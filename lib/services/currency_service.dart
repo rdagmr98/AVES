@@ -1,70 +1,101 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'activity_service.dart';
+import 'gh_db_service.dart';
 
 class CurrencyService {
-  final _db = Supabase.instance.client;
+  final _db = GhDbService();
   final _activityService = ActivityService();
 
   static const int warningDays = 30;
 
-  // ─── CRITERI ──────────────────────────────────────────────────────────────
+  Map<String, dynamic>? _findCapability(int? id) {
+    if (id == null) {
+      return null;
+    }
+    final capabilities = List<Map<String, dynamic>>.from(
+      (_db.referenceData['tobCapabilities'] as List<dynamic>? ?? const []),
+    );
+    for (final capability in capabilities) {
+      if (capability['id'] == id) {
+        return Map<String, dynamic>.from(capability);
+      }
+    }
+    return null;
+  }
+
+  int _nextNotificationId(Iterable<Map<String, dynamic>> items) {
+    final ids = items.map((item) => item['id']).whereType<int>().toSet();
+    var candidate = DateTime.now().millisecondsSinceEpoch;
+    while (ids.contains(candidate)) {
+      candidate++;
+    }
+    return candidate;
+  }
 
   Future<List<CurrencyCriteria>> getAllCriteria() async {
-    final data = await _db
-        .from('currency_criteria')
-        .select('*, tob_capabilities(name)')
-        .order('criteria_type')
-        .order('id');
-    return (data as List).map((e) => CurrencyCriteria.fromJson(e)).toList();
+    final items = _db.criteria.map((item) {
+      final capability = _findCapability(item['tob_capability_id'] as int?);
+      return CurrencyCriteria.fromJson({...item, 'tob_capabilities': capability});
+    }).toList()
+      ..sort(
+        (a, b) => ('${a.criteriaType}|${a.id ?? 0}').compareTo(
+          '${b.criteriaType}|${b.id ?? 0}',
+        ),
+      );
+    return items;
   }
 
   Future<CurrencyCriteria?> getMaintenanceCriteria() async {
-    final data = await _db
-        .from('currency_criteria')
-        .select()
-        .eq('criteria_type', 'MAINTENANCE')
-        .isFilter('tob_capability_id', null)
-        .maybeSingle();
-    if (data == null) return null;
-    return CurrencyCriteria.fromJson(data);
+    for (final item in _db.criteria) {
+      if (item['criteria_type'] == 'MAINTENANCE' &&
+          item['tob_capability_id'] == null) {
+        return CurrencyCriteria.fromJson(item);
+      }
+    }
+    return null;
   }
 
   Future<CurrencyCriteria?> getFlightTCriteria() async {
-    final data = await _db
-        .from('currency_criteria')
-        .select()
-        .eq('criteria_type', 'FLIGHT_T')
-        .isFilter('tob_capability_id', null)
-        .maybeSingle();
-    if (data == null) return null;
-    return CurrencyCriteria.fromJson(data);
+    for (final item in _db.criteria) {
+      if (item['criteria_type'] == 'FLIGHT_T' && item['tob_capability_id'] == null) {
+        return CurrencyCriteria.fromJson(item);
+      }
+    }
+    return null;
   }
 
-  Future<CurrencyCriteria?> getTobCapabilityCriteria(
-    int tobCapabilityId,
-  ) async {
-    final data = await _db
-        .from('currency_criteria')
-        .select('*, tob_capabilities(name)')
-        .eq('criteria_type', 'TOB_CAPABILITY')
-        .eq('tob_capability_id', tobCapabilityId)
-        .maybeSingle();
-    if (data == null) return null;
-    return CurrencyCriteria.fromJson(data);
+  Future<CurrencyCriteria?> getTobCapabilityCriteria(int tobCapabilityId) async {
+    for (final item in _db.criteria) {
+      if (item['criteria_type'] == 'TOB_CAPABILITY' &&
+          item['tob_capability_id'] == tobCapabilityId) {
+        return CurrencyCriteria.fromJson({
+          ...item,
+          'tob_capabilities': _findCapability(tobCapabilityId),
+        });
+      }
+    }
+    return null;
   }
 
   Future<void> updateCriteria(CurrencyCriteria c, String updatedBy) async {
-    await _db
-        .from('currency_criteria')
-        .update({
-          'period_days': c.periodDays,
-          'min_hours': c.minHours,
-          'updated_at': DateTime.now().toIso8601String(),
-          'updated_by': updatedBy,
-        })
-        .eq('id', c.id!);
+    final criteria = _db.criteria;
+    final index = criteria.indexWhere((item) => item['id'] == c.id);
+    if (index == -1) {
+      throw Exception('Criterio non trovato');
+    }
+
+    criteria[index] = {
+      ...criteria[index],
+      'criteria_type': c.criteriaType,
+      'tob_capability_id': c.tobCapabilityId,
+      'period_days': c.periodDays,
+      'min_hours': c.minHours,
+      'description': c.description,
+      'updated_at': DateTime.now().toIso8601String(),
+      'updated_by': updatedBy,
+    };
+    await _db.saveCriteria(criteria);
   }
 
   Future<void> updateCriteriaById(
@@ -73,18 +104,24 @@ class CurrencyService {
     double? minHours,
     String updatedBy,
   ) async {
-    await _db
-        .from('currency_criteria')
-        .update({
-          'period_days': periodDays,
-          'min_hours': minHours,
-          'updated_at': DateTime.now().toIso8601String(),
-          'updated_by': updatedBy,
-        })
-        .eq('id', id);
+    final criteria = await getAllCriteria();
+    final match = criteria.firstWhere(
+      (item) => item.id == id,
+      orElse: () => throw Exception('Criterio non trovato'),
+    );
+    await updateCriteria(
+      CurrencyCriteria(
+        id: match.id,
+        criteriaType: match.criteriaType,
+        tobCapabilityId: match.tobCapabilityId,
+        periodDays: periodDays,
+        minHours: minHours,
+        description: match.description,
+        tobCapabilityName: match.tobCapabilityName,
+      ),
+      updatedBy,
+    );
   }
-
-  // ─── CALCOLO CURRENCY ─────────────────────────────────────────────────────
 
   CurrencyStatus _computeStatus({
     required DateTime? lastDate,
@@ -94,21 +131,21 @@ class CurrencyService {
     if (lastDate == null) {
       return CurrencyStatus(status: CurrencyStatusEnum.expired, label: label);
     }
-    final expiry = lastDate.add(Duration(days: periodDays));
-    final now = DateTime.now();
-    final daysLeft = expiry.difference(now).inDays;
 
-    late CurrencyStatusEnum st;
+    final expiry = lastDate.add(Duration(days: periodDays));
+    final daysLeft = expiry.difference(DateTime.now()).inDays;
+
+    late final CurrencyStatusEnum status;
     if (daysLeft < 0) {
-      st = CurrencyStatusEnum.expired;
+      status = CurrencyStatusEnum.expired;
     } else if (daysLeft <= warningDays) {
-      st = CurrencyStatusEnum.warning;
+      status = CurrencyStatusEnum.warning;
     } else {
-      st = CurrencyStatusEnum.valid;
+      status = CurrencyStatusEnum.valid;
     }
 
     return CurrencyStatus(
-      status: st,
+      status: status,
       lastActivityDate: lastDate,
       expiryDate: expiry,
       daysUntilExpiry: daysLeft.clamp(-9999, 9999),
@@ -132,43 +169,38 @@ class CurrencyService {
     final periodDays = criteria?.periodDays ?? 180;
     final minHours = criteria?.minHours ?? 3.0;
 
-    final hours = await _activityService.getFlightHoursInPeriod(
-      userId,
-      periodDays,
-    );
-    final hoursOk = hours >= minHours;
+    final hours = await _activityService.getFlightHoursInPeriod(userId, periodDays);
+    final validatedFlightActs = _db.flightActs
+        .where(
+          (item) => item['user_id'] == userId && item['is_validated'] == true,
+        )
+        .toList()
+      ..sort(
+        (a, b) => DateTime.parse(b['activity_date'] as String).compareTo(
+          DateTime.parse(a['activity_date'] as String),
+        ),
+      );
+    final lastDate = validatedFlightActs.isEmpty
+        ? null
+        : DateTime.parse(validatedFlightActs.first['activity_date'] as String);
 
-    // Anche calcoliamo la data dell'ultima attività validata
-    final data = await _db
-        .from('flight_activities')
-        .select('activity_date')
-        .eq('user_id', userId)
-        .eq('is_validated', true)
-        .order('activity_date', ascending: false)
-        .limit(1)
-        .maybeSingle();
+    final label =
+        'Currency Volo (${hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)';
 
-    final DateTime? lastDate = data != null
-        ? DateTime.parse(data['activity_date'] as String)
-        : null;
-
-    if (!hoursOk) {
-      // Se le ore non sono sufficienti nel periodo, è scaduta o in warning
+    if (hours < minHours) {
       return CurrencyStatus(
         status: lastDate == null
             ? CurrencyStatusEnum.expired
             : CurrencyStatusEnum.warning,
         lastActivityDate: lastDate,
-        label:
-            'Currency Volo (${hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)',
+        label: label,
       );
     }
 
     return _computeStatus(
       lastDate: lastDate,
       periodDays: periodDays,
-      label:
-          'Currency Volo (${hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)',
+      label: label,
     );
   }
 
@@ -179,11 +211,11 @@ class CurrencyService {
   ) async {
     final criteria = await getTobCapabilityCriteria(capabilityId);
     final periodDays = criteria?.periodDays ?? 90;
-
     final last = await _activityService.getLastValidatedTobActivity(
       userId,
       capabilityId,
     );
+
     return _computeStatus(
       lastDate: last?.activityDate,
       periodDays: periodDays,
@@ -191,24 +223,17 @@ class CurrencyService {
     );
   }
 
-  /// Mappa completa della currency per un utente
   Future<Map<String, CurrencyStatus>> getFullCurrency(
     String userId,
     List<UserTobCapability> tobCaps,
   ) async {
     final result = <String, CurrencyStatus>{};
-
     result['maintenance'] = await getMaintenanceCurrency(userId);
 
-    // Cerca se ha equipaggi T
-    final crews = await _db
-        .from('user_crew_assignments')
-        .select('crew_type')
-        .eq('user_id', userId)
-        .eq('active', true);
-    final crewTypes = (crews as List)
-        .map((c) => c['crew_type'] as String)
-        .toSet();
+    final crews = _db.crew.where(
+      (item) => item['user_id'] == userId && item['active'] == true,
+    );
+    final crewTypes = crews.map((item) => item['crew_type'] as String).toSet();
 
     if (crewTypes.contains('T')) {
       result['flight_t'] = await getFlightCurrency(userId);
@@ -228,24 +253,27 @@ class CurrencyService {
     return result;
   }
 
-  // ─── NOTIFICHE AUTOMATICHE ─────────────────────────────────────────────────
-
   Future<void> checkAndNotify(
     String userId,
     List<UserTobCapability> tobCaps,
   ) async {
-    final currency = await getFullCurrency(userId, tobCaps);
+    if (!_db.hasWritePat) {
+      return;
+    }
 
+    final currency = await getFullCurrency(userId, tobCaps);
     for (final entry in currency.entries) {
       final status = entry.value;
       if (status.isExpired) {
-        final type = _notifType(entry.key, expired: true);
-        await _upsertNotification(userId, type, status.label);
-      } else if (status.isWarning) {
-        final type = _notifType(entry.key, expired: false);
         await _upsertNotification(
           userId,
-          type,
+          _notifType(entry.key, expired: true),
+          status.label,
+        );
+      } else if (status.isWarning) {
+        await _upsertNotification(
+          userId,
+          _notifType(entry.key, expired: false),
           status.label,
           daysLeft: status.daysUntilExpiry ?? 0,
         );
@@ -269,25 +297,29 @@ class CurrencyService {
     String label, {
     int? daysLeft,
   }) async {
-    // Evita duplicati: se esiste già una non letta dello stesso tipo, non inserire
-    final existing = await _db
-        .from('notifications')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('type', type)
-        .eq('is_read', false)
-        .limit(1)
-        .maybeSingle();
-    if (existing != null) return;
+    final notifications = _db.notifications;
+    final exists = notifications.any(
+      (item) =>
+          item['user_id'] == userId &&
+          item['type'] == type &&
+          item['is_read'] == false,
+    );
+    if (exists) {
+      return;
+    }
 
-    final msg = daysLeft != null
+    final message = daysLeft != null
         ? '⚠️ $label in scadenza tra $daysLeft giorni!'
         : '🔴 $label SCADUTA! Eseguire attività di mantenimento.';
 
-    await _db.from('notifications').insert({
+    notifications.add({
+      'id': _nextNotificationId(notifications),
       'user_id': userId,
       'type': type,
-      'message': msg,
+      'message': message,
+      'is_read': false,
+      'created_at': DateTime.now().toIso8601String(),
     });
+    await _db.saveNotifications(notifications);
   }
 }

@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
-import 'config/supabase_config.dart';
+import 'config/gh_config.dart';
+import 'services/gh_db_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (SupabaseConfig.isConfigured) {
-    await Supabase.initialize(
-      url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
-    );
-    runApp(const ProviderScope(child: AvesApp()));
-  } else {
+  if (!GhConfig.isConfigured) {
     runApp(const _SetupApp());
+    return;
   }
+  await GhDbService().init();
+  runApp(const ProviderScope(child: AvesApp()));
 }
 
 class _SetupApp extends StatelessWidget {
@@ -50,13 +47,13 @@ class _SetupScreen extends StatelessWidget {
               Icon(Icons.settings, size: 64, color: Colors.grey),
               SizedBox(height: 16),
               Text(
-                'Configurazione Supabase richiesta',
+                'Configurazione richiesta',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 12),
               Text(
-                'Apri lib/config/supabase_config.dart\n'
-                'e inserisci supabaseUrl e supabaseAnonKey.\n'
+                'Apri lib/config/gh_config.dart\n'
+                'e inserisci il Read PAT per il repository aves-data.\n'
                 'Vedi README.md per le istruzioni.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15),

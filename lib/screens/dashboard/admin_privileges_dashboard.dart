@@ -8,6 +8,7 @@ import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/user_service.dart';
+import '../../widgets/admin_write_pat_button.dart';
 
 class AdminPrivilegesDashboard extends ConsumerWidget {
   const AdminPrivilegesDashboard({super.key});
@@ -80,6 +81,7 @@ class AdminPrivilegesDashboard extends ConsumerWidget {
                     icon: const Icon(Icons.add_task_outlined),
                     label: const Text('Inserisci Attività'),
                   ),
+                  const AdminWritePatButton(),
                 ],
               ),
               const SizedBox(height: 24),

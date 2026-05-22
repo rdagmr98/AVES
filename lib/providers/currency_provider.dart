@@ -28,7 +28,18 @@ class CurrencyProvider extends ChangeNotifier {
   }
 
   Future<void> updateCriteria(CurrencyCriteria c, String updatedBy) async {
-    await _service.updateCriteria(c, updatedBy);
-    await loadCriteria();
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _service.updateCriteria(c, updatedBy);
+      _criteria = await _service.getAllCriteria();
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

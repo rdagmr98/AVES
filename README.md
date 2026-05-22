@@ -1,89 +1,111 @@
 # AVES Currency
 
-Applicazione Flutter Web per la gestione della currency del personale AVES, con autenticazione Supabase, workflow di approvazione utenti e dashboard dedicate per operatori e amministratori privilegi/equipaggi.
+Applicazione Flutter Web per la gestione della currency del personale AVES. Il backend usa il repository privato GitHub `rdagmr98/aves-data` come database JSON tramite GitHub Contents API.
 
-## Funzionalità principali
+## Architettura
 
-- accesso e registrazione utenti con approvazione amministrativa
-- dashboard utente con stato currency, notifiche e accesso rapido alle attività
-- dashboard amministrative separate per privilegi ed equipaggi
-- inserimento, validazione e consultazione di attività manutentive, di volo e TOB
-- gestione criteri currency, ruoli e assegnazioni operative
+- app Flutter Web: questo repository
+- data repo privato: `rdagmr98/aves-data`
+- lettura: Fine-Grained PAT read-only configurato in `lib/config/gh_config.dart`
+- scrittura: Fine-Grained PAT inserito una volta dall'amministratore tramite dashboard/settings e salvato nel browser
+- sessione: browser `localStorage` (`aves_session`)
+- write PAT: browser `localStorage` (`aves_write_pat`)
 
-## Requisiti
+## 1. Creare il repository dati `aves-data`
 
-- Flutter SDK installato e disponibile nel PATH
-- account Supabase
-- browser moderno per esecuzione web
+1. Crea il repository privato `rdagmr98/aves-data`.
+2. Crea la cartella `db/` nella root del repository.
+3. Copia nel repository dati tutti i file presenti in `data_setup/db/` di questo progetto.
+4. Esegui commit e push del contenuto iniziale.
 
-## Setup Supabase
+Struttura richiesta:
 
-1. Crea un progetto su [Supabase](https://supabase.com/).
-2. In **SQL Editor** esegui nell'ordine:
-   - `supabase/schema.sql`
-   - `supabase/seed.sql`
-   - `supabase/rls.sql`
-3. In **Project Settings > API** copia:
-   - `Project URL`
-   - `anon public key`
-4. Apri `lib/config/supabase_config.dart` e sostituisci i placeholder con i valori reali.
-5. In **Authentication > Users** crea i due account amministrativi:
-   - `admin.privilegi@aves.esercito.it` / `AvesPriv2024!`
-   - `admin.equipaggi@aves.esercito.it` / `AvesCrew2024!`
-6. Dopo aver creato gli utenti admin, esegui questa query per inizializzare i profili:
-
-```sql
-INSERT INTO user_profiles (id, nome, cognome, role, is_approved, is_active)
-VALUES
-  ((SELECT id FROM auth.users WHERE email = 'admin.privilegi@aves.esercito.it'),
-   'Admin', 'Privilegi', 'admin_priv', TRUE, TRUE),
-  ((SELECT id FROM auth.users WHERE email = 'admin.equipaggi@aves.esercito.it'),
-   'Admin', 'Equipaggi', 'admin_crew', TRUE, TRUE);
+```text
+db/
+  reference.json
+  users.json
+  licenses.json
+  privileges.json
+  crew.json
+  tob_user_caps.json
+  maintenance.json
+  flight.json
+  tob_acts.json
+  criteria.json
+  notifications.json
 ```
 
-## Credenziali amministrative iniziali
+## 2. Seed iniziale
 
-- Admin Privilegi: `admin.privilegi@aves.esercito.it` / `AvesPriv2024!`
-- Admin Equipaggi: `admin.equipaggi@aves.esercito.it` / `AvesCrew2024!`
+In questo repository trovi già i seed pronti in `data_setup/db/`.
 
-## Avvio in sviluppo
+- `reference.json`: dati di riferimento AVES
+- `users.json`: due account admin iniziali con password hash SHA-256 + salt
+- `criteria.json`: criteri currency di default
+- altri file: array vuoti pronti all'uso
+
+## 3. Creare i Fine-Grained PAT
+
+### Read PAT
+
+Crea un Fine-Grained PAT con accesso **read-only** al repository `aves-data`.
+
+Permessi minimi consigliati:
+- Repository access: solo `aves-data`
+- Contents: `Read-only`
+
+### Write PAT
+
+Crea un Fine-Grained PAT con accesso **read/write** al repository `aves-data`.
+
+Permessi minimi consigliati:
+- Repository access: solo `aves-data`
+- Contents: `Read and write`
+
+> Il Write PAT non va messo nel codice sorgente. Inseriscilo dalla dashboard admin con il pulsante **Configura Write PAT** oppure dalla schermata **Impostazioni Currency**.
+
+## 4. Configurare il Read PAT nell'app
+
+Apri `lib/config/gh_config.dart` e sostituisci il placeholder:
+
+```dart
+static const String readPat = 'REPLACE_WITH_READ_ONLY_PAT';
+```
+
+Se il placeholder resta invariato, l'app mostrerà una schermata di setup.
+
+## 5. Credenziali amministrative iniziali
+
+Cambia le password al primo accesso.
+
+- Admin Privilegi: `admin.privilegi@aves.it` / `AvesPriv2024!`
+- Admin Equipaggi: `admin.equipaggi@aves.it` / `AvesCrew2024!`
+
+## 6. Avvio in sviluppo
 
 ```bash
 flutter pub get
+flutter analyze
 flutter run -d chrome
 ```
 
-Se Supabase non è configurato, l'app mostra una schermata di setup con le istruzioni essenziali.
+## 7. Deploy su GitHub Pages
 
-## Qualità del codice
-
-Comandi consigliati durante lo sviluppo:
+Il workflow `.github/workflows/deploy.yml` esegue già:
 
 ```bash
-dart format lib\ testflutter analyze
-flutter test
+flutter pub get
+flutter build web --release --base-href /AVES/
 ```
 
-## Deploy
+Per pubblicare:
 
-Il repository include il workflow GitHub Actions `.github/workflows/deploy.yml`.
-
-Flusso suggerito:
-
-1. Verifica localmente con `flutter analyze` e `flutter test`.
-2. Esegui commit e push sul branch desiderato.
-3. Lascia che GitHub Actions costruisca e pubblichi l'app secondo la configurazione del workflow.
-
-## Struttura progetto
-
-- `lib/app.dart`: bootstrap applicazione, provider Riverpod e routing GoRouter
-- `lib/providers/`: stato applicativo per autenticazione e criteri currency
-- `lib/screens/`: schermate per autenticazione, dashboard, attività, profilo e amministrazione
-- `lib/services/`: integrazione Supabase per auth, utenti, activity e notification
-- `supabase/`: schema, seed e policy RLS
+1. verifica localmente `flutter analyze`
+2. esegui commit e push su `main`
+3. lascia che GitHub Actions pubblichi `build/web` su GitHub Pages
 
 ## Note operative
 
-- gli utenti appena registrati restano in stato **pending approval** finché un amministratore non li approva
-- gli amministratori possono inserire attività già validate per conto degli utenti
-- i criteri currency sono modificabili dalla dashboard admin privilegi
+- gli utenti appena registrati restano in attesa di approvazione admin
+- tutte le scritture su JSON richiedono il Write PAT nel browser corrente
+- i dati vengono caricati in memoria all'avvio dall'app tramite `GhDbService`

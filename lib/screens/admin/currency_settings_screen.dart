@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app.dart';
 import '../../models/activity_models.dart';
+import '../../widgets/admin_write_pat_button.dart';
 
 class CurrencySettingsScreen extends ConsumerStatefulWidget {
   const CurrencySettingsScreen({super.key});
@@ -69,27 +70,36 @@ class _CurrencySettingsScreenState
               if (userId == null) {
                 return;
               }
-              await ref
-                  .read(currencyProviderProv)
-                  .updateCriteria(
-                    CurrencyCriteria(
-                      id: criteria.id,
-                      criteriaType: criteria.criteriaType,
-                      tobCapabilityId: criteria.tobCapabilityId,
-                      periodDays: period,
-                      minHours: hours,
-                      description: criteria.description,
-                      tobCapabilityName: criteria.tobCapabilityName,
-                    ),
-                    userId,
-                  );
-              if (!mounted || !dialogContext.mounted) {
-                return;
+              try {
+                await ref
+                    .read(currencyProviderProv)
+                    .updateCriteria(
+                      CurrencyCriteria(
+                        id: criteria.id,
+                        criteriaType: criteria.criteriaType,
+                        tobCapabilityId: criteria.tobCapabilityId,
+                        periodDays: period,
+                        minHours: hours,
+                        description: criteria.description,
+                        tobCapabilityName: criteria.tobCapabilityName,
+                      ),
+                      userId,
+                    );
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Criterio aggiornato.')),
+                );
+              } catch (e) {
+                if (!mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.toString())),
+                );
               }
-              Navigator.of(dialogContext).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Criterio aggiornato.')),
-              );
             },
             child: const Text('Salva'),
           ),
@@ -106,7 +116,15 @@ class _CurrencySettingsScreenState
     final provider = ref.watch(currencyProviderProv);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Impostazioni Currency')),
+      appBar: AppBar(
+        title: const Text('Impostazioni Currency'),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: AdminWritePatButton(),
+          ),
+        ],
+      ),
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.separated(

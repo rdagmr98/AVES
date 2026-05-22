@@ -45,20 +45,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (profile == null) {
       return;
     }
-    await auth.updateProfile(
-      profile.copyWith(
-        nome: _nomeCtrl.text.trim(),
-        cognome: _cognomeCtrl.text.trim(),
-        qualifica: _qualificaCtrl.text.trim(),
-        orgUnitId: _orgUnitId,
-      ),
-    );
-    if (!mounted) {
-      return;
+    try {
+      await auth.updateProfile(
+        profile.copyWith(
+          nome: _nomeCtrl.text.trim(),
+          cognome: _cognomeCtrl.text.trim(),
+          qualifica: _qualificaCtrl.text.trim(),
+          orgUnitId: _orgUnitId,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profilo aggiornato con successo.')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profilo aggiornato con successo.')),
-    );
   }
 
   Future<void> _showChangePasswordDialog() async {
@@ -101,14 +110,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 );
                 return;
               }
-              await ref.read(authProvider).changePassword(newPasswordCtrl.text);
-              if (!mounted || !dialogContext.mounted) {
-                return;
+              try {
+                await ref.read(authProvider).changePassword(newPasswordCtrl.text);
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password aggiornata.')),
+                );
+              } catch (e) {
+                if (!mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.toString())));
               }
-              Navigator.of(dialogContext).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Password aggiornata.')),
-              );
             },
             child: const Text('Salva'),
           ),

@@ -75,19 +75,26 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
       return;
     }
     setState(() => _saving = true);
-    await _service.addMaintenanceActivity(
-      MaintenanceActivity(
-        userId: user.id,
-        helicopterTypeId: _maintenanceHelicopterId!,
-        privilegeTypeId: _maintenancePrivilegeId!,
-        activityDate: _maintenanceDate,
-        description: _maintenanceDescCtrl.text.trim().isEmpty
-            ? null
-            : _maintenanceDescCtrl.text.trim(),
-        submittedBy: user.id,
-      ),
-    );
-    _finishSubmit();
+    try {
+      await _service.addMaintenanceActivity(
+        MaintenanceActivity(
+          userId: user.id,
+          helicopterTypeId: _maintenanceHelicopterId!,
+          privilegeTypeId: _maintenancePrivilegeId!,
+          activityDate: _maintenanceDate,
+          description: _maintenanceDescCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceDescCtrl.text.trim(),
+          submittedBy: user.id,
+        ),
+      );
+      _finishSubmit();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+      _showMessage(e.toString());
+    }
   }
 
   Future<void> _submitFlight(UserProfile user) async {
@@ -97,19 +104,26 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
       return;
     }
     setState(() => _saving = true);
-    await _service.addFlightActivity(
-      FlightActivity(
-        userId: user.id,
-        helicopterTypeId: _flightHelicopterId!,
-        activityDate: _flightDate,
-        flightHours: hours,
-        description: _flightDescCtrl.text.trim().isEmpty
-            ? null
-            : _flightDescCtrl.text.trim(),
-        submittedBy: user.id,
-      ),
-    );
-    _finishSubmit();
+    try {
+      await _service.addFlightActivity(
+        FlightActivity(
+          userId: user.id,
+          helicopterTypeId: _flightHelicopterId!,
+          activityDate: _flightDate,
+          flightHours: hours,
+          description: _flightDescCtrl.text.trim().isEmpty
+              ? null
+              : _flightDescCtrl.text.trim(),
+          submittedBy: user.id,
+        ),
+      );
+      _finishSubmit();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+      _showMessage(e.toString());
+    }
   }
 
   Future<void> _submitTob(UserProfile user) async {
@@ -118,19 +132,26 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
       return;
     }
     setState(() => _saving = true);
-    await _service.addTobActivity(
-      TobActivity(
-        userId: user.id,
-        helicopterTypeId: _tobHelicopterId!,
-        tobCapabilityId: _tobCapabilityId!,
-        activityDate: _tobDate,
-        description: _tobDescCtrl.text.trim().isEmpty
-            ? null
-            : _tobDescCtrl.text.trim(),
-        submittedBy: user.id,
-      ),
-    );
-    _finishSubmit();
+    try {
+      await _service.addTobActivity(
+        TobActivity(
+          userId: user.id,
+          helicopterTypeId: _tobHelicopterId!,
+          tobCapabilityId: _tobCapabilityId!,
+          activityDate: _tobDate,
+          description: _tobDescCtrl.text.trim().isEmpty
+              ? null
+              : _tobDescCtrl.text.trim(),
+          submittedBy: user.id,
+        ),
+      );
+      _finishSubmit();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+      _showMessage(e.toString());
+    }
   }
 
   void _finishSubmit() {

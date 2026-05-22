@@ -104,8 +104,23 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     if (adminId == null) {
       return;
     }
-    await _service.approveUser(_selectedUser!.id, adminId);
-    await _loadUsers();
+    try {
+      await _service.approveUser(_selectedUser!.id, adminId);
+      await _loadUsers();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utente approvato.')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Future<void> _saveAssignments() async {
@@ -115,67 +130,79 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     }
     setState(() => _saving = true);
 
-    await _service.updateProfile(user.copyWith(role: _selectedRole));
-    await _service.setUserLicenses(
-      user.id,
-      _licenseKeys.map((key) {
-        final parts = key.split(':');
-        return {
-          'helicopter_type_id': int.parse(parts[0]),
-          'license_type_id': int.parse(parts[1]),
-        };
-      }).toList(),
-    );
-    await _service.setUserPrivileges(
-      user.id,
-      _privilegeKeys.map((key) {
-        final parts = key.split(':');
-        return {
-          'helicopter_type_id': int.parse(parts[0]),
-          'privilege_type_id': int.parse(parts[1]),
-        };
-      }).toList(),
-    );
+    try {
+      await _service.updateProfile(user.copyWith(role: _selectedRole));
+      await _service.setUserLicenses(
+        user.id,
+        _licenseKeys.map((key) {
+          final parts = key.split(':');
+          return {
+            'helicopter_type_id': int.parse(parts[0]),
+            'license_type_id': int.parse(parts[1]),
+          };
+        }).toList(),
+      );
+      await _service.setUserPrivileges(
+        user.id,
+        _privilegeKeys.map((key) {
+          final parts = key.split(':');
+          return {
+            'helicopter_type_id': int.parse(parts[0]),
+            'privilege_type_id': int.parse(parts[1]),
+          };
+        }).toList(),
+      );
 
-    final assignments = <Map<String, dynamic>>[];
-    for (final helicopterId in _tCrewHelicopters) {
-      assignments.add({
-        'helicopter_type_id': helicopterId,
-        'crew_type': 'T',
-        'tob_grade': null,
-      });
-    }
-    for (final helicopterId in _tobCrewHelicopters) {
-      assignments.add({
-        'helicopter_type_id': helicopterId,
-        'crew_type': 'TOB',
-        'tob_grade': _tobGrades[helicopterId] ?? 'A',
-      });
-    }
-    await _service.setUserCrewAssignments(user.id, assignments);
-    await _service.setUserTobCapabilities(
-      user.id,
-      _tobCapabilityKeys.map((key) {
-        final parts = key.split(':');
-        return {
-          'helicopter_type_id': int.parse(parts[0]),
-          'tob_capability_id': int.parse(parts[1]),
-        };
-      }).toList(),
-    );
+      final assignments = <Map<String, dynamic>>[];
+      for (final helicopterId in _tCrewHelicopters) {
+        assignments.add({
+          'helicopter_type_id': helicopterId,
+          'crew_type': 'T',
+          'tob_grade': null,
+        });
+      }
+      for (final helicopterId in _tobCrewHelicopters) {
+        assignments.add({
+          'helicopter_type_id': helicopterId,
+          'crew_type': 'TOB',
+          'tob_grade': _tobGrades[helicopterId] ?? 'A',
+        });
+      }
+      await _service.setUserCrewAssignments(user.id, assignments);
+      await _service.setUserTobCapabilities(
+        user.id,
+        _tobCapabilityKeys.map((key) {
+          final parts = key.split(':');
+          return {
+            'helicopter_type_id': int.parse(parts[0]),
+            'tob_capability_id': int.parse(parts[1]),
+          };
+        }).toList(),
+      );
 
-    if (!mounted) {
-      return;
-    }
+      if (!mounted) {
+        return;
+      }
 
-    await _loadUsers();
-    if (!mounted) {
-      return;
+      await _loadUsers();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ruoli e assegnazioni salvati.')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ruoli e assegnazioni salvati.')),
-    );
-    setState(() => _saving = false);
   }
 
   @override

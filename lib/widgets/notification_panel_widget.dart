@@ -46,21 +46,30 @@ class _NotificationPanelWidgetState
     if (notification.isRead) {
       return;
     }
-    await _service.markAsRead(notification.id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _notifications[index] = NotificationModel(
-        id: notification.id,
-        userId: notification.userId,
-        type: notification.type,
-        message: notification.message,
-        isRead: true,
-        createdAt: notification.createdAt,
+    try {
+      await _service.markAsRead(notification.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notifications[index] = NotificationModel(
+          id: notification.id,
+          userId: notification.userId,
+          type: notification.type,
+          message: notification.message,
+          isRead: true,
+          createdAt: notification.createdAt,
+        );
+      });
+      ref.read(authProvider).decrementUnread();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
       );
-    });
-    ref.read(authProvider).decrementUnread();
+    }
   }
 
   Future<void> _markAllAsRead() async {
@@ -68,27 +77,36 @@ class _NotificationPanelWidgetState
     if (unreadCount == 0) {
       return;
     }
-    await _service.markAllAsRead(widget.userId);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _notifications = _notifications
-          .map(
-            (item) => NotificationModel(
-              id: item.id,
-              userId: item.userId,
-              type: item.type,
-              message: item.message,
-              isRead: true,
-              createdAt: item.createdAt,
-            ),
-          )
-          .toList();
-    });
-    final auth = ref.read(authProvider);
-    for (var i = 0; i < unreadCount; i++) {
-      auth.decrementUnread();
+    try {
+      await _service.markAllAsRead(widget.userId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notifications = _notifications
+            .map(
+              (item) => NotificationModel(
+                id: item.id,
+                userId: item.userId,
+                type: item.type,
+                message: item.message,
+                isRead: true,
+                createdAt: item.createdAt,
+              ),
+            )
+            .toList();
+      });
+      final auth = ref.read(authProvider);
+      for (var i = 0; i < unreadCount; i++) {
+        auth.decrementUnread();
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app.dart';
 import '../../services/activity_service.dart';
 import '../../services/user_service.dart';
+import '../../widgets/admin_write_pat_button.dart';
 
 class AdminCrewDashboard extends ConsumerWidget {
   const AdminCrewDashboard({super.key});
@@ -77,6 +78,7 @@ class AdminCrewDashboard extends ConsumerWidget {
                     icon: const Icon(Icons.add_task_outlined),
                     label: const Text('Inserisci Attività'),
                   ),
+                  const AdminWritePatButton(),
                 ],
               ),
             ],

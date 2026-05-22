@@ -1,0 +1,10 @@
+[
+  {"id": 1, "criteria_type": "MAINTENANCE", "tob_capability_id": null, "period_days": 180, "min_hours": null, "description": "Un task manutentivo ogni 6 mesi"},
+  {"id": 2, "criteria_type": "FLIGHT_T", "tob_capability_id": null, "period_days": 180, "min_hours": 3.0, "description": "3 ore di volo ogni 6 mesi"},
+  {"id": 3, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 1, "period_days": 90, "min_hours": null, "description": "Attività benna ogni 90 giorni"},
+  {"id": 4, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 2, "period_days": 90, "min_hours": null, "description": "Attività gancio baricentrico ogni 90 giorni"},
+  {"id": 5, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 3, "period_days": 180, "min_hours": null, "description": "Attività NVG ogni 180 giorni"},
+  {"id": 6, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 4, "period_days": 90, "min_hours": null, "description": "Attività verricello ogni 90 giorni"},
+  {"id": 7, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 5, "period_days": 90, "min_hours": null, "description": "Attività barella ogni 90 giorni"},
+  {"id": 8, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 6, "period_days": 90, "min_hours": null, "description": "Attività sling load ogni 90 giorni"}
+]

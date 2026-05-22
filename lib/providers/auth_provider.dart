@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import '../models/user_models.dart';
+
 import '../models/activity_models.dart';
 import '../models/reference_models.dart';
+import '../models/user_models.dart';
 import '../services/auth_service.dart';
-import '../services/user_service.dart';
 import '../services/currency_service.dart';
 import '../services/notification_service.dart';
+import '../services/user_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final _authService = AuthService();
@@ -18,7 +19,6 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   bool _initialized = false;
 
-  // Dati utente corrente
   List<UserLicense> _licenses = [];
   List<UserPrivilege> _privileges = [];
   List<UserCrewAssignment> _crewAssignments = [];
@@ -26,14 +26,12 @@ class AuthProvider extends ChangeNotifier {
   Map<String, CurrencyStatus> _currency = {};
   int _unreadNotifications = 0;
 
-  // Referenze
   List<HelicopterType> _helicopterTypes = [];
   List<PrivilegeType> _privilegeTypes = [];
   List<LicenseType> _licenseTypes = [];
   List<TobCapability> _tobCapabilityTypes = [];
   List<OrgUnit> _orgUnits = [];
 
-  // Getters
   UserProfile? get userProfile => _userProfile;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -57,20 +55,26 @@ class AuthProvider extends ChangeNotifier {
   List<TobCapability> get tobCapabilityTypes => _tobCapabilityTypes;
   List<OrgUnit> get orgUnits => _orgUnits;
 
-  bool get hasTCrew => _crewAssignments.any((c) => c.crewType == 'T');
-  bool get hasTobCrew => _crewAssignments.any((c) => c.crewType == 'TOB');
+  bool get hasTCrew => _crewAssignments.any((item) => item.crewType == 'T');
+  bool get hasTobCrew => _crewAssignments.any((item) => item.crewType == 'TOB');
 
   Future<void> initialize() async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
+
     try {
       await _loadReferenceData();
-      final user = _authService.currentUser;
-      if (user != null) {
-        await _loadUserData(user.id);
+      final session = await _authService.loadSession();
+      final userId = session?['userId'];
+      if (userId != null) {
+        await _loadUserData(userId);
+        if (_userProfile == null) {
+          await _authService.signOut();
+        }
       }
     } catch (e) {
-      _error = e.toString();
+      _error = _parseError(e);
     } finally {
       _isLoading = false;
       _initialized = true;
@@ -87,28 +91,34 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _loadUserData(String userId) async {
+    _licenses = [];
+    _privileges = [];
+    _crewAssignments = [];
+    _tobCapabilities = [];
+    _currency = {};
+    _unreadNotifications = 0;
+
     _userProfile = await _userService.getUserProfile(userId);
-    if (_userProfile == null) return;
+    if (_userProfile == null) {
+      return;
+    }
 
     if (_userProfile!.isUser || _userProfile!.isApproved) {
       await Future.wait([
-        _userService.getUserLicenses(userId).then((v) => _licenses = v),
-        _userService.getUserPrivileges(userId).then((v) => _privileges = v),
-        _userService
-            .getUserCrewAssignments(userId)
-            .then((v) => _crewAssignments = v),
-        _userService
-            .getUserTobCapabilities(userId)
-            .then((v) => _tobCapabilities = v),
+        _userService.getUserLicenses(userId).then((value) => _licenses = value),
+        _userService.getUserPrivileges(userId).then(
+          (value) => _privileges = value,
+        ),
+        _userService.getUserCrewAssignments(userId).then(
+          (value) => _crewAssignments = value,
+        ),
+        _userService.getUserTobCapabilities(userId).then(
+          (value) => _tobCapabilities = value,
+        ),
       ]);
 
-      _currency = await _currencyService.getFullCurrency(
-        userId,
-        _tobCapabilities,
-      );
+      _currency = await _currencyService.getFullCurrency(userId, _tobCapabilities);
       _unreadNotifications = await _notifService.getUnreadCount(userId);
-
-      // Controlla e crea notifiche automatiche
       await _currencyService.checkAndNotify(userId, _tobCapabilities);
       _unreadNotifications = await _notifService.getUnreadCount(userId);
     }
@@ -118,13 +128,16 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
     try {
       _userProfile = await _authService.signIn(email, password);
       if (_userProfile == null) {
         _error = 'Credenziali non valide';
         return false;
       }
+
       await _loadReferenceData();
+      await _authService.saveSession(_userProfile!.id, _userProfile!.role);
       await _loadUserData(_userProfile!.id);
       return true;
     } catch (e) {
@@ -146,6 +159,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
     try {
       _userProfile = await _authService.signUp(
         email: email,
@@ -155,6 +169,8 @@ class AuthProvider extends ChangeNotifier {
         numeroLicenza: numeroLicenza,
       );
       await _loadReferenceData();
+      await _authService.saveSession(_userProfile!.id, _userProfile!.role);
+      await _loadUserData(_userProfile!.id);
       return true;
     } catch (e) {
       _error = _parseError(e);
@@ -178,11 +194,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> changePassword(String newPassword) async {
-    await _authService.changePassword(newPassword);
+    final userId = _userProfile?.id;
+    if (userId == null) {
+      throw Exception('Utente non autenticato');
+    }
+    await _authService.changePassword(userId, newPassword);
   }
 
   Future<void> refreshUserData() async {
-    if (_userProfile == null) return;
+    if (_userProfile == null) {
+      return;
+    }
+
     _isLoading = true;
     notifyListeners();
     try {
@@ -195,7 +218,11 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> updateProfile(UserProfile updated) async {
     await _userService.updateProfile(updated);
-    _userProfile = updated;
+    final refreshed = await _userService.getUserProfile(updated.id);
+    if (refreshed == null) {
+      throw Exception('Profilo non trovato dopo l\'aggiornamento');
+    }
+    _userProfile = refreshed;
     notifyListeners();
   }
 
@@ -213,13 +240,21 @@ class AuthProvider extends ChangeNotifier {
 
   String _parseError(dynamic e) {
     final msg = e.toString().toLowerCase();
-    if (msg.contains('invalid login credentials') ||
-        msg.contains('invalid credentials')) {
+    if (msg.contains('invalid credentials') || msg.contains('credenziali')) {
       return 'Email o password non corretti';
     }
-    if (msg.contains('email already')) return 'Email già registrata';
-    if (msg.contains('unique') && msg.contains('numero_licenza')) {
+    if (msg.contains('email già registrata') || msg.contains('email already')) {
+      return 'Email già registrata';
+    }
+    if (msg.contains('numero di licenza già registrato') ||
+        (msg.contains('unique') && msg.contains('numero_licenza'))) {
       return 'Numero di licenza già registrato';
+    }
+    if (msg.contains('write pat')) {
+      return 'Write PAT non configurato. Vai alle impostazioni admin.';
+    }
+    if (msg.contains('account disabilitato')) {
+      return 'Account disabilitato';
     }
     return 'Errore: ${e.toString()}';
   }

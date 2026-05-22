@@ -1,259 +1,487 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/user_models.dart';
 import '../models/reference_models.dart';
+import '../models/user_models.dart';
+import 'gh_db_service.dart';
 
 class UserService {
-  final _db = Supabase.instance.client;
+  final _db = GhDbService();
 
-  // Profilo utente
+  List<Map<String, dynamic>> _referenceList(String key) =>
+      List<Map<String, dynamic>>.from(
+        (_db.referenceData[key] as List<dynamic>? ?? const []),
+      );
+
+  Map<String, dynamic>? _findReference(String key, int? id) {
+    if (id == null) {
+      return null;
+    }
+    final items = _referenceList(key);
+    for (final item in items) {
+      if (item['id'] == id) {
+        return Map<String, dynamic>.from(item);
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _withOrgUnit(Map<String, dynamic> user) => {
+    ...user,
+    'org_units': _findReference('orgUnits', user['org_unit_id'] as int?),
+  };
+
+  int _nextId(Iterable<Map<String, dynamic>> existing) {
+    final ids = existing
+        .map((item) => item['id'])
+        .whereType<int>()
+        .toSet();
+    var candidate = DateTime.now().microsecondsSinceEpoch;
+    while (ids.contains(candidate)) {
+      candidate++;
+    }
+    return candidate;
+  }
+
   Future<UserProfile?> getUserProfile(String userId) async {
-    final data = await _db
-        .from('user_profiles')
-        .select('*, org_units(*)')
-        .eq('id', userId)
-        .maybeSingle();
-    if (data == null) return null;
-    return UserProfile.fromJson(data);
+    for (final user in _db.users) {
+      if (user['id'] == userId) {
+        return UserProfile.fromJson(_withOrgUnit(user));
+      }
+    }
+    return null;
   }
 
   Future<UserProfile> createProfile({
-    required String id,
+    String? id,
+    required String email,
     required String nome,
     required String cognome,
     String? numeroLicenza,
+    String role = 'user',
   }) async {
-    final data = await _db
-        .from('user_profiles')
-        .insert({
-          'id': id,
-          'nome': nome,
-          'cognome': cognome,
-          'numero_licenza': numeroLicenza,
-          'role': 'user',
-          'is_approved': false,
-        })
-        .select('*, org_units(*)')
-        .single();
-    return UserProfile.fromJson(data);
+    final users = _db.users;
+    final normalizedEmail = email.trim().toLowerCase();
+    if (users.any(
+      (item) => (item['email'] as String?)?.toLowerCase() == normalizedEmail,
+    )) {
+      throw Exception('Email già registrata');
+    }
+    if (numeroLicenza != null &&
+        numeroLicenza.isNotEmpty &&
+        users.any((item) => item['numero_licenza'] == numeroLicenza)) {
+      throw Exception('Numero di licenza già registrato');
+    }
+
+    final now = DateTime.now().toIso8601String();
+    final newUser = <String, dynamic>{
+      'id': id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      'email': normalizedEmail,
+      'password_hash': '',
+      'nome': nome,
+      'cognome': cognome,
+      'numero_licenza': numeroLicenza,
+      'qualifica': '',
+      'org_unit_id': null,
+      'role': role,
+      'is_approved': role != 'user',
+      'is_active': true,
+      'note': null,
+      'created_at': now,
+      'updated_at': now,
+    };
+
+    await _db.saveUsers([...users, newUser]);
+    return UserProfile.fromJson(_withOrgUnit(newUser));
   }
 
   Future<void> updateProfile(UserProfile profile) async {
-    await _db
-        .from('user_profiles')
-        .update(profile.toJson())
-        .eq('id', profile.id);
+    final users = _db.users;
+    final index = users.indexWhere((item) => item['id'] == profile.id);
+    if (index == -1) {
+      throw Exception('Utente non trovato');
+    }
+
+    users[index] = {
+      ...users[index],
+      ...profile.toJson(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveUsers(users);
   }
 
   Future<void> approveUser(String userId, String adminId) async {
-    await _db
-        .from('user_profiles')
-        .update({'is_approved': true})
-        .eq('id', userId);
-    await _db.from('notifications').insert({
+    final users = _db.users;
+    final index = users.indexWhere((item) => item['id'] == userId);
+    if (index == -1) {
+      throw Exception('Utente non trovato');
+    }
+
+    users[index] = {
+      ...users[index],
+      'is_approved': true,
+      'updated_at': DateTime.now().toIso8601String(),
+      'approved_by': adminId,
+    };
+    await _db.saveUsers(users);
+
+    final notifications = _db.notifications;
+    final now = DateTime.now().toIso8601String();
+    notifications.add({
+      'id': _nextId(notifications),
       'user_id': userId,
       'type': 'PROFILE_APPROVED',
       'message':
           'Il tuo profilo è stato approvato. Puoi ora accedere a tutte le funzionalità.',
+      'is_read': false,
+      'created_at': now,
     });
+    await _db.saveNotifications(notifications);
   }
 
   Future<List<UserProfile>> getAllUsers() async {
-    final data = await _db
-        .from('user_profiles')
-        .select('*, org_units(*)')
-        .eq('role', 'user')
-        .order('cognome');
-    return (data as List).map((e) => UserProfile.fromJson(e)).toList();
+    final users = _db.users
+        .where((item) => item['role'] == 'user')
+        .map((item) => UserProfile.fromJson(_withOrgUnit(item)))
+        .toList();
+    users.sort(
+      (a, b) => ('${a.cognome}|${a.nome}').compareTo('${b.cognome}|${b.nome}'),
+    );
+    return users;
   }
 
   Future<List<UserProfile>> getPendingApprovalUsers() async {
-    final data = await _db
-        .from('user_profiles')
-        .select('*, org_units(*)')
-        .eq('role', 'user')
-        .eq('is_approved', false)
-        .order('created_at');
-    return (data as List).map((e) => UserProfile.fromJson(e)).toList();
+    final users = _db.users
+        .where((item) => item['role'] == 'user' && item['is_approved'] != true)
+        .map((item) => UserProfile.fromJson(_withOrgUnit(item)))
+        .toList();
+    users.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return users;
   }
 
-  // Referenze
   Future<List<HelicopterType>> getHelicopterTypes() async {
-    final data = await _db
-        .from('helicopter_types')
-        .select()
-        .eq('active', true)
-        .order('id');
-    return (data as List).map((e) => HelicopterType.fromJson(e)).toList();
+    final items = _referenceList('helicopterTypes')
+        .where((item) => item['active'] != false)
+        .toList()
+      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    return items.map(HelicopterType.fromJson).toList();
   }
 
   Future<List<LicenseType>> getLicenseTypes() async {
-    final data = await _db.from('license_types').select().order('id');
-    return (data as List).map((e) => LicenseType.fromJson(e)).toList();
+    final items = _referenceList('licenseTypes')
+      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    return items.map(LicenseType.fromJson).toList();
   }
 
   Future<List<PrivilegeType>> getPrivilegeTypes() async {
-    final data = await _db.from('privilege_types').select().order('sort_order');
-    return (data as List).map((e) => PrivilegeType.fromJson(e)).toList();
+    final items = _referenceList('privilegeTypes')
+      ..sort(
+        (a, b) => (a['sort_order'] as int? ?? 0).compareTo(
+          b['sort_order'] as int? ?? 0,
+        ),
+      );
+    return items.map(PrivilegeType.fromJson).toList();
   }
 
   Future<List<TobCapability>> getTobCapabilities() async {
-    final data = await _db.from('tob_capabilities').select().order('id');
-    return (data as List).map((e) => TobCapability.fromJson(e)).toList();
+    final items = _referenceList('tobCapabilities')
+      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    return items.map(TobCapability.fromJson).toList();
   }
 
   Future<List<OrgUnit>> getOrgUnits() async {
-    final data = await _db.from('org_units').select().order('id');
-    return (data as List).map((e) => OrgUnit.fromJson(e)).toList();
+    final items = _referenceList('orgUnits')
+      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    return items.map(OrgUnit.fromJson).toList();
   }
 
-  // Licenze utente
   Future<List<UserLicense>> getUserLicenses(String userId) async {
-    final data = await _db
-        .from('user_licenses')
-        .select('*, helicopter_types(*), license_types(*)')
-        .eq('user_id', userId)
-        .eq('active', true);
-    return (data as List).map((e) => UserLicense.fromJson(e)).toList();
+    final rows = _db.licenses
+        .where((item) => item['user_id'] == userId && item['active'] != false)
+        .map(
+          (item) => UserLicense.fromJson({
+            ...item,
+            'helicopter_types': _findReference(
+              'helicopterTypes',
+              item['helicopter_type_id'] as int?,
+            ),
+            'license_types': _findReference(
+              'licenseTypes',
+              item['license_type_id'] as int?,
+            ),
+          }),
+        )
+        .toList();
+    rows.sort(
+      (a, b) => ('${a.helicopterCode}|${a.licenseCode}').compareTo(
+        '${b.helicopterCode}|${b.licenseCode}',
+      ),
+    );
+    return rows;
   }
 
   Future<void> setUserLicenses(
     String userId,
     List<Map<String, dynamic>> licenses,
   ) async {
-    await _db.from('user_licenses').delete().eq('user_id', userId);
-    if (licenses.isNotEmpty) {
-      final rows = licenses
-          .map(
-            (l) => {
-              'user_id': userId,
-              'helicopter_type_id': l['helicopter_type_id'],
-              'license_type_id': l['license_type_id'],
-            },
-          )
-          .toList();
-      await _db.from('user_licenses').insert(rows);
+    final now = DateTime.now().toIso8601String();
+    final existing = _db.licenses;
+    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    for (final item in licenses) {
+      updated.add({
+        'id': _nextId(updated),
+        'user_id': userId,
+        'helicopter_type_id': item['helicopter_type_id'],
+        'license_type_id': item['license_type_id'],
+        'license_number': item['license_number'],
+        'expiry_date': item['expiry_date'],
+        'active': true,
+        'created_at': now,
+        'updated_at': now,
+      });
     }
+    await _db.saveLicenses(updated);
   }
 
-  // Privilegi utente
   Future<List<UserPrivilege>> getUserPrivileges(String userId) async {
-    final data = await _db
-        .from('user_privileges')
-        .select('*, helicopter_types(*), privilege_types(*)')
-        .eq('user_id', userId)
-        .eq('active', true);
-    return (data as List).map((e) => UserPrivilege.fromJson(e)).toList();
+    final rows = _db.privileges
+        .where((item) => item['user_id'] == userId && item['active'] != false)
+        .map(
+          (item) => UserPrivilege.fromJson({
+            ...item,
+            'helicopter_types': _findReference(
+              'helicopterTypes',
+              item['helicopter_type_id'] as int?,
+            ),
+            'privilege_types': _findReference(
+              'privilegeTypes',
+              item['privilege_type_id'] as int?,
+            ),
+          }),
+        )
+        .toList();
+    rows.sort(
+      (a, b) => a.sortOrder != b.sortOrder
+          ? a.sortOrder.compareTo(b.sortOrder)
+          : a.helicopterCode.compareTo(b.helicopterCode),
+    );
+    return rows;
   }
 
   Future<void> setUserPrivileges(
     String userId,
     List<Map<String, dynamic>> privileges,
   ) async {
-    await _db.from('user_privileges').delete().eq('user_id', userId);
-    if (privileges.isNotEmpty) {
-      final rows = privileges
-          .map(
-            (p) => {
-              'user_id': userId,
-              'helicopter_type_id': p['helicopter_type_id'],
-              'privilege_type_id': p['privilege_type_id'],
-            },
-          )
-          .toList();
-      await _db.from('user_privileges').insert(rows);
+    final now = DateTime.now().toIso8601String();
+    final existing = _db.privileges;
+    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    for (final item in privileges) {
+      updated.add({
+        'id': _nextId(updated),
+        'user_id': userId,
+        'helicopter_type_id': item['helicopter_type_id'],
+        'privilege_type_id': item['privilege_type_id'],
+        'expiry_date': item['expiry_date'],
+        'active': true,
+        'created_at': now,
+        'updated_at': now,
+      });
     }
+    await _db.savePrivileges(updated);
   }
 
-  // Equipaggi fissi
   Future<List<UserCrewAssignment>> getUserCrewAssignments(String userId) async {
-    final data = await _db
-        .from('user_crew_assignments')
-        .select('*, helicopter_types(*)')
-        .eq('user_id', userId)
-        .eq('active', true);
-    return (data as List).map((e) => UserCrewAssignment.fromJson(e)).toList();
+    final rows = _db.crew
+        .where((item) => item['user_id'] == userId && item['active'] != false)
+        .map(
+          (item) => UserCrewAssignment.fromJson({
+            ...item,
+            'helicopter_types': _findReference(
+              'helicopterTypes',
+              item['helicopter_type_id'] as int?,
+            ),
+          }),
+        )
+        .toList();
+    rows.sort(
+      (a, b) => ('${a.crewType}|${a.helicopterCode}').compareTo(
+        '${b.crewType}|${b.helicopterCode}',
+      ),
+    );
+    return rows;
   }
 
   Future<void> setUserCrewAssignments(
     String userId,
     List<Map<String, dynamic>> assignments,
   ) async {
-    await _db.from('user_crew_assignments').delete().eq('user_id', userId);
-    if (assignments.isNotEmpty) {
-      final rows = assignments
-          .map(
-            (a) => {
-              'user_id': userId,
-              'helicopter_type_id': a['helicopter_type_id'],
-              'crew_type': a['crew_type'],
-              'tob_grade': a['tob_grade'],
-            },
-          )
-          .toList();
-      await _db.from('user_crew_assignments').insert(rows);
+    final now = DateTime.now().toIso8601String();
+    final existing = _db.crew;
+    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    for (final item in assignments) {
+      updated.add({
+        'id': _nextId(updated),
+        'user_id': userId,
+        'helicopter_type_id': item['helicopter_type_id'],
+        'crew_type': item['crew_type'],
+        'tob_grade': item['tob_grade'],
+        'active': true,
+        'created_at': now,
+        'updated_at': now,
+      });
     }
+    await _db.saveCrew(updated);
   }
 
-  // Capacità TOB
   Future<List<UserTobCapability>> getUserTobCapabilities(String userId) async {
-    final data = await _db
-        .from('user_tob_capabilities')
-        .select('*, helicopter_types(*), tob_capabilities(*)')
-        .eq('user_id', userId)
-        .eq('active', true);
-    return (data as List).map((e) => UserTobCapability.fromJson(e)).toList();
+    final rows = _db.tobUserCaps
+        .where((item) => item['user_id'] == userId && item['active'] != false)
+        .map(
+          (item) => UserTobCapability.fromJson({
+            ...item,
+            'helicopter_types': _findReference(
+              'helicopterTypes',
+              item['helicopter_type_id'] as int?,
+            ),
+            'tob_capabilities': _findReference(
+              'tobCapabilities',
+              item['tob_capability_id'] as int?,
+            ),
+          }),
+        )
+        .toList();
+    rows.sort(
+      (a, b) => ('${a.helicopterCode}|${a.capabilityCode}').compareTo(
+        '${b.helicopterCode}|${b.capabilityCode}',
+      ),
+    );
+    return rows;
   }
 
   Future<void> setUserTobCapabilities(
     String userId,
     List<Map<String, dynamic>> caps,
   ) async {
-    await _db.from('user_tob_capabilities').delete().eq('user_id', userId);
-    if (caps.isNotEmpty) {
-      final rows = caps
-          .map(
-            (c) => {
-              'user_id': userId,
-              'helicopter_type_id': c['helicopter_type_id'],
-              'tob_capability_id': c['tob_capability_id'],
-            },
-          )
-          .toList();
-      await _db.from('user_tob_capabilities').insert(rows);
+    final now = DateTime.now().toIso8601String();
+    final existing = _db.tobUserCaps;
+    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    for (final item in caps) {
+      updated.add({
+        'id': _nextId(updated),
+        'user_id': userId,
+        'helicopter_type_id': item['helicopter_type_id'],
+        'tob_capability_id': item['tob_capability_id'],
+        'expiry_date': item['expiry_date'],
+        'active': true,
+        'created_at': now,
+        'updated_at': now,
+      });
     }
+    await _db.saveTobUserCaps(updated);
   }
 
-  // ─── INDIVIDUAL CRUD ───────────────────────────────────────────────────────
-
   Future<void> addUserLicense(UserLicense lic) async {
-    await _db.from('user_licenses').insert(lic.toInsertJson());
+    final licenses = _db.licenses;
+    final now = DateTime.now().toIso8601String();
+    licenses.add({
+      'id': _nextId(licenses),
+      ...lic.toInsertJson(),
+      'active': true,
+      'created_at': now,
+      'updated_at': now,
+    });
+    await _db.saveLicenses(licenses);
   }
 
   Future<void> deleteUserLicense(int id) async {
-    await _db.from('user_licenses').delete().eq('id', id);
+    final licenses = _db.licenses;
+    final index = licenses.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      return;
+    }
+    licenses[index] = {
+      ...licenses[index],
+      'active': false,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveLicenses(licenses);
   }
 
   Future<void> addUserPrivilege(UserPrivilege priv) async {
-    await _db.from('user_privileges').insert(priv.toInsertJson());
+    final privileges = _db.privileges;
+    final now = DateTime.now().toIso8601String();
+    privileges.add({
+      'id': _nextId(privileges),
+      ...priv.toInsertJson(),
+      'active': true,
+      'created_at': now,
+      'updated_at': now,
+    });
+    await _db.savePrivileges(privileges);
   }
 
   Future<void> deleteUserPrivilege(int id) async {
-    await _db.from('user_privileges').delete().eq('id', id);
+    final privileges = _db.privileges;
+    final index = privileges.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      return;
+    }
+    privileges[index] = {
+      ...privileges[index],
+      'active': false,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.savePrivileges(privileges);
   }
 
   Future<void> addUserCrewAssignment(UserCrewAssignment crew) async {
-    await _db.from('user_crew_assignments').insert(crew.toInsertJson());
+    final crews = _db.crew;
+    final now = DateTime.now().toIso8601String();
+    crews.add({
+      'id': _nextId(crews),
+      ...crew.toInsertJson(),
+      'active': true,
+      'created_at': now,
+      'updated_at': now,
+    });
+    await _db.saveCrew(crews);
   }
 
   Future<void> deleteUserCrewAssignment(int id) async {
-    await _db.from('user_crew_assignments').delete().eq('id', id);
+    final crews = _db.crew;
+    final index = crews.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      return;
+    }
+    crews[index] = {
+      ...crews[index],
+      'active': false,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveCrew(crews);
   }
 
   Future<void> addUserTobCapability(UserTobCapability cap) async {
-    await _db.from('user_tob_capabilities').insert(cap.toInsertJson());
+    final caps = _db.tobUserCaps;
+    final now = DateTime.now().toIso8601String();
+    caps.add({
+      'id': _nextId(caps),
+      ...cap.toInsertJson(),
+      'active': true,
+      'created_at': now,
+      'updated_at': now,
+    });
+    await _db.saveTobUserCaps(caps);
   }
 
   Future<void> deleteUserTobCapability(int id) async {
-    await _db.from('user_tob_capabilities').delete().eq('id', id);
+    final caps = _db.tobUserCaps;
+    final index = caps.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      return;
+    }
+    caps[index] = {
+      ...caps[index],
+      'active': false,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveTobUserCaps(caps);
   }
 }

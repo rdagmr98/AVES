@@ -59,8 +59,17 @@ class _ValidateActivitiesScreenState
     if (adminId == null) {
       return;
     }
-    await _service.validateMaintenanceActivity(id, adminId);
-    await _load();
+    try {
+      await _service.validateMaintenanceActivity(id, adminId);
+      await _load();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Future<void> _validateFlight(int id) async {
@@ -68,8 +77,17 @@ class _ValidateActivitiesScreenState
     if (adminId == null) {
       return;
     }
-    await _service.validateFlightActivity(id, adminId);
-    await _load();
+    try {
+      await _service.validateFlightActivity(id, adminId);
+      await _load();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Future<void> _validateTob(int id) async {
@@ -77,8 +95,17 @@ class _ValidateActivitiesScreenState
     if (adminId == null) {
       return;
     }
-    await _service.validateTobActivity(id, adminId);
-    await _load();
+    try {
+      await _service.validateTobActivity(id, adminId);
+      await _load();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   @override

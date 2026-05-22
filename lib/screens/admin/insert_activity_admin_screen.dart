@@ -120,20 +120,29 @@ class _InsertActivityAdminScreenState
       return;
     }
     setState(() => _saving = true);
-    await _activityService.addMaintenanceActivityValidated(
-      MaintenanceActivity(
-        userId: user.id,
-        helicopterTypeId: _maintenanceHelicopterId!,
-        privilegeTypeId: _maintenancePrivilegeId!,
-        activityDate: _maintenanceDate,
-        description: _maintenanceDescCtrl.text.trim().isEmpty
-            ? null
-            : _maintenanceDescCtrl.text.trim(),
-        submittedBy: adminId,
-      ),
-      adminId,
-    );
-    _finish();
+    try {
+      await _activityService.addMaintenanceActivityValidated(
+        MaintenanceActivity(
+          userId: user.id,
+          helicopterTypeId: _maintenanceHelicopterId!,
+          privilegeTypeId: _maintenancePrivilegeId!,
+          activityDate: _maintenanceDate,
+          description: _maintenanceDescCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceDescCtrl.text.trim(),
+          submittedBy: adminId,
+        ),
+        adminId,
+      );
+      _finish();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 
   Future<void> _submitFlight() async {
@@ -148,20 +157,29 @@ class _InsertActivityAdminScreenState
       return;
     }
     setState(() => _saving = true);
-    await _activityService.addFlightActivityValidated(
-      FlightActivity(
-        userId: user.id,
-        helicopterTypeId: _flightHelicopterId!,
-        activityDate: _flightDate,
-        flightHours: hours,
-        description: _flightDescCtrl.text.trim().isEmpty
-            ? null
-            : _flightDescCtrl.text.trim(),
-        submittedBy: adminId,
-      ),
-      adminId,
-    );
-    _finish();
+    try {
+      await _activityService.addFlightActivityValidated(
+        FlightActivity(
+          userId: user.id,
+          helicopterTypeId: _flightHelicopterId!,
+          activityDate: _flightDate,
+          flightHours: hours,
+          description: _flightDescCtrl.text.trim().isEmpty
+              ? null
+              : _flightDescCtrl.text.trim(),
+          submittedBy: adminId,
+        ),
+        adminId,
+      );
+      _finish();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 
   Future<void> _submitTob() async {
@@ -174,20 +192,29 @@ class _InsertActivityAdminScreenState
       return;
     }
     setState(() => _saving = true);
-    await _activityService.addTobActivityValidated(
-      TobActivity(
-        userId: user.id,
-        helicopterTypeId: _tobHelicopterId!,
-        tobCapabilityId: _tobCapabilityId!,
-        activityDate: _tobDate,
-        description: _tobDescCtrl.text.trim().isEmpty
-            ? null
-            : _tobDescCtrl.text.trim(),
-        submittedBy: adminId,
-      ),
-      adminId,
-    );
-    _finish();
+    try {
+      await _activityService.addTobActivityValidated(
+        TobActivity(
+          userId: user.id,
+          helicopterTypeId: _tobHelicopterId!,
+          tobCapabilityId: _tobCapabilityId!,
+          activityDate: _tobDate,
+          description: _tobDescCtrl.text.trim().isEmpty
+              ? null
+              : _tobDescCtrl.text.trim(),
+          submittedBy: adminId,
+        ),
+        adminId,
+      );
+      _finish();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
   }
 
   void _finish() {
