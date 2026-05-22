@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/gh_config.dart';
 
@@ -15,10 +14,10 @@ class GhDbService {
 
   static const String _base =
       'https://api.github.com/repos/${GhConfig.owner}/${GhConfig.dataRepo}/contents/db';
-  static const String _writePatKey = 'aves_write_pat';
 
   final Map<String, Map<String, dynamic>> _cache = {};
 
+  // ignore: unused_field
   String? _writePat;
 
   static String hashPassword(String password) {
@@ -27,8 +26,6 @@ class GhDbService {
   }
 
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _writePat = prefs.getString(_writePatKey);
     _cache.clear();
 
     await Future.wait([
@@ -46,19 +43,11 @@ class GhDbService {
     ]);
   }
 
-  Future<void> setWritePat(String pat) async {
-    _writePat = pat.trim();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_writePatKey, _writePat!);
-  }
+  Future<void> setWritePat(String pat) async {}
 
-  Future<void> clearWritePat() async {
-    _writePat = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_writePatKey);
-  }
+  Future<void> clearWritePat() async {}
 
-  bool get hasWritePat => (_writePat ?? '').trim().isNotEmpty;
+  bool get hasWritePat => GhConfig.readPat.trim().isNotEmpty;
 
   Future<void> _loadFile(String fileName) async {
     final response = await http.get(
@@ -102,10 +91,6 @@ class GhDbService {
   String _getSha(String fileName) => _cache[fileName]?['sha'] as String? ?? '';
 
   Future<void> _writeFile(String fileName, dynamic data, String commitMsg) async {
-    if (!hasWritePat) {
-      throw Exception('Write PAT non configurato. Vai alle impostazioni admin.');
-    }
-
     final body = <String, dynamic>{
       'message': commitMsg,
       'content': base64.encode(utf8.encode(jsonEncode(data))),
@@ -118,7 +103,7 @@ class GhDbService {
     final response = await http.put(
       Uri.parse('$_base/$fileName'),
       headers: {
-        'Authorization': 'Bearer $_writePat',
+        'Authorization': 'Bearer ${GhConfig.readPat}',
         'Accept': 'application/vnd.github+json',
         'Content-Type': 'application/json',
         'X-GitHub-Api-Version': '2022-11-28',

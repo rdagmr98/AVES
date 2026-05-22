@@ -2,6 +2,7 @@ import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'activity_service.dart';
 import 'gh_db_service.dart';
+import 'web_notification_service.dart';
 
 class CurrencyService {
   final _db = GhDbService();
@@ -257,26 +258,26 @@ class CurrencyService {
     String userId,
     List<UserTobCapability> tobCaps,
   ) async {
-    if (!_db.hasWritePat) {
-      return;
-    }
-
     final currency = await getFullCurrency(userId, tobCaps);
     for (final entry in currency.entries) {
       final status = entry.value;
+      String? message;
       if (status.isExpired) {
-        await _upsertNotification(
+        message = await _upsertNotification(
           userId,
           _notifType(entry.key, expired: true),
           status.label,
         );
       } else if (status.isWarning) {
-        await _upsertNotification(
+        message = await _upsertNotification(
           userId,
           _notifType(entry.key, expired: false),
           status.label,
           daysLeft: status.daysUntilExpiry ?? 0,
         );
+      }
+      if (message != null) {
+        WebNotificationService.showNotification('AVES CSL', message);
       }
     }
   }
@@ -291,7 +292,7 @@ class CurrencyService {
     return expired ? 'TOB_EXPIRED' : 'TOB_EXPIRING';
   }
 
-  Future<void> _upsertNotification(
+  Future<String?> _upsertNotification(
     String userId,
     String type,
     String label, {
@@ -305,7 +306,7 @@ class CurrencyService {
           item['is_read'] == false,
     );
     if (exists) {
-      return;
+      return null;
     }
 
     final message = daysLeft != null
@@ -321,5 +322,6 @@ class CurrencyService {
       'created_at': DateTime.now().toIso8601String(),
     });
     await _db.saveNotifications(notifications);
+    return message;
   }
 }

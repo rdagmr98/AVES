@@ -14,13 +14,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscure = true;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _usernameCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
@@ -30,7 +30,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
     final auth = ref.read(authProvider);
-    final ok = await auth.signIn(_emailCtrl.text.trim(), _passCtrl.text);
+    final ok = await auth.signIn(_usernameCtrl.text.trim(), _passCtrl.text);
     if (!mounted) {
       return;
     }
@@ -117,15 +117,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 20),
                           TextFormField(
-                            controller: _emailCtrl,
+                            controller: _usernameCtrl,
                             decoration: const InputDecoration(
-                              labelText: 'Email',
-                              prefixIcon: Icon(Icons.email_outlined),
+                              labelText: 'Numero Licenza / Username',
+                              prefixIcon: Icon(Icons.badge_outlined),
                             ),
-                            keyboardType: TextInputType.emailAddress,
                             validator: (value) =>
-                                value == null || !value.contains('@')
-                                ? 'Email non valida'
+                                value == null || value.trim().isEmpty
+                                ? 'Campo obbligatorio'
                                 : null,
                           ),
                           const SizedBox(height: 16),
@@ -146,7 +145,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             obscureText: _obscure,
                             validator: (value) =>
-                                value == null || value.length < 6
+                                value == null || value.length < 4
                                 ? 'Password troppo corta'
                                 : null,
                           ),

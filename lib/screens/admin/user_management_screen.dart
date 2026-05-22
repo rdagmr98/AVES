@@ -16,12 +16,16 @@ class UserManagementScreen extends ConsumerStatefulWidget {
 
 class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   final _service = UserService();
+  final _searchCtrl = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
   List<UserProfile> _users = [];
   UserProfile? _selectedUser;
   String _selectedRole = 'user';
+  String _search = '';
+  int? _orgUnitId;
+  String _approvalFilter = 'all';
 
   Set<String> _licenseKeys = <String>{};
   Set<String> _privilegeKeys = <String>{};
@@ -36,6 +40,12 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     _loadUsers();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadUsers() async {
     setState(() => _loading = true);
     final users = await _service.getAllUsers();
@@ -48,11 +58,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     });
     if (users.isNotEmpty) {
       final selectedId = _selectedUser?.id;
-      final matched = users
-          .where((item) => item.id == selectedId)
-          .cast<UserProfile?>()
-          .firstWhere((item) => item != null, orElse: () => users.first);
-      await _selectUser(matched!);
+      final matched = users.firstWhere(
+        (item) => item.id == selectedId,
+        orElse: () => users.first,
+      );
+      await _selectUser(matched);
     }
   }
 
@@ -110,16 +120,16 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Utente approvato.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Utente approvato.')));
     } catch (e) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -195,14 +205,31 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) {
         setState(() => _saving = false);
       }
     }
+  }
+
+  List<UserProfile> _filteredUsers() {
+    return _users.where((user) {
+      final search = _search.trim().toLowerCase();
+      final matchesSearch =
+          search.isEmpty ||
+          user.fullName.toLowerCase().contains(search) ||
+          (user.numeroLicenza ?? '').toLowerCase().contains(search);
+      final matchesOrg = _orgUnitId == null || user.orgUnitId == _orgUnitId;
+      final matchesApproval = switch (_approvalFilter) {
+        'approved' => user.isApproved,
+        'pending' => !user.isApproved,
+        _ => true,
+      };
+      return matchesSearch && matchesOrg && matchesApproval;
+    }).toList();
   }
 
   @override
@@ -212,85 +239,161 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     final licenseTypes = auth.licenseTypes;
     final privilegeTypes = auth.privilegeTypes;
     final tobCapabilities = auth.tobCapabilityTypes;
+    final filteredUsers = _filteredUsers();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Gestione Utenti')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final detail = _selectedUser == null
-                    ? const Center(
-                        child: Text(
-                          'Seleziona un utente per vedere i dettagli.',
-                        ),
-                      )
-                    : _UserDetailPanel(
-                        user: _selectedUser!,
-                        selectedRole: _selectedRole,
-                        onRoleChanged: (value) =>
-                            setState(() => _selectedRole = value ?? 'user'),
-                        onApprove: _approveUser,
-                        onSave: _saving ? null : _saveAssignments,
-                        helicopterTypes: helicopterTypes,
-                        licenseTypes: licenseTypes,
-                        privilegeTypes: privilegeTypes,
-                        tobCapabilities: tobCapabilities,
-                        licenseKeys: _licenseKeys,
-                        privilegeKeys: _privilegeKeys,
-                        tCrewHelicopters: _tCrewHelicopters,
-                        tobCrewHelicopters: _tobCrewHelicopters,
-                        tobCapabilityKeys: _tobCapabilityKeys,
-                        tobGrades: _tobGrades,
-                        onToggleLicense: (key) =>
-                            setState(() => _toggleKey(_licenseKeys, key)),
-                        onTogglePrivilege: (key) =>
-                            setState(() => _toggleKey(_privilegeKeys, key)),
-                        onToggleTCrew: (helicopterId) => setState(
-                          () => _toggleInt(_tCrewHelicopters, helicopterId),
-                        ),
-                        onToggleTobCrew: (helicopterId) => setState(() {
-                          _toggleInt(_tobCrewHelicopters, helicopterId);
-                          _tobGrades.putIfAbsent(helicopterId, () => 'A');
-                        }),
-                        onToggleTobCapability: (key) =>
-                            setState(() => _toggleKey(_tobCapabilityKeys, key)),
-                        onTobGradeChanged: (helicopterId, value) => setState(
-                          () => _tobGrades[helicopterId] = value ?? 'A',
-                        ),
-                      );
-
-                if (constraints.maxWidth < 1000) {
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: _UserList(
-                          users: _users,
-                          selected: _selectedUser,
-                          onSelected: _selectUser,
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(child: detail),
-                    ],
-                  );
-                }
-
-                return Row(
-                  children: [
-                    SizedBox(
-                      width: 340,
-                      child: _UserList(
-                        users: _users,
-                        selected: _selectedUser,
-                        onSelected: _selectUser,
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: 260,
+                            child: TextField(
+                              controller: _searchCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Cerca per nome o licenza',
+                                prefixIcon: Icon(Icons.search),
+                              ),
+                              onChanged: (value) => setState(() => _search = value),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: DropdownButtonFormField<int?>(
+                              initialValue: _orgUnitId,
+                              decoration: const InputDecoration(
+                                labelText: 'Unità organizzativa',
+                              ),
+                              items: [
+                                const DropdownMenuItem<int?>(
+                                  value: null,
+                                  child: Text('Tutte'),
+                                ),
+                                ...auth.orgUnits.map(
+                                  (unit) => DropdownMenuItem<int?>(
+                                    value: unit.id,
+                                    child: Text('${unit.code} - ${unit.name}'),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (value) => setState(() => _orgUnitId = value),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 200,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _approvalFilter,
+                              decoration: const InputDecoration(
+                                labelText: 'Stato approvazione',
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'all', child: Text('Tutti')),
+                                DropdownMenuItem(
+                                  value: 'approved',
+                                  child: Text('Approvati'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'pending',
+                                  child: Text('In attesa'),
+                                ),
+                              ],
+                              onChanged: (value) =>
+                                  setState(() => _approvalFilter = value ?? 'all'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const VerticalDivider(width: 1),
-                    Expanded(child: detail),
-                  ],
-                );
-              },
+                  ),
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final detail = _selectedUser == null
+                          ? const Center(
+                              child: Text(
+                                'Seleziona un utente per vedere i dettagli.',
+                              ),
+                            )
+                          : _UserDetailPanel(
+                              user: _selectedUser!,
+                              selectedRole: _selectedRole,
+                              onRoleChanged: (value) =>
+                                  setState(() => _selectedRole = value ?? 'user'),
+                              onApprove: _approveUser,
+                              onSave: _saving ? null : _saveAssignments,
+                              helicopterTypes: helicopterTypes,
+                              licenseTypes: licenseTypes,
+                              privilegeTypes: privilegeTypes,
+                              tobCapabilities: tobCapabilities,
+                              licenseKeys: _licenseKeys,
+                              privilegeKeys: _privilegeKeys,
+                              tCrewHelicopters: _tCrewHelicopters,
+                              tobCrewHelicopters: _tobCrewHelicopters,
+                              tobCapabilityKeys: _tobCapabilityKeys,
+                              tobGrades: _tobGrades,
+                              onToggleLicense: (key) =>
+                                  setState(() => _toggleKey(_licenseKeys, key)),
+                              onTogglePrivilege: (key) =>
+                                  setState(() => _toggleKey(_privilegeKeys, key)),
+                              onToggleTCrew: (helicopterId) =>
+                                  setState(() => _toggleInt(_tCrewHelicopters, helicopterId)),
+                              onToggleTobCrew: (helicopterId) => setState(() {
+                                _toggleInt(_tobCrewHelicopters, helicopterId);
+                                _tobGrades.putIfAbsent(helicopterId, () => 'A');
+                              }),
+                              onToggleTobCapability: (key) =>
+                                  setState(() => _toggleKey(_tobCapabilityKeys, key)),
+                              onTobGradeChanged: (helicopterId, value) =>
+                                  setState(() => _tobGrades[helicopterId] = value ?? 'A'),
+                              showMaintenanceSections: auth.isAdminPriv || !auth.isAdminCrew,
+                              showCrewSections: auth.isAdminCrew || !auth.isAdminPriv,
+                            );
+
+                      if (constraints.maxWidth < 1000) {
+                        return Column(
+                          children: [
+                            Expanded(
+                              child: _UserList(
+                                users: filteredUsers,
+                                selected: _selectedUser,
+                                onSelected: _selectUser,
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(child: detail),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          SizedBox(
+                            width: 340,
+                            child: _UserList(
+                              users: filteredUsers,
+                              selected: _selectedUser,
+                              onSelected: _selectUser,
+                            ),
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: detail),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
     );
   }
@@ -325,6 +428,10 @@ class _UserList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (users.isEmpty) {
+      return const Center(child: Text('Nessun utente trovato.'));
+    }
+
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: users.length,
@@ -341,7 +448,9 @@ class _UserList extends StatelessWidget {
           child: ListTile(
             onTap: () => onSelected(user),
             title: Text(user.fullName),
-            subtitle: Text('${user.qualifica} · ${user.orgUnitName}'.trim()),
+            subtitle: Text(
+              '${user.numeroLicenza ?? 'Licenza non indicata'} · ${user.orgUnitName}',
+            ),
             trailing: user.isApproved
                 ? const Icon(Icons.verified, color: Colors.green)
                 : const Icon(Icons.pending_actions, color: Colors.amber),
@@ -375,6 +484,8 @@ class _UserDetailPanel extends StatelessWidget {
     required this.onToggleTobCrew,
     required this.onToggleTobCapability,
     required this.onTobGradeChanged,
+    required this.showMaintenanceSections,
+    required this.showCrewSections,
   });
 
   final UserProfile user;
@@ -398,9 +509,16 @@ class _UserDetailPanel extends StatelessWidget {
   final ValueChanged<int> onToggleTobCrew;
   final ValueChanged<String> onToggleTobCapability;
   final void Function(int helicopterId, String? value) onTobGradeChanged;
+  final bool showMaintenanceSections;
+  final bool showCrewSections;
 
   @override
   Widget build(BuildContext context) {
+    final maintenanceSummary =
+        '${licenseKeys.length} licenze · ${privilegeKeys.length} privilegi';
+    final crewSummary =
+        '${tCrewHelicopters.length + tobCrewHelicopters.length} assegnazioni · ${tobCapabilityKeys.length} cap. TOB';
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -422,11 +540,11 @@ class _UserDetailPanel extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${user.qualifica} · ${user.orgUnitName}'.trim(),
+                            '${user.numeroLicenza ?? 'Licenza non indicata'} · ${user.orgUnitName}',
                           ),
-                          Text(
-                            'Licenza: ${user.numeroLicenza ?? 'Non indicata'}',
-                          ),
+                          Text('Username: ${user.username ?? '-'}'),
+                          if (showMaintenanceSections) Text('Area manutenzione: $maintenanceSummary'),
+                          if (showCrewSections) Text('Area equipaggi: $crewSummary'),
                         ],
                       ),
                     ),
@@ -459,122 +577,126 @@ class _UserDetailPanel extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        _AssignmentSection(
-          title: 'Licenze',
-          children: helicopterTypes
-              .map(
-                (helicopter) => _HelicopterCheckboxGroup(
-                  title: '${helicopter.code} - ${helicopter.name}',
-                  children: licenseTypes
-                      .map(
-                        (license) => FilterChip(
-                          selected: licenseKeys.contains(
-                            '${helicopter.id}:${license.id}',
-                          ),
-                          label: Text(license.name),
-                          onSelected: (_) =>
-                              onToggleLicense('${helicopter.id}:${license.id}'),
-                        ),
-                      )
-                      .toList(),
-                ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 16),
-        _AssignmentSection(
-          title: 'Privilegi',
-          children: helicopterTypes
-              .map(
-                (helicopter) => _HelicopterCheckboxGroup(
-                  title: '${helicopter.code} - ${helicopter.name}',
-                  children: privilegeTypes
-                      .map(
-                        (privilege) => FilterChip(
-                          selected: privilegeKeys.contains(
-                            '${helicopter.id}:${privilege.id}',
-                          ),
-                          label: Text(privilege.name),
-                          onSelected: (_) => onTogglePrivilege(
-                            '${helicopter.id}:${privilege.id}',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 16),
-        _AssignmentSection(
-          title: 'Assegnazioni equipaggi',
-          children: helicopterTypes
-              .map(
-                (helicopter) => Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${helicopter.code} - ${helicopter.name}'),
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Equipaggio T'),
-                          value: tCrewHelicopters.contains(helicopter.id),
-                          onChanged: (_) => onToggleTCrew(helicopter.id),
-                        ),
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Equipaggio TOB'),
-                          value: tobCrewHelicopters.contains(helicopter.id),
-                          onChanged: (_) => onToggleTobCrew(helicopter.id),
-                        ),
-                        if (tobCrewHelicopters.contains(helicopter.id))
-                          DropdownButtonFormField<String>(
-                            initialValue: tobGrades[helicopter.id] ?? 'A',
-                            decoration: const InputDecoration(
-                              labelText: 'Fascia TOB',
+        if (showMaintenanceSections) ...[
+          const SizedBox(height: 16),
+          _AssignmentSection(
+            title: 'Licenze',
+            children: helicopterTypes
+                .map(
+                  (helicopter) => _HelicopterCheckboxGroup(
+                    title: '${helicopter.code} - ${helicopter.name}',
+                    children: licenseTypes
+                        .map(
+                          (license) => FilterChip(
+                            selected: licenseKeys.contains(
+                              '${helicopter.id}:${license.id}',
                             ),
-                            items: const [
-                              DropdownMenuItem(value: 'A', child: Text('A')),
-                              DropdownMenuItem(value: 'B', child: Text('B')),
-                              DropdownMenuItem(value: 'C', child: Text('C')),
-                            ],
-                            onChanged: (value) =>
-                                onTobGradeChanged(helicopter.id, value),
+                            label: Text(license.name),
+                            onSelected: (_) =>
+                                onToggleLicense('${helicopter.id}:${license.id}'),
                           ),
-                      ],
+                        )
+                        .toList(),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 16),
+          _AssignmentSection(
+            title: 'Privilegi manutentivi',
+            children: helicopterTypes
+                .map(
+                  (helicopter) => _HelicopterCheckboxGroup(
+                    title: '${helicopter.code} - ${helicopter.name}',
+                    children: privilegeTypes
+                        .map(
+                          (privilege) => FilterChip(
+                            selected: privilegeKeys.contains(
+                              '${helicopter.id}:${privilege.id}',
+                            ),
+                            label: Text(privilege.name),
+                            onSelected: (_) => onTogglePrivilege(
+                              '${helicopter.id}:${privilege.id}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+        if (showCrewSections) ...[
+          const SizedBox(height: 16),
+          _AssignmentSection(
+            title: 'Equipaggi di volo',
+            children: helicopterTypes
+                .map(
+                  (helicopter) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${helicopter.code} - ${helicopter.name}'),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Equipaggio T'),
+                            value: tCrewHelicopters.contains(helicopter.id),
+                            onChanged: (_) => onToggleTCrew(helicopter.id),
+                          ),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Equipaggio TOB'),
+                            value: tobCrewHelicopters.contains(helicopter.id),
+                            onChanged: (_) => onToggleTobCrew(helicopter.id),
+                          ),
+                          if (tobCrewHelicopters.contains(helicopter.id))
+                            DropdownButtonFormField<String>(
+                              initialValue: tobGrades[helicopter.id] ?? 'A',
+                              decoration: const InputDecoration(
+                                labelText: 'Fascia TOB',
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'A', child: Text('A')),
+                                DropdownMenuItem(value: 'B', child: Text('B')),
+                                DropdownMenuItem(value: 'C', child: Text('C')),
+                              ],
+                              onChanged: (value) =>
+                                  onTobGradeChanged(helicopter.id, value),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 16),
-        _AssignmentSection(
-          title: 'Capacità TOB',
-          children: helicopterTypes
-              .map(
-                (helicopter) => _HelicopterCheckboxGroup(
-                  title: '${helicopter.code} - ${helicopter.name}',
-                  children: tobCapabilities
-                      .map(
-                        (capability) => FilterChip(
-                          selected: tobCapabilityKeys.contains(
-                            '${helicopter.id}:${capability.id}',
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 16),
+          _AssignmentSection(
+            title: 'Capacità TOB',
+            children: helicopterTypes
+                .map(
+                  (helicopter) => _HelicopterCheckboxGroup(
+                    title: '${helicopter.code} - ${helicopter.name}',
+                    children: tobCapabilities
+                        .map(
+                          (capability) => FilterChip(
+                            selected: tobCapabilityKeys.contains(
+                              '${helicopter.id}:${capability.id}',
+                            ),
+                            label: Text(capability.name),
+                            onSelected: (_) => onToggleTobCapability(
+                              '${helicopter.id}:${capability.id}',
+                            ),
                           ),
-                          label: Text(capability.name),
-                          onSelected: (_) => onToggleTobCapability(
-                            '${helicopter.id}:${capability.id}',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              )
-              .toList(),
-        ),
+                        )
+                        .toList(),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
         const SizedBox(height: 24),
         Align(
           alignment: Alignment.centerLeft,

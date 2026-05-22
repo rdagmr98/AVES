@@ -14,12 +14,15 @@ class ValidateActivitiesScreen extends ConsumerStatefulWidget {
       _ValidateActivitiesScreenState();
 }
 
+enum _ValidationTabType { maintenance, flight, tob }
+
 class _ValidateActivitiesScreenState
     extends ConsumerState<ValidateActivitiesScreen>
     with SingleTickerProviderStateMixin {
   final _service = ActivityService();
 
   late final TabController _tabController;
+  late final List<_ValidationTabType> _tabs;
   bool _loading = true;
   List<MaintenanceActivity> _maintenance = [];
   List<FlightActivity> _flight = [];
@@ -28,7 +31,19 @@ class _ValidateActivitiesScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    final auth = ref.read(authProvider);
+    if (auth.isAdminPriv) {
+      _tabs = const [_ValidationTabType.maintenance];
+    } else if (auth.isAdminCrew) {
+      _tabs = const [_ValidationTabType.flight, _ValidationTabType.tob];
+    } else {
+      _tabs = const [
+        _ValidationTabType.maintenance,
+        _ValidationTabType.flight,
+        _ValidationTabType.tob,
+      ];
+    }
+    _tabController = TabController(length: _tabs.length, vsync: this);
     _load();
   }
 
@@ -40,9 +55,15 @@ class _ValidateActivitiesScreenState
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final maintenance = await _service.getPendingMaintenanceActivities();
-    final flight = await _service.getPendingFlightActivities();
-    final tob = await _service.getPendingTobActivities();
+    final maintenance = _tabs.contains(_ValidationTabType.maintenance)
+        ? await _service.getPendingMaintenanceActivities()
+        : <MaintenanceActivity>[];
+    final flight = _tabs.contains(_ValidationTabType.flight)
+        ? await _service.getPendingFlightActivities()
+        : <FlightActivity>[];
+    final tob = _tabs.contains(_ValidationTabType.tob)
+        ? await _service.getPendingTobActivities()
+        : <TobActivity>[];
     if (!mounted) {
       return;
     }
@@ -66,9 +87,9 @@ class _ValidateActivitiesScreenState
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -84,9 +105,9 @@ class _ValidateActivitiesScreenState
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -102,9 +123,9 @@ class _ValidateActivitiesScreenState
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -115,11 +136,17 @@ class _ValidateActivitiesScreenState
         title: const Text('Valida Attività'),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Manutenzione'),
-            Tab(text: 'Volo'),
-            Tab(text: 'TOB'),
-          ],
+          tabs: _tabs
+              .map(
+                (tab) => Tab(
+                  text: switch (tab) {
+                    _ValidationTabType.maintenance => 'Manutenzione',
+                    _ValidationTabType.flight => 'Volo',
+                    _ValidationTabType.tob => 'TOB',
+                  },
+                ),
+              )
+              .toList(),
         ),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
@@ -129,49 +156,53 @@ class _ValidateActivitiesScreenState
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabController,
-              children: [
-                _ValidationList<MaintenanceActivity>(
-                  items: _maintenance,
-                  titleBuilder: (item) =>
-                      '${item.userFullName} · ${item.helicopterCode}',
-                  subtitleBuilder: (item) =>
-                      '${item.privilegeName}\n${item.description ?? 'Nessuna descrizione'}',
-                  dateBuilder: (item) => item.activityDate,
-                  onValidate: (item) => _validateMaintenance(item.id!),
-                  onReject: (item) async {
-                    await _service.rejectMaintenanceActivity(item.id!);
-                    await _load();
-                  },
-                ),
-                _ValidationList<FlightActivity>(
-                  items: _flight,
-                  titleBuilder: (item) =>
-                      '${item.userFullName} · ${item.helicopterCode}',
-                  subtitleBuilder: (item) =>
-                      '${item.flightHours.toStringAsFixed(1)}h\n${item.description ?? 'Nessuna descrizione'}',
-                  dateBuilder: (item) => item.activityDate,
-                  onValidate: (item) => _validateFlight(item.id!),
-                  onReject: (item) async {
-                    await _service.rejectFlightActivity(item.id!);
-                    await _load();
-                  },
-                ),
-                _ValidationList<TobActivity>(
-                  items: _tob,
-                  titleBuilder: (item) =>
-                      '${item.userFullName} · ${item.helicopterCode}',
-                  subtitleBuilder: (item) =>
-                      '${item.capabilityName}\n${item.description ?? 'Nessuna descrizione'}',
-                  dateBuilder: (item) => item.activityDate,
-                  onValidate: (item) => _validateTob(item.id!),
-                  onReject: (item) async {
-                    await _service.rejectTobActivity(item.id!);
-                    await _load();
-                  },
-                ),
-              ],
+              children: _tabs.map(_buildTabContent).toList(),
             ),
     );
+  }
+
+  Widget _buildTabContent(_ValidationTabType tab) {
+    switch (tab) {
+      case _ValidationTabType.maintenance:
+        return _ValidationList<MaintenanceActivity>(
+          items: _maintenance,
+          titleBuilder: (item) => '${item.userFullName} · ${item.helicopterCode}',
+          subtitleBuilder: (item) =>
+              '${item.privilegeName}\n${item.description ?? 'Nessuna descrizione'}',
+          dateBuilder: (item) => item.activityDate,
+          onValidate: (item) => _validateMaintenance(item.id!),
+          onReject: (item) async {
+            await _service.rejectMaintenanceActivity(item.id!);
+            await _load();
+          },
+        );
+      case _ValidationTabType.flight:
+        return _ValidationList<FlightActivity>(
+          items: _flight,
+          titleBuilder: (item) => '${item.userFullName} · ${item.helicopterCode}',
+          subtitleBuilder: (item) =>
+              '${item.flightHours.toStringAsFixed(1)}h\n${item.description ?? 'Nessuna descrizione'}',
+          dateBuilder: (item) => item.activityDate,
+          onValidate: (item) => _validateFlight(item.id!),
+          onReject: (item) async {
+            await _service.rejectFlightActivity(item.id!);
+            await _load();
+          },
+        );
+      case _ValidationTabType.tob:
+        return _ValidationList<TobActivity>(
+          items: _tob,
+          titleBuilder: (item) => '${item.userFullName} · ${item.helicopterCode}',
+          subtitleBuilder: (item) =>
+              '${item.capabilityName}\n${item.description ?? 'Nessuna descrizione'}',
+          dateBuilder: (item) => item.activityDate,
+          onValidate: (item) => _validateTob(item.id!),
+          onReject: (item) async {
+            await _service.rejectTobActivity(item.id!);
+            await _load();
+          },
+        );
+    }
   }
 }
 

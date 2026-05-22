@@ -2,8 +2,8 @@ class UserProfile {
   final String id;
   final String nome;
   final String cognome;
+  final String? username;
   final String? numeroLicenza;
-  final String qualifica;
   final int? orgUnitId;
   final String orgUnitName;
   final String role;
@@ -17,8 +17,8 @@ class UserProfile {
     required this.id,
     required this.nome,
     required this.cognome,
+    this.username,
     this.numeroLicenza,
-    this.qualifica = '',
     this.orgUnitId,
     this.orgUnitName = '',
     required this.role,
@@ -39,8 +39,8 @@ class UserProfile {
     id: j['id'] as String,
     nome: j['nome'] as String? ?? '',
     cognome: j['cognome'] as String? ?? '',
+    username: j['username'] as String?,
     numeroLicenza: j['numero_licenza'] as String?,
-    qualifica: j['qualifica'] as String? ?? '',
     orgUnitId: j['org_unit_id'] as int?,
     orgUnitName:
         (j['org_units'] as Map<String, dynamic>?)?['name'] as String? ?? '',
@@ -59,8 +59,8 @@ class UserProfile {
   Map<String, dynamic> toJson() => {
     'nome': nome,
     'cognome': cognome,
+    'username': username,
     'numero_licenza': numeroLicenza,
-    'qualifica': qualifica,
     'org_unit_id': orgUnitId,
     'role': role,
     'is_approved': isApproved,
@@ -71,8 +71,8 @@ class UserProfile {
   UserProfile copyWith({
     String? nome,
     String? cognome,
+    String? username,
     String? numeroLicenza,
-    String? qualifica,
     int? orgUnitId,
     String? orgUnitName,
     String? role,
@@ -83,8 +83,8 @@ class UserProfile {
     id: id,
     nome: nome ?? this.nome,
     cognome: cognome ?? this.cognome,
+    username: username ?? this.username,
     numeroLicenza: numeroLicenza ?? this.numeroLicenza,
-    qualifica: qualifica ?? this.qualifica,
     orgUnitId: orgUnitId ?? this.orgUnitId,
     orgUnitName: orgUnitName ?? this.orgUnitName,
     role: role ?? this.role,

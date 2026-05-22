@@ -5,6 +5,22 @@ import 'gh_db_service.dart';
 class UserService {
   final _db = GhDbService();
 
+  String _normalizeUsername(String value) => value.trim().toLowerCase();
+
+  String? _userUsername(Map<String, dynamic> user) {
+    final username = user['username'] as String?;
+    if (username != null && username.trim().isNotEmpty) {
+      return _normalizeUsername(username);
+    }
+
+    final numeroLicenza = user['numero_licenza'] as String?;
+    if (numeroLicenza != null && numeroLicenza.trim().isNotEmpty) {
+      return _normalizeUsername(numeroLicenza);
+    }
+
+    return null;
+  }
+
   List<Map<String, dynamic>> _referenceList(String key) =>
       List<Map<String, dynamic>>.from(
         (_db.referenceData[key] as List<dynamic>? ?? const []),
@@ -51,34 +67,36 @@ class UserService {
 
   Future<UserProfile> createProfile({
     String? id,
-    required String email,
+    String? username,
     required String nome,
     required String cognome,
     String? numeroLicenza,
     String role = 'user',
   }) async {
     final users = _db.users;
-    final normalizedEmail = email.trim().toLowerCase();
-    if (users.any(
-      (item) => (item['email'] as String?)?.toLowerCase() == normalizedEmail,
-    )) {
-      throw Exception('Email già registrata');
+    final resolvedUsername = (username ?? numeroLicenza ?? '').trim();
+    if (resolvedUsername.isNotEmpty) {
+      final normalizedUsername = _normalizeUsername(resolvedUsername);
+      if (users.any((item) => _userUsername(item) == normalizedUsername)) {
+        throw Exception('Username già registrato');
+      }
     }
-    if (numeroLicenza != null &&
-        numeroLicenza.isNotEmpty &&
-        users.any((item) => item['numero_licenza'] == numeroLicenza)) {
-      throw Exception('Numero di licenza già registrato');
-    }
+
+    final normalizedLicense = numeroLicenza?.trim().toUpperCase();
+    final normalizedStoredUsername = resolvedUsername.isEmpty
+        ? null
+        : (role == 'user'
+              ? resolvedUsername.toUpperCase()
+              : resolvedUsername.trim());
 
     final now = DateTime.now().toIso8601String();
     final newUser = <String, dynamic>{
       'id': id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-      'email': normalizedEmail,
+      'username': normalizedStoredUsername,
       'password_hash': '',
       'nome': nome,
       'cognome': cognome,
-      'numero_licenza': numeroLicenza,
-      'qualifica': '',
+      'numero_licenza': normalizedLicense,
       'org_unit_id': null,
       'role': role,
       'is_approved': role != 'user',

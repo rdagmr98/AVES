@@ -27,15 +27,9 @@ class AppColors {
 
 class AppStrings {
   // App
-  static const String appName = 'AVES Currency';
+  static const String appName = 'AVES CSL';
   static const String appFullName =
       'Aviazione dell\'Esercito\nGestione Currency';
-
-  // Admin email (iniziali, modificabili in app)
-  static const String adminPrivEmail = 'admin.privilegi@aves.esercito.it';
-  static const String adminCrewEmail = 'admin.equipaggi@aves.esercito.it';
-  static const String adminPrivPassword = 'AvesPriv2024!';
-  static const String adminCrewPassword = 'AvesCrew2024!';
 
   // Currency status
   static const String currencyValid = 'VALIDA';

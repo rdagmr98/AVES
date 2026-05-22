@@ -9,13 +9,29 @@ import 'gh_db_service.dart';
 class AuthService {
   final _db = GhDbService();
 
-  Future<UserProfile?> signIn(String email, String password) async {
+  String _normalizeUsername(String value) => value.trim().toLowerCase();
+
+  String? _userUsername(Map<String, dynamic> user) {
+    final username = user['username'] as String?;
+    if (username != null && username.trim().isNotEmpty) {
+      return _normalizeUsername(username);
+    }
+
+    final numeroLicenza = user['numero_licenza'] as String?;
+    if (numeroLicenza != null && numeroLicenza.trim().isNotEmpty) {
+      return _normalizeUsername(numeroLicenza);
+    }
+
+    return null;
+  }
+
+  Future<UserProfile?> signIn(String username, String password) async {
     final hash = GhDbService.hashPassword(password);
-    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedUsername = _normalizeUsername(username);
     Map<String, dynamic>? match;
 
     for (final user in _db.users) {
-      if ((user['email'] as String?)?.toLowerCase() == normalizedEmail &&
+      if (_userUsername(user) == normalizedUsername &&
           user['password_hash'] == hash) {
         match = user;
         break;
@@ -50,37 +66,28 @@ class AuthService {
   }
 
   Future<UserProfile> signUp({
-    required String email,
     required String password,
     required String nome,
     required String cognome,
-    String? numeroLicenza,
+    required String numeroLicenza,
   }) async {
     final users = _db.users;
-    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedUsername = _normalizeUsername(numeroLicenza);
 
-    if (users.any(
-      (user) => (user['email'] as String?)?.toLowerCase() == normalizedEmail,
-    )) {
-      throw Exception('Email già registrata');
-    }
-
-    if (numeroLicenza != null &&
-        numeroLicenza.isNotEmpty &&
-        users.any((user) => user['numero_licenza'] == numeroLicenza)) {
-      throw Exception('Numero di licenza già registrato');
+    if (users.any((user) => _userUsername(user) == normalizedUsername)) {
+      throw Exception('Username già registrato');
     }
 
     final id = _generateId();
     final now = DateTime.now().toIso8601String();
+    final licenseNumber = numeroLicenza.trim().toUpperCase();
     final newUser = <String, dynamic>{
       'id': id,
-      'email': normalizedEmail,
+      'username': licenseNumber,
       'password_hash': GhDbService.hashPassword(password),
       'nome': nome,
       'cognome': cognome,
-      'numero_licenza': numeroLicenza,
-      'qualifica': '',
+      'numero_licenza': licenseNumber,
       'org_unit_id': null,
       'role': 'user',
       'is_approved': false,

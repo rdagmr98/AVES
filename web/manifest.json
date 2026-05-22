@@ -1,11 +1,11 @@
 {
-    "name": "aves_currency",
-    "short_name": "aves_currency",
+    "name": "AVES CSL",
+    "short_name": "AVES",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A1A2E",
+    "theme_color": "#1B4332",
+    "description": "Gestione Currency Manutentori ed Equipaggi - Aviazione dell'Esercito",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

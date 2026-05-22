@@ -89,7 +89,7 @@ class UserDashboard extends ConsumerWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${user.qualifica} · ${user.orgUnitName}'.trim(),
+                            user.orgUnitName,
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],

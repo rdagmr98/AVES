@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/currency_service.dart';
 import '../services/notification_service.dart';
 import '../services/user_service.dart';
+import '../services/web_notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final _authService = AuthService();
@@ -124,13 +125,13 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> signIn(String email, String password) async {
+  Future<bool> signIn(String username, String password) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      _userProfile = await _authService.signIn(email, password);
+      _userProfile = await _authService.signIn(username, password);
       if (_userProfile == null) {
         _error = 'Credenziali non valide';
         return false;
@@ -139,6 +140,7 @@ class AuthProvider extends ChangeNotifier {
       await _loadReferenceData();
       await _authService.saveSession(_userProfile!.id, _userProfile!.role);
       await _loadUserData(_userProfile!.id);
+      await WebNotificationService.requestPermission();
       return true;
     } catch (e) {
       _error = _parseError(e);
@@ -150,11 +152,10 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> signUp({
-    required String email,
     required String password,
     required String nome,
     required String cognome,
-    String? numeroLicenza,
+    required String numeroLicenza,
   }) async {
     _isLoading = true;
     _error = null;
@@ -162,7 +163,6 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       _userProfile = await _authService.signUp(
-        email: email,
         password: password,
         nome: nome,
         cognome: cognome,
@@ -241,17 +241,13 @@ class AuthProvider extends ChangeNotifier {
   String _parseError(dynamic e) {
     final msg = e.toString().toLowerCase();
     if (msg.contains('invalid credentials') || msg.contains('credenziali')) {
-      return 'Email o password non corretti';
+      return 'Identificativo o password non corretti';
     }
-    if (msg.contains('email già registrata') || msg.contains('email already')) {
-      return 'Email già registrata';
-    }
-    if (msg.contains('numero di licenza già registrato') ||
+    if (msg.contains('username già registrato') ||
+        msg.contains('username already') ||
+        msg.contains('numero di licenza già registrato') ||
         (msg.contains('unique') && msg.contains('numero_licenza'))) {
-      return 'Numero di licenza già registrato';
-    }
-    if (msg.contains('write pat')) {
-      return 'Write PAT non configurato. Vai alle impostazioni admin.';
+      return 'Numero licenza / username già registrato';
     }
     if (msg.contains('account disabilitato')) {
       return 'Account disabilitato';

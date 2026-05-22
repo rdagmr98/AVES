@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app.dart';
+import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
-import '../../widgets/privilege_grid_widget.dart';
+import '../../services/user_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -13,11 +14,12 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _userService = UserService();
   late final TextEditingController _nomeCtrl;
   late final TextEditingController _cognomeCtrl;
-  late final TextEditingController _qualificaCtrl;
   late final TextEditingController _licenzaCtrl;
   int? _orgUnitId;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -25,7 +27,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profile = ref.read(authProvider).userProfile;
     _nomeCtrl = TextEditingController(text: profile?.nome ?? '');
     _cognomeCtrl = TextEditingController(text: profile?.cognome ?? '');
-    _qualificaCtrl = TextEditingController(text: profile?.qualifica ?? '');
     _licenzaCtrl = TextEditingController(text: profile?.numeroLicenza ?? '');
     _orgUnitId = profile?.orgUnitId;
   }
@@ -34,9 +35,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void dispose() {
     _nomeCtrl.dispose();
     _cognomeCtrl.dispose();
-    _qualificaCtrl.dispose();
     _licenzaCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _runMutation(
+    Future<void> Function() action, {
+    required String successMessage,
+  }) async {
+    setState(() => _saving = true);
+    try {
+      await action();
+      await ref.read(authProvider).refreshUserData();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(successMessage)));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -45,29 +73,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (profile == null) {
       return;
     }
-    try {
-      await auth.updateProfile(
+
+    await _runMutation(
+      () => auth.updateProfile(
         profile.copyWith(
           nome: _nomeCtrl.text.trim(),
           cognome: _cognomeCtrl.text.trim(),
-          qualifica: _qualificaCtrl.text.trim(),
           orgUnitId: _orgUnitId,
         ),
-      );
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profilo aggiornato con successo.')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
-    }
+      ),
+      successMessage: 'Profilo aggiornato con successo.',
+    );
   }
 
   Future<void> _showChangePasswordDialog() async {
@@ -138,6 +154,298 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     confirmPasswordCtrl.dispose();
   }
 
+  Future<Map<String, int>?> _showLicenseDialog(
+    List<HelicopterType> helicopterTypes,
+    List<LicenseType> licenseTypes,
+  ) async {
+    return showDialog<Map<String, int>>(
+      context: context,
+      builder: (dialogContext) {
+        int? helicopterId;
+        int? licenseTypeId;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Aggiungi licenza'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: helicopterId,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: helicopterTypes
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => helicopterId = value),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: licenseTypeId,
+                  decoration: const InputDecoration(labelText: 'Tipo licenza'),
+                  items: licenseTypes
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text(item.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => licenseTypeId = value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (helicopterId == null || licenseTypeId == null) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop({
+                    'helicopterTypeId': helicopterId!,
+                    'licenseTypeId': licenseTypeId!,
+                  });
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>?> _showPrivilegeDialog(
+    List<HelicopterType> helicopterTypes,
+    List<PrivilegeType> privilegeTypes,
+  ) async {
+    return showDialog<Map<String, int>>(
+      context: context,
+      builder: (dialogContext) {
+        int? helicopterId;
+        int? privilegeTypeId;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Aggiungi privilegio'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: helicopterId,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: helicopterTypes
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => helicopterId = value),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: privilegeTypeId,
+                  decoration: const InputDecoration(labelText: 'Privilegio'),
+                  items: privilegeTypes
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text(item.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => privilegeTypeId = value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (helicopterId == null || privilegeTypeId == null) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop({
+                    'helicopterTypeId': helicopterId!,
+                    'privilegeTypeId': privilegeTypeId!,
+                  });
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> _showCrewDialog(
+    List<HelicopterType> helicopterTypes,
+  ) async {
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        int? helicopterId;
+        String crewType = 'T';
+        String fascia = 'A';
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Aggiungi equipaggio'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: helicopterId,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: helicopterTypes
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => helicopterId = value),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: crewType,
+                  decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
+                  items: const [
+                    DropdownMenuItem(value: 'T', child: Text('T')),
+                    DropdownMenuItem(value: 'TOB', child: Text('TOB')),
+                  ],
+                  onChanged: (value) => setDialogState(() {
+                    crewType = value ?? 'T';
+                  }),
+                ),
+                if (crewType == 'TOB') ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: fascia,
+                    decoration: const InputDecoration(labelText: 'Fascia TOB'),
+                    items: const [
+                      DropdownMenuItem(value: 'A', child: Text('A')),
+                      DropdownMenuItem(value: 'B', child: Text('B')),
+                      DropdownMenuItem(value: 'C', child: Text('C')),
+                    ],
+                    onChanged: (value) =>
+                        setDialogState(() => fascia = value ?? 'A'),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (helicopterId == null) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop({
+                    'helicopterTypeId': helicopterId,
+                    'crewType': crewType,
+                    'fascia': crewType == 'TOB' ? fascia : null,
+                  });
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>?> _showTobCapabilityDialog(
+    List<HelicopterType> helicopterTypes,
+    List<TobCapability> tobCapabilities,
+  ) async {
+    return showDialog<Map<String, int>>(
+      context: context,
+      builder: (dialogContext) {
+        int? helicopterId;
+        int? capabilityId;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Aggiungi capacità TOB'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: helicopterId,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: helicopterTypes
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => helicopterId = value),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: capabilityId,
+                  decoration: const InputDecoration(labelText: 'Capacità TOB'),
+                  items: tobCapabilities
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text(item.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => capabilityId = value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (helicopterId == null || capabilityId == null) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop({
+                    'helicopterTypeId': helicopterId!,
+                    'capabilityId': capabilityId!,
+                  });
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -146,12 +454,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (_nomeCtrl.text != profile.nome) {
+      _nomeCtrl.text = profile.nome;
+    }
+    if (_cognomeCtrl.text != profile.cognome) {
+      _cognomeCtrl.text = profile.cognome;
+    }
+    if (_licenzaCtrl.text != (profile.numeroLicenza ?? '')) {
+      _licenzaCtrl.text = profile.numeroLicenza ?? '';
+    }
+    _orgUnitId ??= profile.orgUnitId;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profilo'),
         actions: [
           IconButton(
-            onPressed: _saveProfile,
+            onPressed: _saving ? null : _saveProfile,
             icon: const Icon(Icons.save_outlined),
           ),
         ],
@@ -159,6 +478,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          if (_saving || auth.isLoading) const LinearProgressIndicator(),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -178,11 +498,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   TextField(
                     controller: _cognomeCtrl,
                     decoration: const InputDecoration(labelText: 'Cognome'),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _qualificaCtrl,
-                    decoration: const InputDecoration(labelText: 'Qualifica'),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -222,56 +537,193 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
+          _EditableSection(
             title: 'Licenze',
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: auth.licenses.isEmpty
-                  ? const [Text('Nessuna licenza assegnata.')]
-                  : auth.licenses
+            addLabel: 'Aggiungi',
+            onAdd: () async {
+              final result = await _showLicenseDialog(
+                auth.helicopterTypes,
+                auth.licenseTypes,
+              );
+              if (result == null) {
+                return;
+              }
+              await _runMutation(
+                () => _userService.addUserLicense(
+                  UserLicense(
+                    userId: profile.id,
+                    helicopterTypeId: result['helicopterTypeId']!,
+                    licenseTypeId: result['licenseTypeId']!,
+                  ),
+                ),
+                successMessage: 'Licenza aggiunta.',
+              );
+            },
+            child: auth.licenses.isEmpty
+                ? const Text('Nessuna licenza assegnata.')
+                : Column(
+                    children: auth.licenses
                         .map(
-                          (item) => Chip(
-                            label: Text(
-                              '${item.helicopterCode} · ${item.licenseName}',
+                          (item) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${item.helicopterCode} · ${item.licenseName}'),
+                            trailing: IconButton(
+                              onPressed: item.id == null
+                                  ? null
+                                  : () => _runMutation(
+                                        () => _userService.deleteUserLicense(
+                                          item.id!,
+                                        ),
+                                        successMessage: 'Licenza rimossa.',
+                                      ),
+                              icon: const Icon(Icons.delete_outline),
                             ),
                           ),
                         )
                         .toList(),
-            ),
+                  ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Privilegi',
-            child: PrivilegeGridWidget(privileges: auth.privileges),
+          _EditableSection(
+            title: 'Privilegi manutentivi',
+            addLabel: 'Aggiungi',
+            onAdd: () async {
+              final result = await _showPrivilegeDialog(
+                auth.helicopterTypes,
+                auth.privilegeTypes,
+              );
+              if (result == null) {
+                return;
+              }
+              await _runMutation(
+                () => _userService.addUserPrivilege(
+                  UserPrivilege(
+                    userId: profile.id,
+                    helicopterTypeId: result['helicopterTypeId']!,
+                    privilegeTypeId: result['privilegeTypeId']!,
+                  ),
+                ),
+                successMessage: 'Privilegio aggiunto.',
+              );
+            },
+            child: auth.privileges.isEmpty
+                ? const Text('Nessun privilegio assegnato.')
+                : Column(
+                    children: auth.privileges
+                        .map(
+                          (item) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${item.helicopterCode} · ${item.privilegeName}'),
+                            trailing: IconButton(
+                              onPressed: item.id == null
+                                  ? null
+                                  : () => _runMutation(
+                                        () => _userService.deleteUserPrivilege(
+                                          item.id!,
+                                        ),
+                                        successMessage: 'Privilegio rimosso.',
+                                      ),
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Assegnazioni equipaggio',
-            child: _CrewAssignmentsList(assignments: auth.crewAssignments),
+          _EditableSection(
+            title: 'Equipaggi di volo',
+            addLabel: 'Aggiungi',
+            onAdd: () async {
+              final result = await _showCrewDialog(auth.helicopterTypes);
+              if (result == null) {
+                return;
+              }
+              await _runMutation(
+                () => _userService.addUserCrewAssignment(
+                  UserCrewAssignment(
+                    userId: profile.id,
+                    helicopterTypeId: result['helicopterTypeId'] as int,
+                    crewType: result['crewType'] as String,
+                    fascia: result['fascia'] as String?,
+                  ),
+                ),
+                successMessage: 'Equipaggio aggiunto.',
+              );
+            },
+            child: auth.crewAssignments.isEmpty
+                ? const Text('Nessun equipaggio assegnato.')
+                : Column(
+                    children: auth.crewAssignments
+                        .map(
+                          (item) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${item.helicopterCode} · ${item.crewType}'),
+                            subtitle: item.crewType == 'TOB'
+                                ? Text('Fascia ${item.fascia ?? '-'}')
+                                : null,
+                            trailing: IconButton(
+                              onPressed: item.id == null
+                                  ? null
+                                  : () => _runMutation(
+                                        () => _userService.deleteUserCrewAssignment(
+                                          item.id!,
+                                        ),
+                                        successMessage: 'Equipaggio rimosso.',
+                                      ),
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
+          _EditableSection(
             title: 'Capacità TOB',
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: auth.tobCapabilities.isEmpty
-                  ? const [Text('Nessuna capacità TOB assegnata.')]
-                  : auth.tobCapabilities
+            addLabel: 'Aggiungi',
+            onAdd: () async {
+              final result = await _showTobCapabilityDialog(
+                auth.helicopterTypes,
+                auth.tobCapabilityTypes,
+              );
+              if (result == null) {
+                return;
+              }
+              await _runMutation(
+                () => _userService.addUserTobCapability(
+                  UserTobCapability(
+                    userId: profile.id,
+                    helicopterTypeId: result['helicopterTypeId']!,
+                    tobCapabilityId: result['capabilityId']!,
+                  ),
+                ),
+                successMessage: 'Capacità TOB aggiunta.',
+              );
+            },
+            child: auth.tobCapabilities.isEmpty
+                ? const Text('Nessuna capacità TOB assegnata.')
+                : Column(
+                    children: auth.tobCapabilities
                         .map(
-                          (item) => Chip(
-                            label: Text(
-                              '${item.helicopterCode} · ${item.capabilityName}',
-                            ),
-                            avatar: const Icon(
-                              Icons.build_circle_outlined,
-                              size: 18,
+                          (item) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${item.helicopterCode} · ${item.capabilityName}'),
+                            trailing: IconButton(
+                              onPressed: item.id == null
+                                  ? null
+                                  : () => _runMutation(
+                                        () => _userService.deleteUserTobCapability(
+                                          item.id!,
+                                        ),
+                                        successMessage: 'Capacità TOB rimossa.',
+                                      ),
+                              icon: const Icon(Icons.delete_outline),
                             ),
                           ),
                         )
                         .toList(),
-            ),
+                  ),
           ),
         ],
       ),
@@ -279,10 +731,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+class _EditableSection extends StatelessWidget {
+  const _EditableSection({
+    required this.title,
+    required this.addLabel,
+    required this.onAdd,
+    required this.child,
+  });
 
   final String title;
+  final String addLabel;
+  final VoidCallback onAdd;
   final Widget child;
 
   @override
@@ -293,44 +752,23 @@ class _SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: Text(addLabel),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             child,
           ],
         ),
       ),
-    );
-  }
-}
-
-class _CrewAssignmentsList extends StatelessWidget {
-  const _CrewAssignmentsList({required this.assignments});
-
-  final List<UserCrewAssignment> assignments;
-
-  @override
-  Widget build(BuildContext context) {
-    if (assignments.isEmpty) {
-      return const Text('Nessuna assegnazione equipaggio.');
-    }
-
-    return Column(
-      children: assignments
-          .map(
-            (assignment) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.flight_takeoff_outlined),
-              title: Text(
-                '${assignment.helicopterCode} · ${assignment.crewType}',
-              ),
-              subtitle: Text(
-                assignment.fascia == null
-                    ? assignment.helicopterName
-                    : 'Fascia TOB ${assignment.fascia}',
-              ),
-            ),
-          )
-          .toList(),
     );
   }
 }

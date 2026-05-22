@@ -17,6 +17,8 @@ class InsertActivityAdminScreen extends ConsumerStatefulWidget {
       _InsertActivityAdminScreenState();
 }
 
+enum _AdminInsertTabType { maintenance, flight, tob }
+
 class _InsertActivityAdminScreenState
     extends ConsumerState<InsertActivityAdminScreen>
     with SingleTickerProviderStateMixin {
@@ -28,6 +30,7 @@ class _InsertActivityAdminScreenState
   final _flightHoursCtrl = TextEditingController();
 
   late final TabController _tabController;
+  late final List<_AdminInsertTabType> _tabs;
   bool _loading = true;
   bool _saving = false;
   List<UserProfile> _users = [];
@@ -50,7 +53,19 @@ class _InsertActivityAdminScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    final auth = ref.read(authProvider);
+    if (auth.isAdminPriv) {
+      _tabs = const [_AdminInsertTabType.maintenance];
+    } else if (auth.isAdminCrew) {
+      _tabs = const [_AdminInsertTabType.flight, _AdminInsertTabType.tob];
+    } else {
+      _tabs = const [
+        _AdminInsertTabType.maintenance,
+        _AdminInsertTabType.flight,
+        _AdminInsertTabType.tob,
+      ];
+    }
+    _tabController = TabController(length: _tabs.length, vsync: this);
     _loadUsers();
   }
 
@@ -227,16 +242,12 @@ class _InsertActivityAdminScreenState
 
   @override
   Widget build(BuildContext context) {
-    final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(
-      _privileges,
-    );
+    final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(_privileges);
     final filteredPrivileges = _privileges
         .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
         .toList();
     final tAssignments = _crews.where((item) => item.crewType == 'T').toList();
-    final tobAssignments = _crews
-        .where((item) => item.crewType == 'TOB')
-        .toList();
+    final tobAssignments = _crews.where((item) => item.crewType == 'TOB').toList();
     final flightHelicopters = _uniqueCrewHelicopters(tAssignments);
     final tobHelicopters = _uniqueCrewHelicopters(tobAssignments);
     final filteredCapabilities = _tobCapabilities
@@ -248,11 +259,17 @@ class _InsertActivityAdminScreenState
         title: const Text('Inserimento attività amministrativo'),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Manutenzione'),
-            Tab(text: 'Volo'),
-            Tab(text: 'TOB'),
-          ],
+          tabs: _tabs
+              .map(
+                (tab) => Tab(
+                  text: switch (tab) {
+                    _AdminInsertTabType.maintenance => 'Manutenzione',
+                    _AdminInsertTabType.flight => 'Volo',
+                    _AdminInsertTabType.tob => 'TOB',
+                  },
+                ),
+              )
+              .toList(),
         ),
       ),
       body: _loading
@@ -262,9 +279,7 @@ class _InsertActivityAdminScreenState
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: _selectedUser?.id,
-                  decoration: const InputDecoration(
-                    labelText: 'Seleziona utente',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Seleziona utente'),
                   items: _users
                       .map(
                         (user) => DropdownMenuItem<String>(
@@ -291,231 +306,193 @@ class _InsertActivityAdminScreenState
                   height: 640,
                   child: TabBarView(
                     controller: _tabController,
-                    children: [
-                      _AdminActivityTab(
-                        enabled:
-                            _selectedUser != null &&
-                            maintenanceHelicopters.isNotEmpty,
-                        child: _AdminActivityCard(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              initialValue:
-                                  maintenanceHelicopters.any(
-                                    (item) =>
-                                        item.id == _maintenanceHelicopterId,
+                    children: _tabs.map((tab) {
+                      switch (tab) {
+                        case _AdminInsertTabType.maintenance:
+                          return _AdminActivityTab(
+                            enabled: _selectedUser != null && maintenanceHelicopters.isNotEmpty,
+                            child: _AdminActivityCard(
+                              children: [
+                                DropdownButtonFormField<int>(
+                                  initialValue: maintenanceHelicopters.any(
+                                    (item) => item.id == _maintenanceHelicopterId,
                                   )
-                                  ? _maintenanceHelicopterId
-                                  : null,
-                              decoration: const InputDecoration(
-                                labelText: 'Elicottero',
-                              ),
-                              items: maintenanceHelicopters
-                                  .map(
-                                    (item) => DropdownMenuItem<int>(
-                                      value: item.id,
-                                      child: Text(
-                                        '${item.code} - ${item.name}',
-                                      ),
-                                    ),
+                                      ? _maintenanceHelicopterId
+                                      : null,
+                                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                                  items: maintenanceHelicopters
+                                      .map(
+                                        (item) => DropdownMenuItem<int>(
+                                          value: item.id,
+                                          child: Text('${item.code} - ${item.name}'),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => _maintenanceHelicopterId = value),
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<int>(
+                                  initialValue: filteredPrivileges.any(
+                                    (item) => item.privilegeTypeId == _maintenancePrivilegeId,
                                   )
-                                  .toList(),
-                              onChanged: (value) => setState(
-                                () => _maintenanceHelicopterId = value,
-                              ),
+                                      ? _maintenancePrivilegeId
+                                      : null,
+                                  decoration: const InputDecoration(labelText: 'Privilegio'),
+                                  items: filteredPrivileges
+                                      .map(
+                                        (item) => DropdownMenuItem<int>(
+                                          value: item.privilegeTypeId,
+                                          child: Text(item.privilegeName),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => _maintenancePrivilegeId = value),
+                                ),
+                                const SizedBox(height: 16),
+                                _AdminDateButton(
+                                  label: 'Data attività',
+                                  date: _maintenanceDate,
+                                  onPressed: () => _pickDate(
+                                    (value) => _maintenanceDate = value,
+                                    _maintenanceDate,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _maintenanceDescCtrl,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton(
+                                  onPressed: _saving ? null : _submitMaintenance,
+                                  child: const Text('Inserisci come validata'),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
-                            DropdownButtonFormField<int>(
-                              initialValue:
-                                  filteredPrivileges.any(
-                                    (item) =>
-                                        item.privilegeTypeId ==
-                                        _maintenancePrivilegeId,
-                                  )
-                                  ? _maintenancePrivilegeId
-                                  : null,
-                              decoration: const InputDecoration(
-                                labelText: 'Privilegio',
-                              ),
-                              items: filteredPrivileges
-                                  .map(
-                                    (item) => DropdownMenuItem<int>(
-                                      value: item.privilegeTypeId,
-                                      child: Text(item.privilegeName),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) => setState(
-                                () => _maintenancePrivilegeId = value,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _AdminDateButton(
-                              label: 'Data attività',
-                              date: _maintenanceDate,
-                              onPressed: () => _pickDate(
-                                (value) => _maintenanceDate = value,
-                                _maintenanceDate,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _maintenanceDescCtrl,
-                              maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Descrizione',
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: _saving ? null : _submitMaintenance,
-                              child: const Text('Inserisci come validata'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _AdminActivityTab(
-                        enabled:
-                            _selectedUser != null &&
-                            flightHelicopters.isNotEmpty,
-                        child: _AdminActivityCard(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              initialValue:
-                                  flightHelicopters.any(
+                          );
+                        case _AdminInsertTabType.flight:
+                          return _AdminActivityTab(
+                            enabled: _selectedUser != null && flightHelicopters.isNotEmpty,
+                            child: _AdminActivityCard(
+                              children: [
+                                DropdownButtonFormField<int>(
+                                  initialValue: flightHelicopters.any(
                                     (item) => item.id == _flightHelicopterId,
                                   )
-                                  ? _flightHelicopterId
-                                  : null,
-                              decoration: const InputDecoration(
-                                labelText: 'Elicottero',
-                              ),
-                              items: flightHelicopters
-                                  .map(
-                                    (item) => DropdownMenuItem<int>(
-                                      value: item.id,
-                                      child: Text(
-                                        '${item.code} - ${item.name}',
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) =>
-                                  setState(() => _flightHelicopterId = value),
-                            ),
-                            const SizedBox(height: 16),
-                            _AdminDateButton(
-                              label: 'Data volo',
-                              date: _flightDate,
-                              onPressed: () => _pickDate(
-                                (value) => _flightDate = value,
-                                _flightDate,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _flightHoursCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Ore di volo',
-                              ),
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
+                                      ? _flightHelicopterId
+                                      : null,
+                                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                                  items: flightHelicopters
+                                      .map(
+                                        (item) => DropdownMenuItem<int>(
+                                          value: item.id,
+                                          child: Text('${item.code} - ${item.name}'),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => _flightHelicopterId = value),
+                                ),
+                                const SizedBox(height: 16),
+                                _AdminDateButton(
+                                  label: 'Data volo',
+                                  date: _flightDate,
+                                  onPressed: () => _pickDate(
+                                    (value) => _flightDate = value,
+                                    _flightDate,
                                   ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _flightHoursCtrl,
+                                  decoration: const InputDecoration(labelText: 'Ore di volo'),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(decimal: true),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _flightDescCtrl,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton(
+                                  onPressed: _saving ? null : _submitFlight,
+                                  child: const Text('Inserisci come validata'),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _flightDescCtrl,
-                              maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Descrizione',
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: _saving ? null : _submitFlight,
-                              child: const Text('Inserisci come validata'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _AdminActivityTab(
-                        enabled:
-                            _selectedUser != null && tobHelicopters.isNotEmpty,
-                        child: _AdminActivityCard(
-                          children: [
-                            DropdownButtonFormField<int>(
-                              initialValue:
-                                  tobHelicopters.any(
+                          );
+                        case _AdminInsertTabType.tob:
+                          return _AdminActivityTab(
+                            enabled: _selectedUser != null && tobHelicopters.isNotEmpty,
+                            child: _AdminActivityCard(
+                              children: [
+                                DropdownButtonFormField<int>(
+                                  initialValue: tobHelicopters.any(
                                     (item) => item.id == _tobHelicopterId,
                                   )
-                                  ? _tobHelicopterId
-                                  : null,
-                              decoration: const InputDecoration(
-                                labelText: 'Elicottero',
-                              ),
-                              items: tobHelicopters
-                                  .map(
-                                    (item) => DropdownMenuItem<int>(
-                                      value: item.id,
-                                      child: Text(
-                                        '${item.code} - ${item.name}',
-                                      ),
-                                    ),
+                                      ? _tobHelicopterId
+                                      : null,
+                                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                                  items: tobHelicopters
+                                      .map(
+                                        (item) => DropdownMenuItem<int>(
+                                          value: item.id,
+                                          child: Text('${item.code} - ${item.name}'),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => _tobHelicopterId = value),
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<int>(
+                                  initialValue: filteredCapabilities.any(
+                                    (item) => item.tobCapabilityId == _tobCapabilityId,
                                   )
-                                  .toList(),
-                              onChanged: (value) =>
-                                  setState(() => _tobHelicopterId = value),
+                                      ? _tobCapabilityId
+                                      : null,
+                                  decoration: const InputDecoration(labelText: 'Capacità TOB'),
+                                  items: filteredCapabilities
+                                      .map(
+                                        (item) => DropdownMenuItem<int>(
+                                          value: item.tobCapabilityId,
+                                          child: Text(item.capabilityName),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => _tobCapabilityId = value),
+                                ),
+                                const SizedBox(height: 16),
+                                _AdminDateButton(
+                                  label: 'Data attività TOB',
+                                  date: _tobDate,
+                                  onPressed: () => _pickDate(
+                                    (value) => _tobDate = value,
+                                    _tobDate,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _tobDescCtrl,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton(
+                                  onPressed: _saving ? null : _submitTob,
+                                  child: const Text('Inserisci come validata'),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
-                            DropdownButtonFormField<int>(
-                              initialValue:
-                                  filteredCapabilities.any(
-                                    (item) =>
-                                        item.tobCapabilityId ==
-                                        _tobCapabilityId,
-                                  )
-                                  ? _tobCapabilityId
-                                  : null,
-                              decoration: const InputDecoration(
-                                labelText: 'Capacità TOB',
-                              ),
-                              items: filteredCapabilities
-                                  .map(
-                                    (item) => DropdownMenuItem<int>(
-                                      value: item.tobCapabilityId,
-                                      child: Text(item.capabilityName),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) =>
-                                  setState(() => _tobCapabilityId = value),
-                            ),
-                            const SizedBox(height: 16),
-                            _AdminDateButton(
-                              label: 'Data attività TOB',
-                              date: _tobDate,
-                              onPressed: () => _pickDate(
-                                (value) => _tobDate = value,
-                                _tobDate,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _tobDescCtrl,
-                              maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Descrizione',
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: _saving ? null : _submitTob,
-                              child: const Text('Inserisci come validata'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          );
+                      }
+                    }).toList(),
                   ),
                 ),
               ],
