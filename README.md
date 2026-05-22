@@ -44,35 +44,31 @@ In questo repository trovi già i seed pronti in `data_setup/db/`.
 - `criteria.json`: criteri currency di default
 - altri file: array vuoti pronti all'uso
 
-## 3. Creare i Fine-Grained PAT
+## 3. GitHub Actions secret per il Read PAT
 
-### Read PAT
+Il Read PAT **non va nel codice sorgente**: viene iniettato al momento del build da GitHub Actions tramite `--dart-define`.
 
-Crea un Fine-Grained PAT con accesso **read-only** al repository `aves-data`.
+1. Vai su **GitHub → AVES repo → Settings → Secrets and variables → Actions**
+2. Aggiungi un secret chiamato `AVES_READ_PAT` con il tuo token GitHub (scope `repo` è sufficiente, oppure un Fine-Grained PAT con Contents: Read su `aves-data`)
+3. GitHub Actions lo inietterà automaticamente ad ogni push su `main`
 
-Permessi minimi consigliati:
-- Repository access: solo `aves-data`
-- Contents: `Read-only`
+### Write PAT (solo per gli amministratori)
 
-### Write PAT
+Crea un Classic PAT o Fine-Grained PAT con accesso **read/write** al solo repository `aves-data`.
 
-Crea un Fine-Grained PAT con accesso **read/write** al repository `aves-data`.
-
-Permessi minimi consigliati:
+Permessi minimi:
 - Repository access: solo `aves-data`
 - Contents: `Read and write`
 
-> Il Write PAT non va messo nel codice sorgente. Inseriscilo dalla dashboard admin con il pulsante **Configura Write PAT** oppure dalla schermata **Impostazioni Currency**.
+> Il Write PAT non va nel codice sorgente. L'admin lo inserisce una volta sola dalla dashboard con il pulsante **Configura Write PAT**: viene salvato nel browser locale (`localStorage`).
 
-## 4. Configurare il Read PAT nell'app
+## 4. Deploy automatico
 
-Apri `lib/config/gh_config.dart` e sostituisci il placeholder:
+Ogni push su `main` fa partire GitHub Actions che:
+1. Builda l'app Flutter Web con il Read PAT iniettato via `--dart-define`
+2. Pubblica su GitHub Pages automaticamente
 
-```dart
-static const String readPat = 'REPLACE_WITH_READ_ONLY_PAT';
-```
-
-Se il placeholder resta invariato, l'app mostrerà una schermata di setup.
+Non è necessario modificare `gh_config.dart`.
 
 ## 5. Credenziali amministrative iniziali
 
