@@ -1,0 +1,518 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+
+import '../../app.dart';
+import '../../models/activity_models.dart';
+import '../../models/user_models.dart';
+import '../../services/activity_service.dart';
+
+class AddActivityScreen extends ConsumerStatefulWidget {
+  const AddActivityScreen({super.key});
+
+  @override
+  ConsumerState<AddActivityScreen> createState() => _AddActivityScreenState();
+}
+
+class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
+    with SingleTickerProviderStateMixin {
+  final _service = ActivityService();
+  final _maintenanceDescCtrl = TextEditingController();
+  final _flightDescCtrl = TextEditingController();
+  final _tobDescCtrl = TextEditingController();
+  final _flightHoursCtrl = TextEditingController();
+
+  late final TabController _tabController;
+
+  int? _maintenanceHelicopterId;
+  int? _maintenancePrivilegeId;
+  DateTime _maintenanceDate = DateTime.now();
+
+  int? _flightHelicopterId;
+  DateTime _flightDate = DateTime.now();
+
+  int? _tobHelicopterId;
+  int? _tobCapabilityId;
+  DateTime _tobDate = DateTime.now();
+
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _maintenanceDescCtrl.dispose();
+    _flightDescCtrl.dispose();
+    _tobDescCtrl.dispose();
+    _flightHoursCtrl.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate(
+    ValueSetter<DateTime> onSelected,
+    DateTime initial,
+  ) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => onSelected(picked));
+    }
+  }
+
+  Future<void> _submitMaintenance(UserProfile user) async {
+    if (_maintenanceHelicopterId == null || _maintenancePrivilegeId == null) {
+      _showMessage('Seleziona elicottero e privilegio.');
+      return;
+    }
+    setState(() => _saving = true);
+    await _service.addMaintenanceActivity(
+      MaintenanceActivity(
+        userId: user.id,
+        helicopterTypeId: _maintenanceHelicopterId!,
+        privilegeTypeId: _maintenancePrivilegeId!,
+        activityDate: _maintenanceDate,
+        description: _maintenanceDescCtrl.text.trim().isEmpty
+            ? null
+            : _maintenanceDescCtrl.text.trim(),
+        submittedBy: user.id,
+      ),
+    );
+    _finishSubmit();
+  }
+
+  Future<void> _submitFlight(UserProfile user) async {
+    final hours = double.tryParse(_flightHoursCtrl.text.replaceAll(',', '.'));
+    if (_flightHelicopterId == null || hours == null || hours <= 0) {
+      _showMessage('Inserisci elicottero e ore di volo valide.');
+      return;
+    }
+    setState(() => _saving = true);
+    await _service.addFlightActivity(
+      FlightActivity(
+        userId: user.id,
+        helicopterTypeId: _flightHelicopterId!,
+        activityDate: _flightDate,
+        flightHours: hours,
+        description: _flightDescCtrl.text.trim().isEmpty
+            ? null
+            : _flightDescCtrl.text.trim(),
+        submittedBy: user.id,
+      ),
+    );
+    _finishSubmit();
+  }
+
+  Future<void> _submitTob(UserProfile user) async {
+    if (_tobHelicopterId == null || _tobCapabilityId == null) {
+      _showMessage('Seleziona elicottero e capacità TOB.');
+      return;
+    }
+    setState(() => _saving = true);
+    await _service.addTobActivity(
+      TobActivity(
+        userId: user.id,
+        helicopterTypeId: _tobHelicopterId!,
+        tobCapabilityId: _tobCapabilityId!,
+        activityDate: _tobDate,
+        description: _tobDescCtrl.text.trim().isEmpty
+            ? null
+            : _tobDescCtrl.text.trim(),
+        submittedBy: user.id,
+      ),
+    );
+    _finishSubmit();
+  }
+
+  void _finishSubmit() {
+    setState(() => _saving = false);
+    _maintenanceDescCtrl.clear();
+    _flightDescCtrl.clear();
+    _tobDescCtrl.clear();
+    _flightHoursCtrl.clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Attività inserita e inviata per la validazione.'),
+      ),
+    );
+    context.go('/activities/my');
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
+    final user = auth.userProfile;
+    if (user == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final maintenancePrivileges = auth.privileges;
+    final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(
+      maintenancePrivileges,
+    );
+    final filteredPrivileges = maintenancePrivileges
+        .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
+        .toList();
+
+    final tCrewAssignments = auth.crewAssignments
+        .where((item) => item.crewType == 'T')
+        .toList();
+    final tobCrewAssignments = auth.crewAssignments
+        .where((item) => item.crewType == 'TOB')
+        .toList();
+    final flightHelicopters = _uniqueCrewHelicopters(tCrewAssignments);
+    final tobHelicopters = _uniqueCrewHelicopters(tobCrewAssignments);
+    final filteredCapabilities = auth.tobCapabilities
+        .where((item) => item.helicopterTypeId == _tobHelicopterId)
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Inserisci Attività'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Manutenzione'),
+            Tab(text: 'Volo'),
+            Tab(text: 'TOB'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _ActivityTab(
+            enabled: maintenancePrivileges.isNotEmpty,
+            disabledMessage: 'Nessun privilegio manutentivo assegnato.',
+            child: _ActivityFormCard(
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue:
+                      maintenanceHelicopters.any(
+                        (item) => item.id == _maintenanceHelicopterId,
+                      )
+                      ? _maintenanceHelicopterId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: maintenanceHelicopters
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _maintenanceHelicopterId = value;
+                      if (!filteredPrivileges.any(
+                        (item) =>
+                            item.privilegeTypeId == _maintenancePrivilegeId,
+                      )) {
+                        _maintenancePrivilegeId = null;
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue:
+                      filteredPrivileges.any(
+                        (item) =>
+                            item.privilegeTypeId == _maintenancePrivilegeId,
+                      )
+                      ? _maintenancePrivilegeId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Privilegio'),
+                  items: filteredPrivileges
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.privilegeTypeId,
+                          child: Text(item.privilegeName),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _maintenancePrivilegeId = value),
+                ),
+                const SizedBox(height: 16),
+                _DateSelector(
+                  label: 'Data attività',
+                  date: _maintenanceDate,
+                  onPressed: () => _pickDate(
+                    (value) => _maintenanceDate = value,
+                    _maintenanceDate,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _maintenanceDescCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _saving ? null : () => _submitMaintenance(user),
+                  child: _saving
+                      ? const CircularProgressIndicator()
+                      : const Text('Invia attività manutentiva'),
+                ),
+              ],
+            ),
+          ),
+          _ActivityTab(
+            enabled: auth.hasTCrew,
+            disabledMessage: 'Nessuna abilitazione equipaggio T assegnata.',
+            child: _ActivityFormCard(
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue:
+                      flightHelicopters.any(
+                        (item) => item.id == _flightHelicopterId,
+                      )
+                      ? _flightHelicopterId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: flightHelicopters
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _flightHelicopterId = value),
+                ),
+                const SizedBox(height: 16),
+                _DateSelector(
+                  label: 'Data volo',
+                  date: _flightDate,
+                  onPressed: () =>
+                      _pickDate((value) => _flightDate = value, _flightDate),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _flightHoursCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(labelText: 'Ore di volo'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _flightDescCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _saving ? null : () => _submitFlight(user),
+                  child: _saving
+                      ? const CircularProgressIndicator()
+                      : const Text('Invia attività di volo'),
+                ),
+              ],
+            ),
+          ),
+          _ActivityTab(
+            enabled: auth.hasTobCrew,
+            disabledMessage: 'Nessuna abilitazione equipaggio TOB assegnata.',
+            child: _ActivityFormCard(
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue:
+                      tobHelicopters.any((item) => item.id == _tobHelicopterId)
+                      ? _tobHelicopterId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: tobHelicopters
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text('${item.code} - ${item.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _tobHelicopterId = value;
+                      if (!filteredCapabilities.any(
+                        (item) => item.tobCapabilityId == _tobCapabilityId,
+                      )) {
+                        _tobCapabilityId = null;
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue:
+                      filteredCapabilities.any(
+                        (item) => item.tobCapabilityId == _tobCapabilityId,
+                      )
+                      ? _tobCapabilityId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Capacità TOB'),
+                  items: filteredCapabilities
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.tobCapabilityId,
+                          child: Text(item.capabilityName),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _tobCapabilityId = value),
+                ),
+                const SizedBox(height: 16),
+                _DateSelector(
+                  label: 'Data attività TOB',
+                  date: _tobDate,
+                  onPressed: () =>
+                      _pickDate((value) => _tobDate = value, _tobDate),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _tobDescCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _saving ? null : () => _submitTob(user),
+                  child: _saving
+                      ? const CircularProgressIndicator()
+                      : const Text('Invia attività TOB'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_HelicopterOption> _uniqueHelicoptersFromPrivileges(
+    List<UserPrivilege> privileges,
+  ) {
+    final map = <int, _HelicopterOption>{};
+    for (final privilege in privileges) {
+      map[privilege.helicopterTypeId] = _HelicopterOption(
+        id: privilege.helicopterTypeId,
+        code: privilege.helicopterCode,
+        name: privilege.helicopterName,
+      );
+    }
+    return map.values.toList()..sort((a, b) => a.code.compareTo(b.code));
+  }
+
+  List<_HelicopterOption> _uniqueCrewHelicopters(
+    List<UserCrewAssignment> assignments,
+  ) {
+    final map = <int, _HelicopterOption>{};
+    for (final assignment in assignments) {
+      map[assignment.helicopterTypeId] = _HelicopterOption(
+        id: assignment.helicopterTypeId,
+        code: assignment.helicopterCode,
+        name: assignment.helicopterName,
+      );
+    }
+    return map.values.toList()..sort((a, b) => a.code.compareTo(b.code));
+  }
+}
+
+class _HelicopterOption {
+  const _HelicopterOption({
+    required this.id,
+    required this.code,
+    required this.name,
+  });
+
+  final int id;
+  final String code;
+  final String name;
+}
+
+class _ActivityTab extends StatelessWidget {
+  const _ActivityTab({
+    required this.enabled,
+    required this.disabledMessage,
+    required this.child,
+  });
+
+  final bool enabled;
+  final String disabledMessage;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) {
+      return Center(child: Text(disabledMessage));
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: child,
+    );
+  }
+}
+
+class _ActivityFormCard extends StatelessWidget {
+  const _ActivityFormCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateSelector extends StatelessWidget {
+  const _DateSelector({
+    required this.label,
+    required this.date,
+    required this.onPressed,
+  });
+
+  final String label;
+  final DateTime date;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.calendar_today_outlined),
+      label: Text('$label: ${DateFormat('dd/MM/yyyy').format(date)}'),
+    );
+  }
+}
