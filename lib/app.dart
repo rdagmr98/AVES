@@ -5,10 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'constants/app_constants.dart';
 import 'providers/auth_provider.dart';
 import 'providers/currency_provider.dart';
+
 import 'screens/activities/add_activity_screen.dart';
 import 'screens/activities/my_activities_screen.dart';
+import 'screens/activities/pta_screen.dart';
 import 'screens/admin/currency_settings_screen.dart';
 import 'screens/admin/insert_activity_admin_screen.dart';
+import 'screens/admin/pta_management_screen.dart';
 import 'screens/admin/user_management_screen.dart';
 import 'screens/admin/validate_activities_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -86,6 +89,14 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         path: '/admin/insert',
         builder: (context, state) => const InsertActivityAdminScreen(),
       ),
+      GoRoute(
+        path: '/admin/pta',
+        builder: (context, state) => const PtaManagementScreen(),
+      ),
+      GoRoute(
+        path: '/pta',
+        builder: (context, state) => const PtaScreen(),
+      ),
     ],
     redirect: (context, state) {
       final auth = ref.read(authProvider);
@@ -98,6 +109,7 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         '/admin/users',
         '/admin/settings',
         '/admin/insert',
+        '/admin/pta',
       };
 
       String defaultHome() {
@@ -131,7 +143,9 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         return defaultHome();
       }
 
-      if ((location == '/admin/priv' || location == '/admin/settings') &&
+      if ((location == '/admin/priv' ||
+              location == '/admin/settings' ||
+              location == '/admin/pta') &&
           !auth.isAdminPriv) {
         return defaultHome();
       }

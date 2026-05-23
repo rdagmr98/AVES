@@ -9,6 +9,7 @@ import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_service.dart';
+import '../../services/pta_service.dart';
 import '../../services/report_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/currency_badge_widget.dart';
@@ -27,10 +28,13 @@ class _AdminPrivilegesDashboardState
   final _activityService = ActivityService();
   final _currencyService = CurrencyService();
   final _reportService = ReportService();
+  final _ptaService = PtaService();
   final _searchCtrl = TextEditingController();
 
   bool _loading = true;
   int _pendingActivities = 0;
+  int _activePtaCount = 0;
+  int _pendingAcksCount = 0;
   List<_MaintenanceUserRow> _rows = [];
   String _search = '';
   int? _orgUnitId;
@@ -79,6 +83,8 @@ class _AdminPrivilegesDashboardState
     }
     setState(() {
       _pendingActivities = pendingActivities.length;
+      _activePtaCount = _ptaService.getActivePta().length;
+      _pendingAcksCount = _ptaService.getPendingAcknowledgments().length;
       _rows = rows;
       _loading = false;
     });
@@ -154,6 +160,21 @@ class _AdminPrivilegesDashboardState
                         value: '$expiredCount',
                         icon: Icons.warning_amber_rounded,
                       ),
+                      _StatCard(
+                        title: 'PTA attive',
+                        value: '$_activePtaCount',
+                        icon: Icons.block,
+                        color: _activePtaCount > 0
+                            ? const Color(0xFF8E44AD)
+                            : null,
+                      ),
+                      if (_pendingAcksCount > 0)
+                        _StatCard(
+                          title: 'Prese visione da validare',
+                          value: '$_pendingAcksCount',
+                          icon: Icons.pending_actions,
+                          color: AppColors.currencyWarning,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -173,6 +194,11 @@ class _AdminPrivilegesDashboardState
                             onPressed: () => context.go('/admin/users'),
                             icon: const Icon(Icons.manage_accounts_outlined),
                             label: const Text('Gestione Utenti'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => context.go('/admin/pta'),
+                            icon: const Icon(Icons.block_outlined),
+                            label: const Text('Gestione PTA'),
                           ),
                           OutlinedButton.icon(
                             onPressed: () => context.go('/admin/settings'),
@@ -404,11 +430,13 @@ class _StatCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.icon,
+    this.color,
   });
 
   final String title;
   final String value;
   final IconData icon;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -420,11 +448,16 @@ class _StatCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: AppColors.secondary),
+              Icon(icon, color: color ?? AppColors.secondary),
               const SizedBox(height: 12),
               Text(title, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text(value, style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: color,
+                ),
+              ),
             ],
           ),
         ),

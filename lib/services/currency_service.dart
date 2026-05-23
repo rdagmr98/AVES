@@ -2,11 +2,13 @@ import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'activity_service.dart';
 import 'gh_db_service.dart';
+import 'pta_service.dart';
 import 'web_notification_service.dart';
 
 class CurrencyService {
   final _db = GhDbService();
   final _activityService = ActivityService();
+  final _ptaService = PtaService();
 
   static const int warningDays = 30;
 
@@ -155,6 +157,16 @@ class CurrencyService {
   }
 
   Future<CurrencyStatus> getMaintenanceCurrency(String userId) async {
+    // Check if any active PTA suspends this user's currency
+    final blockingPtas = _ptaService.getBlockingPtaForUser(userId);
+    if (blockingPtas.isNotEmpty) {
+      final ptaNumbers = blockingPtas.map((p) => p.number).join(', ');
+      return CurrencyStatus(
+        status: CurrencyStatusEnum.suspended,
+        label: 'Currency Manutentiva — SOSPESA (PTA: $ptaNumbers)',
+      );
+    }
+
     final criteria = await getMaintenanceCriteria();
     final periodDays = criteria?.periodDays ?? 180;
     final last = await _activityService.getLastValidatedMaintenance(userId);
@@ -262,7 +274,13 @@ class CurrencyService {
     for (final entry in currency.entries) {
       final status = entry.value;
       String? message;
-      if (status.isExpired) {
+      if (status.isSuspended) {
+        message = await _upsertNotification(
+          userId,
+          'MAINTENANCE_SUSPENDED',
+          status.label,
+        );
+      } else if (status.isExpired) {
         message = await _upsertNotification(
           userId,
           _notifType(entry.key, expired: true),

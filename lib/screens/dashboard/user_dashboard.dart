@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
+import '../../services/pta_service.dart';
 import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/privilege_grid_widget.dart';
@@ -129,6 +130,58 @@ class UserDashboard extends ConsumerWidget {
                 ),
               ),
             ],
+            // PTA banner
+            Builder(builder: (context) {
+              final blockingPta =
+                  PtaService().getBlockingPtaForUser(user.id);
+              if (blockingPta.isEmpty) return const SizedBox.shrink();
+              final ptaNumbers =
+                  blockingPta.map((p) => p.number).join(', ');
+              return Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: InkWell(
+                  onTap: () => context.go('/pta'),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8E44AD).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF8E44AD)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.block, color: Color(0xFF8E44AD)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'CURRENCY SOSPESA — PTA attiva',
+                                style: TextStyle(
+                                  color: Color(0xFF8E44AD),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'PTA: $ptaNumbers — Tocca per prendere visione',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: Color(0xFF8E44AD),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
             const SizedBox(height: 24),
             Text(
               'Stato Currency',
@@ -181,6 +234,11 @@ class UserDashboard extends ConsumerWidget {
                   onPressed: () => context.go('/profile'),
                   icon: const Icon(Icons.person_outline),
                   label: const Text('Profilo'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/pta'),
+                  icon: const Icon(Icons.article_outlined),
+                  label: const Text('PTA'),
                 ),
               ],
             ),

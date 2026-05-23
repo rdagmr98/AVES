@@ -40,6 +40,8 @@ class GhDbService {
       _loadFile('tob_acts.json'),
       _loadFile('criteria.json'),
       _loadFile('notifications.json'),
+      _loadFile('pta.json'),
+      _loadFile('pta_acknowledgments.json'),
     ]);
   }
 
@@ -198,6 +200,20 @@ class GhDbService {
 
   Future<void> saveNotifications(List<Map<String, dynamic>> data) =>
       _writeFile('notifications.json', data, 'aggiornamento notifiche');
+
+  List<Map<String, dynamic>> get pta =>
+      List<Map<String, dynamic>>.from(_getData('pta.json') as List? ?? []);
+
+  Future<void> savePta(List<Map<String, dynamic>> data) =>
+      _writeFile('pta.json', data, 'aggiornamento PTA');
+
+  List<Map<String, dynamic>> get ptaAcknowledgments =>
+      List<Map<String, dynamic>>.from(
+        _getData('pta_acknowledgments.json') as List? ?? [],
+      );
+
+  Future<void> savePtaAcknowledgments(List<Map<String, dynamic>> data) =>
+      _writeFile('pta_acknowledgments.json', data, 'aggiornamento presa visione PTA');
 
   Future<void> reloadAll() async => init();
 }
