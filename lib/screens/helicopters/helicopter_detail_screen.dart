@@ -56,12 +56,15 @@ class HelicopterDetailScreen extends ConsumerWidget {
             accent: accent,
           ),
           const SizedBox(height: 16),
-          if (catalog.imageAsset != null)
+          if (catalog.normalModelAsset != null && catalog.hologramModelAsset != null)
             HelicopterViewerWidget(
-              imageAsset: catalog.imageAsset!,
+              normalModelAsset: catalog.normalModelAsset!,
+              hologramModelAsset: catalog.hologramModelAsset!,
               accent: accent,
+              alt: 'Modello 3D ${helicopter.name}',
             ),
-          if (catalog.imageAsset != null) const SizedBox(height: 16),
+          if (catalog.normalModelAsset != null && catalog.hologramModelAsset != null)
+            const SizedBox(height: 16),
           _SpecsCard(specs: catalog.specs, accent: accent),
           const SizedBox(height: 16),
           _AssignmentCard(

@@ -8,6 +8,8 @@ class HelicopterCatalogEntry {
   final String subtitle;
   final String description;
   final String? imageAsset;
+  final String? normalModelAsset;
+  final String? hologramModelAsset;
   final List<(String label, String value)> specs;
 
   const HelicopterCatalogEntry({
@@ -16,6 +18,8 @@ class HelicopterCatalogEntry {
     required this.subtitle,
     required this.description,
     this.imageAsset,
+    this.normalModelAsset,
+    this.hologramModelAsset,
     required this.specs,
   });
 }
@@ -28,6 +32,8 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Configurazione ideale per familiarizzazione operativa, training e missioni utility leggere. Cabina digitale, profilo moderno e impiego versatile.',
     imageAsset: 'assets/images/helicopters/aw169b.jpg',
+    normalModelAsset: 'assets/models/helicopters/uh169b_normal.glb',
+    hologramModelAsset: 'assets/models/helicopters/uh169b_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero utility leggero'),
       ('Propulsione', 'Bimotore'),
@@ -43,6 +49,8 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Versione orientata all’impiego operativo, con configurazione adatta a missioni utility, supporto tattico e profili avanzati su piattaforma moderna.',
     imageAsset: 'assets/images/helicopters/aw169d.jpg',
+    normalModelAsset: 'assets/models/helicopters/uh169d_normal.glb',
+    hologramModelAsset: 'assets/models/helicopters/uh169d_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero multiruolo'),
       ('Propulsione', 'Bimotore'),
@@ -61,6 +69,10 @@ HelicopterCatalogEntry catalogForHelicopter(HelicopterType helicopter) {
         subtitle: 'Piattaforma assegnata al profilo utente',
         description:
             'Scheda sintetica del velivolo con qualifiche, ruoli equipaggio e privilegi associati al tuo profilo.',
+        normalModelAsset:
+            'assets/models/helicopters/${helicopter.code.toLowerCase()}_normal.glb',
+        hologramModelAsset:
+            'assets/models/helicopters/${helicopter.code.toLowerCase()}_hologram.glb',
         specs: [
           ('Codice', helicopter.code),
           ('Denominazione', helicopter.name),
