@@ -16,7 +16,12 @@ class WebNotificationService {
       return;
     }
     if (html.Notification.permission == 'granted') {
-      html.Notification(title, body: body, icon: '/AVES/icons/Icon-192.png');
+      try {
+        html.Notification(title, body: body, icon: '/AVES/icons/Icon-192.png');
+      } catch (_) {
+        // Browser Notification constructor can fail on mobile or when
+        // called outside a service-worker context — silently ignore.
+      }
     }
   }
 

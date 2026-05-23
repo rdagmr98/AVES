@@ -282,7 +282,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                 ...auth.orgUnits.map(
                                   (unit) => DropdownMenuItem<int?>(
                                     value: unit.id,
-                                    child: Text('${unit.code} - ${unit.name}'),
+                                    child: Text(unit.name),
                                   ),
                                 ),
                               ],
@@ -584,7 +584,7 @@ class _UserDetailPanel extends StatelessWidget {
             children: helicopterTypes
                 .map(
                   (helicopter) => _HelicopterCheckboxGroup(
-                    title: '${helicopter.code} - ${helicopter.name}',
+                    title: helicopter.name,
                     children: licenseTypes
                         .map(
                           (license) => FilterChip(
@@ -607,7 +607,7 @@ class _UserDetailPanel extends StatelessWidget {
             children: helicopterTypes
                 .map(
                   (helicopter) => _HelicopterCheckboxGroup(
-                    title: '${helicopter.code} - ${helicopter.name}',
+                    title: helicopter.name,
                     children: privilegeTypes
                         .map(
                           (privilege) => FilterChip(
@@ -638,7 +638,7 @@ class _UserDetailPanel extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${helicopter.code} - ${helicopter.name}'),
+                          Text(helicopter.name),
                           CheckboxListTile(
                             contentPadding: EdgeInsets.zero,
                             title: const Text('Equipaggio T'),
@@ -678,7 +678,7 @@ class _UserDetailPanel extends StatelessWidget {
             children: helicopterTypes
                 .map(
                   (helicopter) => _HelicopterCheckboxGroup(
-                    title: '${helicopter.code} - ${helicopter.name}',
+                    title: helicopter.name,
                     children: tobCapabilities
                         .map(
                           (capability) => FilterChip(
@@ -756,3 +756,4 @@ class _HelicopterCheckboxGroup extends StatelessWidget {
     );
   }
 }
+

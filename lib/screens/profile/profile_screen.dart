@@ -176,7 +176,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       .map(
                         (item) => DropdownMenuItem<int>(
                           value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
+                          child: Text(item.name),
                         ),
                       )
                       .toList(),
@@ -246,7 +246,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       .map(
                         (item) => DropdownMenuItem<int>(
                           value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
+                          child: Text(item.name),
                         ),
                       )
                       .toList(),
@@ -316,7 +316,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       .map(
                         (item) => DropdownMenuItem<int>(
                           value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
+                          child: Text(item.name),
                         ),
                       )
                       .toList(),
@@ -398,7 +398,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       .map(
                         (item) => DropdownMenuItem<int>(
                           value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
+                          child: Text(item.name),
                         ),
                       )
                       .toList(),
@@ -517,7 +517,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         .map(
                           (item) => DropdownMenuItem<int>(
                             value: item.id,
-                            child: Text('${item.code} - ${item.name}'),
+                            child: Text(item.name),
                           ),
                         )
                         .toList(),
@@ -772,3 +772,4 @@ class _EditableSection extends StatelessWidget {
     );
   }
 }
+

@@ -324,7 +324,7 @@ class _InsertActivityAdminScreenState
                                       .map(
                                         (item) => DropdownMenuItem<int>(
                                           value: item.id,
-                                          child: Text('${item.code} - ${item.name}'),
+                                          child: Text(item.name),
                                         ),
                                       )
                                       .toList(),
@@ -389,7 +389,7 @@ class _InsertActivityAdminScreenState
                                       .map(
                                         (item) => DropdownMenuItem<int>(
                                           value: item.id,
-                                          child: Text('${item.code} - ${item.name}'),
+                                          child: Text(item.name),
                                         ),
                                       )
                                       .toList(),
@@ -442,7 +442,7 @@ class _InsertActivityAdminScreenState
                                       .map(
                                         (item) => DropdownMenuItem<int>(
                                           value: item.id,
-                                          child: Text('${item.code} - ${item.name}'),
+                                          child: Text(item.name),
                                         ),
                                       )
                                       .toList(),
@@ -599,3 +599,4 @@ class _AdminDateButton extends StatelessWidget {
     );
   }
 }
+
