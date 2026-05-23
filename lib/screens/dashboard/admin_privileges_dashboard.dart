@@ -57,7 +57,8 @@ class _AdminPrivilegesDashboardState
   Future<void> _loadData() async {
     setState(() => _loading = true);
     final users = await _userService.getAllUsers();
-    final pendingActivities = await _activityService.getPendingMaintenanceActivities();
+    final pendingActivities = await _activityService
+        .getPendingMaintenanceActivities();
     final rows = <_MaintenanceUserRow>[];
 
     for (final user in users.where((item) => item.isApproved)) {
@@ -67,7 +68,9 @@ class _AdminPrivilegesDashboardState
         continue;
       }
       final status = await _currencyService.getMaintenanceCurrency(user.id);
-      final lastActivity = await _activityService.getLastValidatedMaintenance(user.id);
+      final lastActivity = await _activityService.getLastValidatedMaintenance(
+        user.id,
+      );
       rows.add(
         _MaintenanceUserRow(
           user: user,
@@ -119,6 +122,81 @@ class _AdminPrivilegesDashboardState
     final approvedUsersCount = _rows.length;
     final expiredCount = _rows.where((row) => row.status.isExpired).length;
 
+    final statCards = <Widget>[
+      _StatCard(
+        title: 'Attività manutentive in attesa',
+        value: '$_pendingActivities',
+        icon: Icons.pending_actions,
+      ),
+      _StatCard(
+        title: 'Utenti manutenzione approvati',
+        value: '$approvedUsersCount',
+        icon: Icons.groups,
+      ),
+      _StatCard(
+        title: 'Currency scadute',
+        value: '$expiredCount',
+        icon: Icons.warning_amber_rounded,
+      ),
+      _StatCard(
+        title: 'PTA attive',
+        value: '$_activePtaCount',
+        icon: Icons.block,
+        color: _activePtaCount > 0 ? const Color(0xFF8E44AD) : null,
+      ),
+      if (_pendingAcksCount > 0)
+        _StatCard(
+          title: 'Prese visione da validare',
+          value: '$_pendingAcksCount',
+          icon: Icons.pending_actions,
+          color: AppColors.currencyWarning,
+        ),
+    ];
+
+    final quickActions = <_DashboardActionConfig>[
+      _DashboardActionConfig(
+        label: 'Valida Attività',
+        icon: Icons.verified_outlined,
+        onTap: () => context.go('/admin/validate'),
+        highlighted: true,
+      ),
+      _DashboardActionConfig(
+        label: 'Gestione Utenti',
+        icon: Icons.manage_accounts_outlined,
+        onTap: () => context.go('/admin/users'),
+      ),
+      _DashboardActionConfig(
+        label: 'Gestione PTA',
+        icon: Icons.block_outlined,
+        onTap: () => context.go('/admin/pta'),
+      ),
+      _DashboardActionConfig(
+        label: 'Impostazioni Currency',
+        icon: Icons.settings_outlined,
+        onTap: () => context.go('/admin/settings'),
+      ),
+      _DashboardActionConfig(
+        label: 'Scarica Report PDF',
+        icon: Icons.picture_as_pdf_outlined,
+        onTap: _reportService.downloadMaintenanceReport,
+      ),
+    ];
+
+    final orgUnitItems = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
+      ...auth.orgUnits.map(
+        (unit) =>
+            DropdownMenuItem<int?>(value: unit.id, child: Text(unit.name)),
+      ),
+    ];
+    final licenseTypeItems = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
+      ...auth.licenseTypes.map(
+        (item) =>
+            DropdownMenuItem<int?>(value: item.id, child: Text(item.name)),
+      ),
+    ];
+
     return Scaffold(
       appBar: AppBar(
         leading: const Padding(
@@ -144,78 +222,81 @@ class _AdminPrivilegesDashboardState
           : RefreshIndicator(
               onRefresh: _loadData,
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
                 children: [
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      _StatCard(
-                        title: 'Attività manutentive in attesa',
-                        value: '$_pendingActivities',
-                        icon: Icons.pending_actions,
-                      ),
-                      _StatCard(
-                        title: 'Utenti manutenzione approvati',
-                        value: '$approvedUsersCount',
-                        icon: Icons.groups,
-                      ),
-                      _StatCard(
-                        title: 'Currency scadute',
-                        value: '$expiredCount',
-                        icon: Icons.warning_amber_rounded,
-                      ),
-                      _StatCard(
-                        title: 'PTA attive',
-                        value: '$_activePtaCount',
-                        icon: Icons.block,
-                        color: _activePtaCount > 0
-                            ? const Color(0xFF8E44AD)
-                            : null,
-                      ),
-                      if (_pendingAcksCount > 0)
-                        _StatCard(
-                          title: 'Prese visione da validare',
-                          value: '$_pendingAcksCount',
-                          icon: Icons.pending_actions,
-                          color: AppColors.currencyWarning,
-                        ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      if (isMobile) {
+                        return GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.35,
+                          children: statCards,
+                        );
+                      }
+                      return Wrap(
+                        spacing: 16,
+                        runSpacing: 16,
+                        children: [
+                          for (final card in statCards)
+                            SizedBox(width: 240, child: card),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => context.go('/admin/validate'),
-                            icon: const Icon(Icons.verified_outlined),
-                            label: const Text('Valida Attività Manutenzione'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go('/admin/users'),
-                            icon: const Icon(Icons.manage_accounts_outlined),
-                            label: const Text('Gestione Utenti'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go('/admin/pta'),
-                            icon: const Icon(Icons.block_outlined),
-                            label: const Text('Gestione PTA'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go('/admin/settings'),
-                            icon: const Icon(Icons.settings_outlined),
-                            label: const Text('Impostazioni Currency'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _reportService.downloadMaintenanceReport,
-                            icon: const Icon(Icons.picture_as_pdf_outlined),
-                            label: const Text('Scarica Report PDF'),
-                          ),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isMobile = constraints.maxWidth < 600;
+                          if (isMobile) {
+                            return GridView.count(
+                              crossAxisCount: 2,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 1.15,
+                              children: [
+                                for (final action in quickActions)
+                                  _QuickActionTile(config: action),
+                              ],
+                            );
+                          }
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              for (final action in quickActions)
+                                SizedBox(
+                                  width: 240,
+                                  child: action.highlighted
+                                      ? ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            minimumSize: const Size(0, 52),
+                                          ),
+                                          onPressed: action.onTap,
+                                          icon: Icon(action.icon),
+                                          label: Text(action.label),
+                                        )
+                                      : OutlinedButton.icon(
+                                          onPressed: action.onTap,
+                                          icon: Icon(action.icon),
+                                          label: Text(action.label),
+                                        ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -231,98 +312,86 @@ class _AdminPrivilegesDashboardState
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              SizedBox(
-                                width: 260,
-                                child: TextField(
-                                  controller: _searchCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Cerca per nome o licenza',
-                                    prefixIcon: Icon(Icons.search),
-                                  ),
-                                  onChanged: (value) =>
-                                      setState(() => _search = value),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 220,
-                                child: DropdownButtonFormField<int?>(
-                                  initialValue: _orgUnitId,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Unità organizzativa',
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('Tutte'),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isMobile = constraints.maxWidth < 600;
+                              return Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 260,
+                                    child: TextField(
+                                      controller: _searchCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Cerca per nome o licenza',
+                                        prefixIcon: Icon(Icons.search),
+                                      ),
+                                      onChanged: (value) =>
+                                          setState(() => _search = value),
                                     ),
-                                    ...auth.orgUnits.map(
-                                      (unit) => DropdownMenuItem<int?>(
-                                        value: unit.id,
-                                        child: Text('${unit.code} - ${unit.name}'),
+                                  ),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 220,
+                                    child: DropdownButtonFormField<int?>(
+                                      initialValue: _orgUnitId,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Unità organizzativa',
+                                      ),
+                                      items: orgUnitItems,
+                                      onChanged: (value) =>
+                                          setState(() => _orgUnitId = value),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 220,
+                                    child: DropdownButtonFormField<int?>(
+                                      initialValue: _licenseTypeId,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Tipo licenza',
+                                      ),
+                                      items: licenseTypeItems,
+                                      onChanged: (value) => setState(
+                                        () => _licenseTypeId = value,
                                       ),
                                     ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _orgUnitId = value),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 220,
-                                child: DropdownButtonFormField<int?>(
-                                  initialValue: _licenseTypeId,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tipo licenza',
                                   ),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('Tutte'),
-                                    ),
-                                    ...auth.licenseTypes.map(
-                                      (item) => DropdownMenuItem<int?>(
-                                        value: item.id,
-                                        child: Text(item.name),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 220,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: _statusFilter,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Stato currency',
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'all',
+                                          child: Text('Tutte'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'valid',
+                                          child: Text('Valida'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'warning',
+                                          child: Text('In Scadenza'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'expired',
+                                          child: Text('Scaduta'),
+                                        ),
+                                      ],
+                                      onChanged: (value) => setState(
+                                        () => _statusFilter = value ?? 'all',
                                       ),
                                     ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _licenseTypeId = value),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 220,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _statusFilter,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Stato currency',
                                   ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'all',
-                                      child: Text('Tutte'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'valid',
-                                      child: Text('Valida'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'warning',
-                                      child: Text('In Scadenza'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'expired',
-                                      child: Text('Scaduta'),
-                                    ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _statusFilter = value ?? 'all'),
-                                ),
-                              ),
-                            ],
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -338,7 +407,9 @@ class _AdminPrivilegesDashboardState
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: Text('Nessun utente corrisponde ai filtri selezionati.'),
+                        child: Text(
+                          'Nessun utente corrisponde ai filtri selezionati.',
+                        ),
                       ),
                     )
                   else
@@ -349,34 +420,42 @@ class _AdminPrivilegesDashboardState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final compact = constraints.maxWidth < 520;
+                                  final identity = _UserIdentityHeader(
+                                    user: row.user,
+                                  );
+                                  if (compact) {
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          row.user.fullName,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${row.user.numeroLicenza ?? 'Licenza non indicata'} · ${row.user.orgUnitName}',
-                                        ),
+                                        identity,
+                                        const SizedBox(height: 12),
+                                        CurrencyBadgeWidget(status: row.status),
                                       ],
-                                    ),
-                                  ),
-                                  CurrencyBadgeWidget(status: row.status),
-                                ],
+                                    );
+                                  }
+                                  return Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(child: identity),
+                                      const SizedBox(width: 16),
+                                      CurrencyBadgeWidget(status: row.status),
+                                    ],
+                                  );
+                                },
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: row.licenses.isEmpty
-                                    ? const [Chip(label: Text('Nessuna licenza'))]
+                                    ? const [
+                                        Chip(label: Text('Nessuna licenza')),
+                                      ]
                                     : row.licenses
                                           .map(
                                             (item) => Chip(
@@ -387,13 +466,33 @@ class _AdminPrivilegesDashboardState
                                           )
                                           .toList(),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
                               Text(
-                                'Privilegi: ${row.privileges.isEmpty ? '-' : row.privileges.map((item) => '${item.helicopterCode} ${item.privilegeName}').join(', ')}',
+                                'Privilegi',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 4),
                               Text(
-                                'Ultima attività: ${_formatDate(row.lastActivityDate)} · Scadenza: ${_formatDate(row.status.expiryDate)}',
+                                row.privileges.isEmpty
+                                    ? '-'
+                                    : row.privileges
+                                          .map(
+                                            (item) =>
+                                                '${item.helicopterCode} ${item.privilegeName}',
+                                          )
+                                          .join(', '),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Ultima attività: ${_formatDate(row.lastActivityDate)}',
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Scadenza: ${_formatDate(row.status.expiryDate)}',
                               ),
                             ],
                           ),
@@ -445,23 +544,92 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 240,
-      child: Card(
+    final accent = color ?? AppColors.secondary;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: accent),
+            ),
+            const SizedBox(height: 16),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: accent),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardActionConfig {
+  const _DashboardActionConfig({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.highlighted = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool highlighted;
+}
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({required this.config});
+
+  final _DashboardActionConfig config;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = config.highlighted ? AppColors.accent : AppColors.secondary;
+
+    return InkWell(
+      onTap: config.onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceVariant.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: color ?? AppColors.secondary),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: color,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(config.icon, color: accent),
+              ),
+              const Spacer(),
+              Text(
+                config.label,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(color: AppColors.textPrimary),
               ),
             ],
           ),
@@ -469,4 +637,66 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UserIdentityHeader extends StatelessWidget {
+  const _UserIdentityHeader({required this.user});
+
+  final UserProfile user;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = _dashboardInitials('${user.nome} ${user.cognome}');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: AppColors.accent.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            initials,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                user.fullName,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${user.numeroLicenza ?? 'Licenza non indicata'} · ${user.orgUnitName}',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _dashboardInitials(String value) {
+  final parts = value
+      .split(RegExp(r'\s+'))
+      .where((part) => part.trim().isNotEmpty)
+      .toList();
+  if (parts.isEmpty) {
+    return 'AV';
+  }
+  if (parts.length == 1) {
+    return parts.first.substring(0, 1).toUpperCase();
+  }
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
 }

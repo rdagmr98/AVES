@@ -182,6 +182,8 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompactTabs = screenWidth < 420;
     final maintenancePrivileges = auth.privileges;
     final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(
       maintenancePrivileges,
@@ -202,11 +204,47 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
 
+    final maintenanceHelicopterItems = maintenanceHelicopters
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    final maintenancePrivilegeItems = filteredPrivileges
+        .map(
+          (item) => DropdownMenuItem<int>(
+            value: item.privilegeTypeId,
+            child: Text(item.privilegeName),
+          ),
+        )
+        .toList(growable: false);
+    final flightHelicopterItems = flightHelicopters
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    final tobHelicopterItems = tobHelicopters
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    final tobCapabilityItems = filteredCapabilities
+        .map(
+          (item) => DropdownMenuItem<int>(
+            value: item.tobCapabilityId,
+            child: Text(item.capabilityName),
+          ),
+        )
+        .toList(growable: false);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inserisci Attività'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: isCompactTabs,
           tabs: const [
             Tab(text: 'Manutenzione'),
             Tab(text: 'Volo'),
@@ -229,15 +267,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       )
                       ? _maintenanceHelicopterId
                       : null,
+                  menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: maintenanceHelicopters
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
+                  items: maintenanceHelicopterItems,
                   onChanged: (value) {
                     setState(() {
                       _maintenanceHelicopterId = value;
@@ -259,15 +291,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       )
                       ? _maintenancePrivilegeId
                       : null,
+                  menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Privilegio'),
-                  items: filteredPrivileges
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.privilegeTypeId,
-                          child: Text(item.privilegeName),
-                        ),
-                      )
-                      .toList(),
+                  items: maintenancePrivilegeItems,
                   onChanged: (value) =>
                       setState(() => _maintenancePrivilegeId = value),
                 ),
@@ -290,7 +316,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                 ElevatedButton(
                   onPressed: _saving ? null : () => _submitMaintenance(user),
                   child: _saving
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                        )
                       : const Text('Invia attività manutentiva'),
                 ),
               ],
@@ -308,15 +337,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       )
                       ? _flightHelicopterId
                       : null,
+                  menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: flightHelicopters
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
+                  items: flightHelicopterItems,
                   onChanged: (value) =>
                       setState(() => _flightHelicopterId = value),
                 ),
@@ -345,7 +368,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                 ElevatedButton(
                   onPressed: _saving ? null : () => _submitFlight(user),
                   child: _saving
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                        )
                       : const Text('Invia attività di volo'),
                 ),
               ],
@@ -361,15 +387,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       tobHelicopters.any((item) => item.id == _tobHelicopterId)
                       ? _tobHelicopterId
                       : null,
+                  menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: tobHelicopters
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
+                  items: tobHelicopterItems,
                   onChanged: (value) {
                     setState(() {
                       _tobHelicopterId = value;
@@ -389,15 +409,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       )
                       ? _tobCapabilityId
                       : null,
+                  menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Capacità TOB'),
-                  items: filteredCapabilities
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.tobCapabilityId,
-                          child: Text(item.capabilityName),
-                        ),
-                      )
-                      .toList(),
+                  items: tobCapabilityItems,
                   onChanged: (value) =>
                       setState(() => _tobCapabilityId = value),
                 ),
@@ -418,7 +432,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                 ElevatedButton(
                   onPressed: _saving ? null : () => _submitTob(user),
                   child: _saving
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                        )
                       : const Text('Invia attività TOB'),
                 ),
               ],
@@ -487,7 +504,7 @@ class _ActivityTab extends StatelessWidget {
       return Center(child: Text(disabledMessage));
     }
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: child,
     );
   }
@@ -500,12 +517,15 @@ class _ActivityFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardPadding = screenWidth < 600 ? 20.0 : 24.0;
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Card(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(cardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: children,
@@ -531,6 +551,7 @@ class _DateSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft),
       onPressed: onPressed,
       icon: const Icon(Icons.calendar_today_outlined),
       label: Text('$label: ${DateFormat('dd/MM/yyyy').format(date)}'),

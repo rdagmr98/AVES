@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
+import '../../models/user_models.dart';
 import '../../services/pta_service.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
@@ -35,6 +36,48 @@ class UserDashboard extends ConsumerWidget {
         ),
       );
     }
+
+    final currencyCards = <Widget>[
+      _CurrencyCard(
+        title: 'Manutenzione',
+        status: auth.currency['maintenance'],
+      ),
+      if (auth.hasTCrew)
+        _CurrencyCard(title: 'Volo T', status: auth.currency['flight_t']),
+      if (auth.hasTobCrew)
+        _CurrencyCard(title: 'Base TOB', status: auth.currency['tob_base']),
+      if (auth.hasTobCrew)
+        ...auth.tobCapabilities.map(
+          (cap) => _CurrencyCard(
+            title: 'TOB · ${cap.capabilityName}',
+            status: auth.currency['tob_${cap.tobCapabilityId}'],
+          ),
+        ),
+    ];
+
+    final quickActions = <_DashboardActionButtonData>[
+      _DashboardActionButtonData(
+        label: 'Inserisci Attività',
+        icon: Icons.add_circle_outline,
+        onPressed: () => context.go('/activities/add'),
+        primary: true,
+      ),
+      _DashboardActionButtonData(
+        label: 'Le Mie Attività',
+        icon: Icons.history,
+        onPressed: () => context.go('/activities/my'),
+      ),
+      _DashboardActionButtonData(
+        label: 'Profilo',
+        icon: Icons.person_outline,
+        onPressed: () => context.go('/profile'),
+      ),
+      _DashboardActionButtonData(
+        label: 'PTA',
+        icon: Icons.article_outlined,
+        onPressed: () => context.go('/pta'),
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -68,47 +111,11 @@ class UserDashboard extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () => ref.read(authProvider).refreshUserData(),
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.primary,
-                      ),
-                      child: const Icon(Icons.person, size: 32),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Benvenuto ${user.nome}',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            user.orgUnitName,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Badge.count(
-                      isLabelVisible: auth.unreadNotifications > 0,
-                      count: auth.unreadNotifications,
-                      child: const Icon(Icons.mark_email_unread_outlined),
-                    ),
-                  ],
-                ),
-              ),
+            _UserHeaderCard(
+              user: user,
+              unreadNotifications: auth.unreadNotifications,
             ),
             if (!user.isApproved) ...[
               const SizedBox(height: 16),
@@ -116,10 +123,11 @@ class UserDashboard extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.currencyWarning.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.currencyWarning),
                 ),
                 child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
                       Icons.pending_actions,
@@ -135,90 +143,98 @@ class UserDashboard extends ConsumerWidget {
                 ),
               ),
             ],
-            // PTA banner
-            Builder(builder: (context) {
-              final blockingPta =
-                  PtaService().getBlockingPtaForUser(user.id);
-              if (blockingPta.isEmpty) return const SizedBox.shrink();
-              final ptaNumbers =
-                  blockingPta.map((p) => p.number).join(', ');
-              return Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: InkWell(
-                  onTap: () => context.go('/pta'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8E44AD).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF8E44AD)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.block, color: Color(0xFF8E44AD)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'CURRENCY SOSPESA — PTA attiva',
-                                style: TextStyle(
-                                  color: Color(0xFF8E44AD),
-                                  fontWeight: FontWeight.bold,
+            Builder(
+              builder: (context) {
+                final blockingPta = PtaService().getBlockingPtaForUser(user.id);
+                if (blockingPta.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                final ptaNumbers = blockingPta.map((p) => p.number).join(', ');
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: InkWell(
+                    onTap: () => context.go('/pta'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF8E44AD).withValues(alpha: 0.2),
+                            AppColors.surface,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF8E44AD)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.block, color: Color(0xFF8E44AD)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'CURRENCY SOSPESA — PTA attiva',
+                                  style: TextStyle(
+                                    color: Color(0xFFCE93D8),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'PTA: $ptaNumbers — Tocca per prendere visione',
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  'PTA: $ptaNumbers — Tocca per prendere visione',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const Icon(
-                          Icons.chevron_right,
-                          color: Color(0xFF8E44AD),
-                        ),
-                      ],
+                          const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFFCE93D8),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            }),
+                );
+              },
+            ),
             const SizedBox(height: 24),
             Text(
               'Stato Currency',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                _CurrencyCard(
-                  title: 'Manutenzione',
-                  status: auth.currency['maintenance'],
-                ),
-                if (auth.hasTCrew)
-                  _CurrencyCard(
-                    title: 'Volo T',
-                    status: auth.currency['flight_t'],
-                  ),
-                if (auth.hasTobCrew) ...[
-                  _CurrencyCard(
-                    title: 'Base TOB',
-                    status: auth.currency['tob_base'],
-                  ),
-                  ...auth.tobCapabilities.map(
-                    (cap) => _CurrencyCard(
-                      title: 'TOB · ${cap.capabilityName}',
-                      status: auth.currency['tob_${cap.tobCapabilityId}'],
-                    ),
-                  ),
-                ],
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 500;
+                if (isMobile) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < currencyCards.length; i++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: i == currencyCards.length - 1 ? 0 : 12,
+                          ),
+                          child: currencyCards[i],
+                        ),
+                    ],
+                  );
+                }
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    for (final card in currencyCards)
+                      SizedBox(width: 300, child: card),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             Text(
@@ -226,31 +242,38 @@ class UserDashboard extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => context.go('/activities/add'),
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Inserisci Attività'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => context.go('/activities/my'),
-                  icon: const Icon(Icons.history),
-                  label: const Text('Le Mie Attività'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => context.go('/profile'),
-                  icon: const Icon(Icons.person_outline),
-                  label: const Text('Profilo'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => context.go('/pta'),
-                  icon: const Icon(Icons.article_outlined),
-                  label: const Text('PTA'),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 500;
+                if (isMobile) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < quickActions.length; i++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: i == quickActions.length - 1 ? 0 : 8,
+                          ),
+                          child: _DashboardActionButton(data: quickActions[i]),
+                        ),
+                    ],
+                  );
+                }
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final action in quickActions)
+                      SizedBox(
+                        width: 220,
+                        child: _DashboardActionButton(
+                          data: action,
+                          compact: true,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             Text(
@@ -262,6 +285,195 @@ class UserDashboard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _UserHeaderCard extends StatelessWidget {
+  const _UserHeaderCard({
+    required this.user,
+    required this.unreadNotifications,
+  });
+
+  final UserProfile user;
+  final int unreadNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = _buildInitials('${user.nome} ${user.cognome}');
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.surfaceVariant, AppColors.surface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 420;
+            final avatar = Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.accent, AppColors.primary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                initials,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            );
+
+            final info = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Benvenuto ${user.nome}',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  user.orgUnitName,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  user.numeroLicenza ?? 'Licenza non indicata',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            );
+
+            final notificationPill = Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.mark_email_unread_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    unreadNotifications > 0
+                        ? '$unreadNotifications notifiche'
+                        : 'Nessuna notifica',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            if (isMobile) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      avatar,
+                      const Spacer(),
+                      Badge.count(
+                        isLabelVisible: unreadNotifications > 0,
+                        count: unreadNotifications,
+                        child: notificationPill,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  info,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                avatar,
+                const SizedBox(width: 16),
+                Expanded(child: info),
+                const SizedBox(width: 16),
+                Badge.count(
+                  isLabelVisible: unreadNotifications > 0,
+                  count: unreadNotifications,
+                  child: notificationPill,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardActionButtonData {
+  const _DashboardActionButtonData({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.primary = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool primary;
+}
+
+class _DashboardActionButton extends StatelessWidget {
+  const _DashboardActionButton({required this.data, this.compact = false});
+
+  final _DashboardActionButtonData data;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.primary) {
+      return ElevatedButton.icon(
+        style: compact
+            ? ElevatedButton.styleFrom(minimumSize: const Size(0, 52))
+            : null,
+        onPressed: data.onPressed,
+        icon: Icon(data.icon),
+        label: Text(data.label),
+      );
+    }
+
+    return OutlinedButton.icon(
+      style: compact
+          ? OutlinedButton.styleFrom(minimumSize: const Size(0, 52))
+          : null,
+      onPressed: data.onPressed,
+      icon: Icon(data.icon),
+      label: Text(data.label),
     );
   }
 }
@@ -280,32 +492,119 @@ class _CurrencyCard extends StatelessWidget {
           status: CurrencyStatusEnum.noData,
           label: 'Nessun dato',
         );
+    final highlight = Color.lerp(
+      AppColors.surfaceVariant,
+      currentStatus.color,
+      0.2,
+    )!;
 
-    return SizedBox(
-      width: 300,
-      child: Card(
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [highlight, AppColors.surface],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              CurrencyBadgeWidget(status: currentStatus),
-              const SizedBox(height: 12),
-              Text('Etichetta: ${currentStatus.label}'),
-              if (currentStatus.lastActivityDate != null)
-                Text(
-                  'Ultima attività: ${DateFormat('dd/MM/yyyy').format(currentStatus.lastActivityDate!)}',
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: currentStatus.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              if (currentStatus.expiryDate != null)
-                Text(
-                  'Scadenza: ${DateFormat('dd/MM/yyyy').format(currentStatus.expiryDate!)}',
+                child: Icon(currentStatus.icon, color: currentStatus.color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    CurrencyBadgeWidget(status: currentStatus),
+                    const SizedBox(height: 10),
+                    Text(
+                      currentStatus.label,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (currentStatus.lastActivityDate != null) ...[
+                      const SizedBox(height: 10),
+                      _CurrencyMetaLine(
+                        icon: Icons.history_toggle_off,
+                        text:
+                            'Ultima attività: ${DateFormat('dd/MM/yyyy').format(currentStatus.lastActivityDate!)}',
+                      ),
+                    ],
+                    if (currentStatus.expiryDate != null) ...[
+                      const SizedBox(height: 6),
+                      _CurrencyMetaLine(
+                        icon: Icons.event_available,
+                        text:
+                            'Scadenza: ${DateFormat('dd/MM/yyyy').format(currentStatus.expiryDate!)}',
+                      ),
+                    ],
+                  ],
                 ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _CurrencyMetaLine extends StatelessWidget {
+  const _CurrencyMetaLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _buildInitials(String value) {
+  final parts = value
+      .split(RegExp(r'\s+'))
+      .where((part) => part.trim().isNotEmpty)
+      .toList();
+  if (parts.isEmpty) {
+    return 'AV';
+  }
+  if (parts.length == 1) {
+    return parts.first.substring(0, 1).toUpperCase();
+  }
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
 }

@@ -60,125 +60,171 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final logoSize = isMobile ? 96.0 : 120.0;
+    final cardPadding = isMobile ? 20.0 : 28.0;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 120,
-                  height: 120,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary,
-                    border: Border.all(color: AppColors.secondary, width: 2),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/images/aves_logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (ctx, err, _) => const Icon(
-                        Icons.flight,
-                        color: Colors.white,
-                        size: 56,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'AVES',
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    color: AppColors.secondary,
-                    letterSpacing: 8,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Gestione Currency\nAviazione dell\'Esercito',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'ACCESSO',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.titleLarge?.copyWith(letterSpacing: 2),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.primaryDark,
+              AppColors.background,
+              AppColors.surface,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: logoSize,
+                      height: logoSize,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [AppColors.accent, AppColors.primary],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        border: Border.all(
+                          color: AppColors.secondary.withValues(alpha: 0.75),
+                          width: 1.8,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
                           ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _usernameCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Numero Licenza / Username',
-                              prefixIcon: Icon(Icons.badge_outlined),
-                            ),
-                            validator: (value) =>
-                                value == null || value.trim().isEmpty
-                                ? 'Campo obbligatorio'
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _passCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: const Icon(Icons.lock_outlined),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscure
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                ),
-                                onPressed: () =>
-                                    setState(() => _obscure = !_obscure),
-                              ),
-                            ),
-                            obscureText: _obscure,
-                            validator: (value) =>
-                                value == null || value.length < 4
-                                ? 'Password troppo corta'
-                                : null,
-                          ),
-                          const SizedBox(height: 24),
-                          if (auth.isLoading)
-                            const Center(child: CircularProgressIndicator())
-                          else
-                            ElevatedButton(
-                              onPressed: _login,
-                              child: const Text('ACCEDI'),
-                            ),
                         ],
                       ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/aves_logo.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (ctx, err, _) => const Icon(
+                            Icons.flight,
+                            color: Colors.white,
+                            size: 52,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'AVES',
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(
+                            color: AppColors.textPrimary,
+                            letterSpacing: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'AVIAZIONE DELL\'ESERCITO',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.secondary,
+                        letterSpacing: 2.6,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Gestione Currency',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 36),
+                    Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(cardPadding),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'ACCESSO',
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(letterSpacing: 1.8),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Accedi al tuo profilo operativo.',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: 24),
+                              TextFormField(
+                                controller: _usernameCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Numero Licenza / Username',
+                                  prefixIcon: Icon(Icons.badge_outlined),
+                                ),
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                    ? 'Campo obbligatorio'
+                                    : null,
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _passCtrl,
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  prefixIcon: const Icon(Icons.lock_outlined),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscure
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
+                                  ),
+                                ),
+                                obscureText: _obscure,
+                                validator: (value) =>
+                                    value == null || value.length < 4
+                                    ? 'Password troppo corta'
+                                    : null,
+                              ),
+                              const SizedBox(height: 24),
+                              if (auth.isLoading)
+                                const Center(child: CircularProgressIndicator())
+                              else
+                                ElevatedButton(
+                                  onPressed: _login,
+                                  child: const Text('ACCEDI'),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () => context.go('/register'),
+                      child: const Text('Non hai un account? Registrati'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () => context.go('/register'),
-                  child: const Text(
-                    'Non hai un account? Registrati',
-                    style: TextStyle(color: AppColors.secondary),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

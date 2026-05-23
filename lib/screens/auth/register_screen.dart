@@ -108,9 +108,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Registrazione inviata'),
-          content: const Text('Registrazione inviata - in attesa di approvazione'),
+          content: const Text(
+            'Registrazione inviata - in attesa di approvazione',
+          ),
           actions: [
             ElevatedButton(
+              style: _dialogActionStyle(),
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('OK'),
             ),
@@ -134,10 +137,39 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
+  Widget _buildDialogContent(List<Widget> children) {
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(mainAxisSize: MainAxisSize.min, children: children),
+      ),
+    );
+  }
+
+  ButtonStyle _dialogActionStyle() {
+    return ElevatedButton.styleFrom(
+      minimumSize: const Size(0, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+    );
+  }
+
   Future<void> _addLicense(
     List<HelicopterType> helicopterTypes,
     List<LicenseType> licenseTypes,
   ) async {
+    final helicopterItems = helicopterTypes
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    final licenseItems = licenseTypes
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
@@ -146,46 +178,33 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: const Text('Aggiungi licenza'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: helicopterId,
-                  decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: helicopterTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => helicopterId = value),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: licenseTypeId,
-                  decoration: const InputDecoration(labelText: 'Tipo licenza'),
-                  items: licenseTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text(item.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => licenseTypeId = value),
-                ),
-              ],
-            ),
+            scrollable: true,
+            content: _buildDialogContent([
+              DropdownButtonFormField<int>(
+                initialValue: helicopterId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Elicottero'),
+                items: helicopterItems,
+                onChanged: (value) =>
+                    setDialogState(() => helicopterId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                initialValue: licenseTypeId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Tipo licenza'),
+                items: licenseItems,
+                onChanged: (value) =>
+                    setDialogState(() => licenseTypeId = value),
+              ),
+            ]),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Annulla'),
               ),
               ElevatedButton(
+                style: _dialogActionStyle(),
                 onPressed: () {
                   if (helicopterId == null || licenseTypeId == null) {
                     return;
@@ -213,9 +232,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           item['license_type_id'] == result['license_type_id'],
     );
     if (exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Licenza già presente.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Licenza già presente.')));
       return;
     }
 
@@ -223,6 +242,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _addCrew(List<HelicopterType> helicopterTypes) async {
+    final helicopterItems = helicopterTypes
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    const crewTypeItems = [
+      DropdownMenuItem(value: 'T', child: Text('T')),
+      DropdownMenuItem(value: 'TOB', child: Text('TOB')),
+    ];
+    const fasciaItems = [
+      DropdownMenuItem(value: 'A', child: Text('A')),
+      DropdownMenuItem(value: 'B', child: Text('B')),
+      DropdownMenuItem(value: 'C', child: Text('C')),
+    ];
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
@@ -232,57 +267,44 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: const Text('Aggiungi equipaggio'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: helicopterId,
-                  decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: helicopterTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => helicopterId = value),
-                ),
+            scrollable: true,
+            content: _buildDialogContent([
+              DropdownButtonFormField<int>(
+                initialValue: helicopterId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Elicottero'),
+                items: helicopterItems,
+                onChanged: (value) =>
+                    setDialogState(() => helicopterId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: crewType,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
+                items: crewTypeItems,
+                onChanged: (value) =>
+                    setDialogState(() => crewType = value ?? 'T'),
+              ),
+              if (crewType == 'TOB') ...[
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: crewType,
-                  decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
-                  items: const [
-                    DropdownMenuItem(value: 'T', child: Text('T')),
-                    DropdownMenuItem(value: 'TOB', child: Text('TOB')),
-                  ],
-                  onChanged: (value) => setDialogState(() {
-                    crewType = value ?? 'T';
-                  }),
+                  initialValue: fascia,
+                  menuMaxHeight: 300,
+                  decoration: const InputDecoration(labelText: 'Fascia TOB'),
+                  items: fasciaItems,
+                  onChanged: (value) =>
+                      setDialogState(() => fascia = value ?? 'A'),
                 ),
-                if (crewType == 'TOB') ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: fascia,
-                    decoration: const InputDecoration(labelText: 'Fascia TOB'),
-                    items: const [
-                      DropdownMenuItem(value: 'A', child: Text('A')),
-                      DropdownMenuItem(value: 'B', child: Text('B')),
-                      DropdownMenuItem(value: 'C', child: Text('C')),
-                    ],
-                    onChanged: (value) =>
-                        setDialogState(() => fascia = value ?? 'A'),
-                  ),
-                ],
               ],
-            ),
+            ]),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Annulla'),
               ),
               ElevatedButton(
+                style: _dialogActionStyle(),
                 onPressed: () {
                   if (helicopterId == null) {
                     return;
@@ -311,9 +333,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           item['crew_type'] == result['crew_type'],
     );
     if (exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Equipaggio già presente.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Equipaggio già presente.')));
       return;
     }
 
@@ -324,6 +346,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     List<HelicopterType> helicopterTypes,
     List<PrivilegeType> privilegeTypes,
   ) async {
+    final helicopterItems = helicopterTypes
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    final privilegeItems = privilegeTypes
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
@@ -332,48 +367,35 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: const Text('Aggiungi privilegio'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: helicopterId,
-                  decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: helicopterTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => helicopterId = value),
+            scrollable: true,
+            content: _buildDialogContent([
+              DropdownButtonFormField<int>(
+                initialValue: helicopterId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Elicottero'),
+                items: helicopterItems,
+                onChanged: (value) =>
+                    setDialogState(() => helicopterId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                initialValue: privilegeTypeId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(
+                  labelText: 'Privilegio manutentivo',
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: privilegeTypeId,
-                  decoration: const InputDecoration(
-                    labelText: 'Privilegio manutentivo',
-                  ),
-                  items: privilegeTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text(item.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => privilegeTypeId = value),
-                ),
-              ],
-            ),
+                items: privilegeItems,
+                onChanged: (value) =>
+                    setDialogState(() => privilegeTypeId = value),
+              ),
+            ]),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Annulla'),
               ),
               ElevatedButton(
+                style: _dialogActionStyle(),
                 onPressed: () {
                   if (helicopterId == null || privilegeTypeId == null) {
                     return;
@@ -401,9 +423,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           item['privilege_type_id'] == result['privilege_type_id'],
     );
     if (exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Privilegio già presente.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Privilegio già presente.')));
       return;
     }
 
@@ -414,6 +436,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     List<HelicopterType> helicopterTypes,
     List<TobCapability> tobCapabilities,
   ) async {
+    final helicopterItems = helicopterTypes
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+    final capabilityItems = tobCapabilities
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
@@ -422,46 +457,33 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: const Text('Aggiungi capacità TOB'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: helicopterId,
-                  decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: helicopterTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text('${item.code} - ${item.name}'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => helicopterId = value),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: capabilityId,
-                  decoration: const InputDecoration(labelText: 'Capacità TOB'),
-                  items: tobCapabilities
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text(item.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => capabilityId = value),
-                ),
-              ],
-            ),
+            scrollable: true,
+            content: _buildDialogContent([
+              DropdownButtonFormField<int>(
+                initialValue: helicopterId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Elicottero'),
+                items: helicopterItems,
+                onChanged: (value) =>
+                    setDialogState(() => helicopterId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                initialValue: capabilityId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Capacità TOB'),
+                items: capabilityItems,
+                onChanged: (value) =>
+                    setDialogState(() => capabilityId = value),
+              ),
+            ]),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Annulla'),
               ),
               ElevatedButton(
+                style: _dialogActionStyle(),
                 onPressed: () {
                   if (helicopterId == null || capabilityId == null) {
                     return;
@@ -542,17 +564,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final privilegeTypes = auth.privilegeTypes;
     final tobCapabilities = auth.tobCapabilityTypes;
     final orgUnits = auth.orgUnits;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final horizontalPadding = isMobile ? 16.0 : 24.0;
+    final formPadding = isMobile ? 20.0 : 24.0;
+    final orgUnitItems = orgUnits
+        .map(
+          (unit) =>
+              DropdownMenuItem<int>(value: unit.id, child: Text(unit.name)),
+        )
+        .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Registrazione')),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 24,
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(formPadding),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -562,6 +597,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         'Nuovo account AVES',
                         style: Theme.of(context).textTheme.headlineSmall,
                         textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Inserisci i dati del profilo e le qualifiche iniziali.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 24),
                       TextFormField(
@@ -606,7 +647,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         decoration: InputDecoration(
                           labelText: 'Password',
                           suffixIcon: IconButton(
-                            onPressed: () => setState(() => _obscure = !_obscure),
+                            onPressed: () =>
+                                setState(() => _obscure = !_obscure),
                             icon: Icon(
                               _obscure
                                   ? Icons.visibility_outlined
@@ -621,18 +663,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: 16),
                       DropdownButtonFormField<int>(
                         initialValue: _orgUnitId,
+                        menuMaxHeight: 300,
                         decoration: const InputDecoration(
                           labelText: 'Unità organizzativa',
                         ),
-                        items: orgUnits
-                            .map(
-                              (unit) => DropdownMenuItem<int>(
-                                value: unit.id,
-                                child: Text('${unit.code} - ${unit.name}'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) => setState(() => _orgUnitId = value),
+                        items: orgUnitItems,
+                        onChanged: (value) =>
+                            setState(() => _orgUnitId = value),
                         validator: (value) =>
                             value == null ? 'Campo obbligatorio' : null,
                       ),
@@ -694,7 +731,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         title: 'Privilegi Manutentivi',
                         itemCount: _pendingPrivileges.length,
                         emptyText: 'Nessun privilegio aggiunto.',
-                        onAdd: () => _addPrivilege(helicopterTypes, privilegeTypes),
+                        onAdd: () =>
+                            _addPrivilege(helicopterTypes, privilegeTypes),
                         addLabel: 'Aggiungi privilegio',
                         children: _pendingPrivileges
                             .asMap()
@@ -706,7 +744,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 ),
                                 trailing: IconButton(
                                   onPressed: () => setState(
-                                    () => _pendingPrivileges.removeAt(entry.key),
+                                    () =>
+                                        _pendingPrivileges.removeAt(entry.key),
                                   ),
                                   icon: const Icon(Icons.delete_outline),
                                 ),
@@ -719,7 +758,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         title: 'Capacità TOB',
                         itemCount: _pendingTobCaps.length,
                         emptyText: 'Nessuna capacità TOB aggiunta.',
-                        onAdd: () => _addTobCapability(helicopterTypes, tobCapabilities),
+                        onAdd: () =>
+                            _addTobCapability(helicopterTypes, tobCapabilities),
                         addLabel: 'Aggiungi capacità',
                         children: _pendingTobCaps
                             .asMap()
@@ -744,7 +784,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: AppColors.border),
                         ),
                         child: const Text(
@@ -796,8 +836,9 @@ class _PendingSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         title: Text('$title ($itemCount)'),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
           if (children.isEmpty)
             Padding(
@@ -809,8 +850,8 @@ class _PendingSection extends StatelessWidget {
             )
           else
             ...children,
-          Align(
-            alignment: Alignment.centerLeft,
+          SizedBox(
+            width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add_circle_outline),

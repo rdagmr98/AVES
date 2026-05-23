@@ -60,7 +60,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       if (assignments.isEmpty) {
         continue;
       }
-      final tobCapabilities = await _userService.getUserTobCapabilities(user.id);
+      final tobCapabilities = await _userService.getUserTobCapabilities(
+        user.id,
+      );
       final fascia = assignments
           .where((a) => a.crewType == 'TOB')
           .map((a) => a.fascia)
@@ -72,12 +74,15 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         flightStatus = await _currencyService.getFlightCurrency(user.id);
       }
       if (assignments.any((item) => item.crewType == 'TOB')) {
-        tobBaseStatus = await _currencyService.getTobBaseCurrency(user.id, fascia);
+        tobBaseStatus = await _currencyService.getTobBaseCurrency(
+          user.id,
+          fascia,
+        );
       }
       final tobStatuses = <int, CurrencyStatus>{};
       for (final capability in tobCapabilities) {
-        tobStatuses[capability.tobCapabilityId] =
-            await _currencyService.getTobCapabilityCurrencyStatus(
+        tobStatuses[capability.tobCapabilityId] = await _currencyService
+            .getTobCapabilityCurrencyStatus(
               user.id,
               capability.tobCapabilityId,
               capability.capabilityName,
@@ -121,7 +126,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       };
       final matchesCapability =
           _tobCapabilityId == null ||
-          row.tobCapabilities.any((item) => item.tobCapabilityId == _tobCapabilityId);
+          row.tobCapabilities.any(
+            (item) => item.tobCapabilityId == _tobCapabilityId,
+          );
       final statuses = row.relevantStatuses(_crewTypeFilter, _tobCapabilityId);
       final matchesStatus = switch (_statusFilter) {
         'valid' => statuses.any((item) => item.isValid),
@@ -143,6 +150,63 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     final filteredRows = _filteredRows();
     final tCrewCount = _rows.where((row) => row.hasTCrew).length;
     final tobCrewCount = _rows.where((row) => row.hasTobCrew).length;
+
+    final statCards = <Widget>[
+      _CrewStatCard(
+        title: 'Attività volo/TOB in attesa',
+        value: '$_pendingActivities',
+        icon: Icons.pending_actions,
+      ),
+      _CrewStatCard(
+        title: 'Equipaggi T',
+        value: '$tCrewCount',
+        icon: Icons.flight,
+      ),
+      _CrewStatCard(
+        title: 'Equipaggi TOB',
+        value: '$tobCrewCount',
+        icon: Icons.precision_manufacturing_outlined,
+      ),
+    ];
+
+    final quickActions = <_CrewActionConfig>[
+      _CrewActionConfig(
+        label: 'Valida Attività Volo',
+        icon: Icons.verified_outlined,
+        onTap: () => context.go('/admin/validate'),
+        highlighted: true,
+      ),
+      _CrewActionConfig(
+        label: 'Gestione Equipaggi',
+        icon: Icons.manage_accounts_outlined,
+        onTap: () => context.go('/admin/users'),
+      ),
+      _CrewActionConfig(
+        label: 'Impostazioni Currency TOB',
+        icon: Icons.tune_outlined,
+        onTap: () => context.go('/admin/settings'),
+      ),
+      _CrewActionConfig(
+        label: 'Scarica Report Volo PDF',
+        icon: Icons.picture_as_pdf_outlined,
+        onTap: _reportService.downloadCrewReport,
+      ),
+    ];
+
+    final orgUnitItems = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
+      ...auth.orgUnits.map(
+        (unit) =>
+            DropdownMenuItem<int?>(value: unit.id, child: Text(unit.name)),
+      ),
+    ];
+    final tobCapabilityItems = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
+      ...auth.tobCapabilityTypes.map(
+        (item) =>
+            DropdownMenuItem<int?>(value: item.id, child: Text(item.name)),
+      ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -169,58 +233,81 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           : RefreshIndicator(
               onRefresh: _loadData,
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
                 children: [
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      _CrewStatCard(
-                        title: 'Attività volo/TOB in attesa',
-                        value: '$_pendingActivities',
-                        icon: Icons.pending_actions,
-                      ),
-                      _CrewStatCard(
-                        title: 'Equipaggi T',
-                        value: '$tCrewCount',
-                        icon: Icons.flight,
-                      ),
-                      _CrewStatCard(
-                        title: 'Equipaggi TOB',
-                        value: '$tobCrewCount',
-                        icon: Icons.precision_manufacturing_outlined,
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      if (isMobile) {
+                        return GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.4,
+                          children: statCards,
+                        );
+                      }
+                      return Wrap(
+                        spacing: 16,
+                        runSpacing: 16,
+                        children: [
+                          for (final card in statCards)
+                            SizedBox(width: 240, child: card),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => context.go('/admin/validate'),
-                            icon: const Icon(Icons.verified_outlined),
-                            label: const Text('Valida Attività Volo'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go('/admin/users'),
-                            icon: const Icon(Icons.manage_accounts_outlined),
-                            label: const Text('Gestione Equipaggi'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go('/admin/settings'),
-                            icon: const Icon(Icons.tune_outlined),
-                            label: const Text('Impostazioni Currency TOB'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _reportService.downloadCrewReport,
-                            icon: const Icon(Icons.picture_as_pdf_outlined),
-                            label: const Text('Scarica Report Volo PDF'),
-                          ),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isMobile = constraints.maxWidth < 600;
+                          if (isMobile) {
+                            return GridView.count(
+                              crossAxisCount: 2,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 1.15,
+                              children: [
+                                for (final action in quickActions)
+                                  _CrewQuickActionTile(config: action),
+                              ],
+                            );
+                          }
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              for (final action in quickActions)
+                                SizedBox(
+                                  width: 240,
+                                  child: action.highlighted
+                                      ? ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            minimumSize: const Size(0, 52),
+                                          ),
+                                          onPressed: action.onTap,
+                                          icon: Icon(action.icon),
+                                          label: Text(action.label),
+                                        )
+                                      : OutlinedButton.icon(
+                                          onPressed: action.onTap,
+                                          icon: Icon(action.icon),
+                                          label: Text(action.label),
+                                        ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -236,115 +323,113 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              SizedBox(
-                                width: 260,
-                                child: TextField(
-                                  controller: _searchCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Cerca per nome o licenza',
-                                    prefixIcon: Icon(Icons.search),
-                                  ),
-                                  onChanged: (value) =>
-                                      setState(() => _search = value),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 220,
-                                child: DropdownButtonFormField<int?>(
-                                  initialValue: _orgUnitId,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Unità organizzativa',
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('Tutte'),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isMobile = constraints.maxWidth < 600;
+                              return Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 260,
+                                    child: TextField(
+                                      controller: _searchCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Cerca per nome o licenza',
+                                        prefixIcon: Icon(Icons.search),
+                                      ),
+                                      onChanged: (value) =>
+                                          setState(() => _search = value),
                                     ),
-                                    ...auth.orgUnits.map(
-                                      (unit) => DropdownMenuItem<int?>(
-                                        value: unit.id,
-                                        child: Text('${unit.code} - ${unit.name}'),
+                                  ),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 220,
+                                    child: DropdownButtonFormField<int?>(
+                                      initialValue: _orgUnitId,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Unità organizzativa',
+                                      ),
+                                      items: orgUnitItems,
+                                      onChanged: (value) =>
+                                          setState(() => _orgUnitId = value),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 180,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: _crewTypeFilter,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Tipo equipaggio',
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'all',
+                                          child: Text('Tutti'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'T',
+                                          child: Text('T'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'TOB',
+                                          child: Text('TOB'),
+                                        ),
+                                      ],
+                                      onChanged: (value) => setState(
+                                        () => _crewTypeFilter = value ?? 'all',
                                       ),
                                     ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _orgUnitId = value),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 180,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _crewTypeFilter,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tipo equipaggio',
                                   ),
-                                  items: const [
-                                    DropdownMenuItem(value: 'all', child: Text('Tutti')),
-                                    DropdownMenuItem(value: 'T', child: Text('T')),
-                                    DropdownMenuItem(value: 'TOB', child: Text('TOB')),
-                                  ],
-                                  onChanged: (value) => setState(
-                                    () => _crewTypeFilter = value ?? 'all',
-                                  ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 220,
-                                child: DropdownButtonFormField<int?>(
-                                  initialValue: _tobCapabilityId,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Capacità TOB',
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('Tutte'),
-                                    ),
-                                    ...auth.tobCapabilityTypes.map(
-                                      (item) => DropdownMenuItem<int?>(
-                                        value: item.id,
-                                        child: Text(item.name),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 220,
+                                    child: DropdownButtonFormField<int?>(
+                                      initialValue: _tobCapabilityId,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Capacità TOB',
+                                      ),
+                                      items: tobCapabilityItems,
+                                      onChanged: (value) => setState(
+                                        () => _tobCapabilityId = value,
                                       ),
                                     ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _tobCapabilityId = value),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 220,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _statusFilter,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Stato currency',
                                   ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'all',
-                                      child: Text('Tutte'),
+                                  SizedBox(
+                                    width: isMobile ? double.infinity : 220,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: _statusFilter,
+                                      menuMaxHeight: 300,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Stato currency',
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'all',
+                                          child: Text('Tutte'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'valid',
+                                          child: Text('Valida'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'warning',
+                                          child: Text('In Scadenza'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'expired',
+                                          child: Text('Scaduta'),
+                                        ),
+                                      ],
+                                      onChanged: (value) => setState(
+                                        () => _statusFilter = value ?? 'all',
+                                      ),
                                     ),
-                                    DropdownMenuItem(
-                                      value: 'valid',
-                                      child: Text('Valida'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'warning',
-                                      child: Text('In Scadenza'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'expired',
-                                      child: Text('Scaduta'),
-                                    ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _statusFilter = value ?? 'all'),
-                                ),
-                              ),
-                            ],
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -360,7 +445,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: Text('Nessun utente corrisponde ai filtri selezionati.'),
+                        child: Text(
+                          'Nessun utente corrisponde ai filtri selezionati.',
+                        ),
                       ),
                     )
                   else
@@ -371,15 +458,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                row.user.fullName,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${row.user.numeroLicenza ?? 'Licenza non indicata'} · ${row.user.orgUnitName}',
-                              ),
-                              const SizedBox(height: 12),
+                              _CrewIdentityHeader(user: row.user),
+                              const SizedBox(height: 16),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
@@ -402,18 +482,33 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Currency assegnate',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
                                   if (row.flightStatus != null)
-                                    CurrencyBadgeWidget(status: row.flightStatus!),
+                                    CurrencyBadgeWidget(
+                                      status: row.flightStatus!,
+                                    ),
                                   if (row.tobBaseStatus != null)
-                                    CurrencyBadgeWidget(status: row.tobBaseStatus!),
+                                    CurrencyBadgeWidget(
+                                      status: row.tobBaseStatus!,
+                                    ),
                                   ...row.tobCapabilities.map(
                                     (item) => CurrencyBadgeWidget(
-                                      status: row.tobStatuses[item.tobCapabilityId] ??
+                                      status:
+                                          row.tobStatuses[item
+                                              .tobCapabilityId] ??
                                           const CurrencyStatus(
                                             status: CurrencyStatusEnum.noData,
                                             label: 'Nessun dato',
@@ -454,13 +549,19 @@ class _CrewUserRow {
   bool get hasTCrew => assignments.any((item) => item.crewType == 'T');
   bool get hasTobCrew => assignments.any((item) => item.crewType == 'TOB');
 
-  List<CurrencyStatus> relevantStatuses(String crewTypeFilter, int? capabilityId) {
+  List<CurrencyStatus> relevantStatuses(
+    String crewTypeFilter,
+    int? capabilityId,
+  ) {
     final statuses = <CurrencyStatus>[];
-    if ((crewTypeFilter == 'all' || crewTypeFilter == 'T') && flightStatus != null) {
+    if ((crewTypeFilter == 'all' || crewTypeFilter == 'T') &&
+        flightStatus != null) {
       statuses.add(flightStatus!);
     }
     if (crewTypeFilter == 'all' || crewTypeFilter == 'TOB') {
-      if (tobBaseStatus != null) statuses.add(tobBaseStatus!);
+      if (tobBaseStatus != null) {
+        statuses.add(tobBaseStatus!);
+      }
       for (final entry in tobStatuses.entries) {
         if (capabilityId == null || capabilityId == entry.key) {
           statuses.add(entry.value);
@@ -484,23 +585,152 @@ class _CrewStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: Card(
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: AppColors.secondary),
+            ),
+            const SizedBox(height: 16),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            const SizedBox(height: 12),
+            Text(value, style: Theme.of(context).textTheme.headlineSmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CrewActionConfig {
+  const _CrewActionConfig({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.highlighted = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool highlighted;
+}
+
+class _CrewQuickActionTile extends StatelessWidget {
+  const _CrewQuickActionTile({required this.config});
+
+  final _CrewActionConfig config;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = config.highlighted ? AppColors.accent : AppColors.secondary;
+
+    return InkWell(
+      onTap: config.onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceVariant.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: AppColors.secondary),
-              const SizedBox(height: 10),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(value, style: Theme.of(context).textTheme.headlineSmall),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(config.icon, color: accent),
+              ),
+              const Spacer(),
+              Text(
+                config.label,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(color: AppColors.textPrimary),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+class _CrewIdentityHeader extends StatelessWidget {
+  const _CrewIdentityHeader({required this.user});
+
+  final UserProfile user;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = _crewInitials('${user.nome} ${user.cognome}');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: AppColors.accent.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            initials,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                user.fullName,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${user.numeroLicenza ?? 'Licenza non indicata'} · ${user.orgUnitName}',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _crewInitials(String value) {
+  final parts = value
+      .split(RegExp(r'\s+'))
+      .where((part) => part.trim().isNotEmpty)
+      .toList();
+  if (parts.isEmpty) {
+    return 'AV';
+  }
+  if (parts.length == 1) {
+    return parts.first.substring(0, 1).toUpperCase();
+  }
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
 }

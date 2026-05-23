@@ -136,6 +136,7 @@ class _ValidateActivitiesScreenState
         title: const Text('Valida Attività'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: MediaQuery.of(context).size.width < 420,
           tabs: _tabs
               .map(
                 (tab) => Tab(
@@ -166,7 +167,8 @@ class _ValidateActivitiesScreenState
       case _ValidationTabType.maintenance:
         return _ValidationList<MaintenanceActivity>(
           items: _maintenance,
-          titleBuilder: (item) => '${item.userFullName} · ${item.helicopterCode}',
+          titleBuilder: (item) =>
+              '${item.userFullName} · ${item.helicopterCode}',
           subtitleBuilder: (item) =>
               '${item.privilegeName}\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
@@ -179,7 +181,8 @@ class _ValidateActivitiesScreenState
       case _ValidationTabType.flight:
         return _ValidationList<FlightActivity>(
           items: _flight,
-          titleBuilder: (item) => '${item.userFullName} · ${item.helicopterCode}',
+          titleBuilder: (item) =>
+              '${item.userFullName} · ${item.helicopterCode}',
           subtitleBuilder: (item) =>
               '${item.flightHours.toStringAsFixed(1)}h\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
@@ -192,7 +195,8 @@ class _ValidateActivitiesScreenState
       case _ValidationTabType.tob:
         return _ValidationList<TobActivity>(
           items: _tob,
-          titleBuilder: (item) => '${item.userFullName} · ${item.helicopterCode}',
+          titleBuilder: (item) =>
+              '${item.userFullName} · ${item.helicopterCode}',
           subtitleBuilder: (item) =>
               '${item.capabilityName}\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
@@ -251,18 +255,38 @@ class _ValidationList<T> extends StatelessWidget {
                   'Data: ${DateFormat('dd/MM/yyyy').format(dateBuilder(item))}',
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    ElevatedButton(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isStacked = constraints.maxWidth < 300;
+                    final validateButton = ElevatedButton(
                       onPressed: () => onValidate(item),
                       child: const Text('Valida'),
-                    ),
-                    const SizedBox(width: 12),
-                    OutlinedButton(
+                    );
+                    final rejectButton = OutlinedButton(
                       onPressed: () => onReject(item),
                       child: const Text('Rifiuta'),
-                    ),
-                  ],
+                    );
+
+                    if (isStacked) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          validateButton,
+                          const SizedBox(height: 8),
+                          rejectButton,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Flexible(child: validateButton),
+                        const SizedBox(width: 12),
+                        Flexible(child: rejectButton),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
