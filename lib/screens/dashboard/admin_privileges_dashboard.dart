@@ -198,8 +198,13 @@ class _AdminPrivilegesDashboardState
     final licenseTypeItems = <DropdownMenuItem<int?>>[
       const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
       ...auth.licenseTypes.map(
-        (item) =>
-            DropdownMenuItem<int?>(value: item.id, child: Text(item.name)),
+        (item) => DropdownMenuItem<int?>(
+          value: item.id,
+          child: Text(
+            item.name,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ),
     ];
 
@@ -209,7 +214,7 @@ class _AdminPrivilegesDashboardState
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: AvesLogoWidget(size: 40),
         ),
-        title: const Text('Dashboard Admin CSL'),
+        title: const Text('Admin CSL'),
         actions: [
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
           IconButton(
@@ -354,6 +359,7 @@ class _AdminPrivilegesDashboardState
                                   SizedBox(
                                     width: isMobile ? double.infinity : 220,
                                     child: DropdownButtonFormField<int?>(
+                                      isExpanded: true,
                                       initialValue: _orgUnitId,
                                       menuMaxHeight: 300,
                                       decoration: const InputDecoration(
@@ -367,6 +373,7 @@ class _AdminPrivilegesDashboardState
                                   SizedBox(
                                     width: isMobile ? double.infinity : 220,
                                     child: DropdownButtonFormField<int?>(
+                                      isExpanded: true,
                                       initialValue: _licenseTypeId,
                                       menuMaxHeight: 300,
                                       decoration: const InputDecoration(
@@ -381,6 +388,7 @@ class _AdminPrivilegesDashboardState
                                   SizedBox(
                                     width: isMobile ? double.infinity : 220,
                                     child: DropdownButtonFormField<String>(
+                                      isExpanded: true,
                                       initialValue: _statusFilter,
                                       menuMaxHeight: 300,
                                       decoration: const InputDecoration(

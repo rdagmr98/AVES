@@ -23,14 +23,35 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="AVES CSL">
+  <meta name="apple-mobile-web-app-title" content="AVES Tecnici">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>AVES CSL</title>
+  <title>AVES Tecnici</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    // AVES push notification helper
+    window.avesShowNotification = function(title, body) {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      var opts = {
+        body: body,
+        icon: '/AVES/icons/Icon-192.png',
+        badge: '/AVES/icons/Icon-192.png',
+        vibrate: [200, 100, 200]
+      };
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(function(reg) {
+          reg.showNotification(title, opts);
+        }).catch(function() {
+          try { new Notification(title, opts); } catch(e) {}
+        });
+      } else {
+        try { new Notification(title, opts); } catch(e) {}
+      }
+    };
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

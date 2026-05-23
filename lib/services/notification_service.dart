@@ -57,4 +57,18 @@ class NotificationService {
       await _db.saveNotifications(notifications);
     }
   }
+
+  Future<void> deleteNotification(int notificationId) async {
+    final notifications = _db.notifications;
+    final updated = notifications.where((n) => n['id'] != notificationId).toList();
+    if (updated.length != notifications.length) {
+      await _db.saveNotifications(updated);
+    }
+  }
+
+  Future<void> deleteAll(String userId) async {
+    final notifications = _db.notifications;
+    final updated = notifications.where((n) => n['user_id'] != userId).toList();
+    await _db.saveNotifications(updated);
+  }
 }

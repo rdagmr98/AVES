@@ -27,7 +27,7 @@ class AppColors {
 }
 
 class AppStrings {
-  static const String appName = 'AVES CSL';
+  static const String appName = 'AVES Tecnici';
   static const String appFullName =
       'Aviazione dell\'Esercito\nGestione Currency';
 

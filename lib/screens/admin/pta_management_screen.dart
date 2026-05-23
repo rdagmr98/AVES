@@ -272,23 +272,49 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
             ...entry.value.map(
               (ack) => Card(
                 margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: Text(ack.userFullName.isNotEmpty
-                      ? ack.userFullName
-                      : ack.userId),
-                  subtitle: Text(
-                    'Licenza: ${ack.userLicenza.isNotEmpty ? ack.userLicenza : "-"}\n'
-                    'Preso visione il: ${DateFormat('dd/MM/yyyy HH:mm').format(ack.acknowledgedAt)}',
-                  ),
-                  isThreeLine: true,
-                  trailing: ElevatedButton.icon(
-                    onPressed: () => _validateAck(ack),
-                    icon: const Icon(Icons.verified_outlined, size: 18),
-                    label: const Text('Valida'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.currencyValid,
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              ack.userFullName.isNotEmpty
+                                  ? ack.userFullName
+                                  : ack.userId,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Licenza: ${ack.userLicenza.isNotEmpty ? ack.userLicenza : "-"}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        'Preso visione il: ${DateFormat('dd/MM/yyyy HH:mm').format(ack.acknowledgedAt)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _validateAck(ack),
+                          icon: const Icon(Icons.verified_outlined, size: 18),
+                          label: const Text('Valida presa visione'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.currencyValid,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
