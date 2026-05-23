@@ -7,6 +7,7 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../services/pta_service.dart';
+import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/privilege_grid_widget.dart';
@@ -37,6 +38,10 @@ class UserDashboard extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const Padding(
+          padding: EdgeInsets.all(6),
+          child: AvesLogoWidget(size: 32),
+        ),
         title: const Text('Dashboard Operatore'),
         actions: [
           IconButton(
@@ -201,13 +206,18 @@ class UserDashboard extends ConsumerWidget {
                     title: 'Volo T',
                     status: auth.currency['flight_t'],
                   ),
-                if (auth.hasTobCrew)
+                if (auth.hasTobCrew) ...[
+                  _CurrencyCard(
+                    title: 'Base TOB',
+                    status: auth.currency['tob_base'],
+                  ),
                   ...auth.tobCapabilities.map(
                     (cap) => _CurrencyCard(
                       title: 'TOB · ${cap.capabilityName}',
                       status: auth.currency['tob_${cap.tobCapabilityId}'],
                     ),
                   ),
+                ],
               ],
             ),
             const SizedBox(height: 24),

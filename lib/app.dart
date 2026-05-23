@@ -144,9 +144,13 @@ class _AvesAppState extends ConsumerState<AvesApp> {
       }
 
       if ((location == '/admin/priv' ||
-              location == '/admin/settings' ||
               location == '/admin/pta') &&
           !auth.isAdminPriv) {
+        return defaultHome();
+      }
+
+      if ((location == '/admin/settings') &&
+          !auth.isAdmin) {
         return defaultHome();
       }
 

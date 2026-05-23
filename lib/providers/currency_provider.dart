@@ -42,4 +42,38 @@ class CurrencyProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> updateCriteriaFascia(
+    CurrencyCriteria c,
+    int periodDaysA,
+    int? periodDaysBC,
+    String updatedBy,
+  ) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _service.updateCriteria(
+        CurrencyCriteria(
+          id: c.id,
+          criteriaType: c.criteriaType,
+          tobCapabilityId: c.tobCapabilityId,
+          periodDays: periodDaysA,
+          periodDaysA: periodDaysA,
+          periodDaysBC: periodDaysBC,
+          minHours: c.minHours,
+          description: c.description,
+          tobCapabilityName: c.tobCapabilityName,
+        ),
+        updatedBy,
+      );
+      _criteria = await _service.getAllCriteria();
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

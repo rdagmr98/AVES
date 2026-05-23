@@ -10,6 +10,7 @@ import '../../services/activity_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/report_service.dart';
 import '../../services/user_service.dart';
+import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 
 class AdminCrewDashboard extends ConsumerStatefulWidget {
@@ -60,9 +61,18 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         continue;
       }
       final tobCapabilities = await _userService.getUserTobCapabilities(user.id);
+      final fascia = assignments
+          .where((a) => a.crewType == 'TOB')
+          .map((a) => a.fascia)
+          .firstWhere((f) => f != null, orElse: () => null);
+
       CurrencyStatus? flightStatus;
+      CurrencyStatus? tobBaseStatus;
       if (assignments.any((item) => item.crewType == 'T')) {
         flightStatus = await _currencyService.getFlightCurrency(user.id);
+      }
+      if (assignments.any((item) => item.crewType == 'TOB')) {
+        tobBaseStatus = await _currencyService.getTobBaseCurrency(user.id, fascia);
       }
       final tobStatuses = <int, CurrencyStatus>{};
       for (final capability in tobCapabilities) {
@@ -71,6 +81,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
               user.id,
               capability.tobCapabilityId,
               capability.capabilityName,
+              fascia: fascia,
             );
       }
       rows.add(
@@ -79,6 +90,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           assignments: assignments,
           tobCapabilities: tobCapabilities,
           flightStatus: flightStatus,
+          tobBaseStatus: tobBaseStatus,
           tobStatuses: tobStatuses,
         ),
       );
@@ -134,6 +146,10 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const Padding(
+          padding: EdgeInsets.all(6),
+          child: AvesLogoWidget(size: 32),
+        ),
         title: const Text('Dashboard Admin Volo'),
         actions: [
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
@@ -193,6 +209,11 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                             onPressed: () => context.go('/admin/users'),
                             icon: const Icon(Icons.manage_accounts_outlined),
                             label: const Text('Gestione Equipaggi'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => context.go('/admin/settings'),
+                            icon: const Icon(Icons.tune_outlined),
+                            label: const Text('Impostazioni Currency TOB'),
                           ),
                           OutlinedButton.icon(
                             onPressed: _reportService.downloadCrewReport,
@@ -388,6 +409,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                                 children: [
                                   if (row.flightStatus != null)
                                     CurrencyBadgeWidget(status: row.flightStatus!),
+                                  if (row.tobBaseStatus != null)
+                                    CurrencyBadgeWidget(status: row.tobBaseStatus!),
                                   ...row.tobCapabilities.map(
                                     (item) => CurrencyBadgeWidget(
                                       status: row.tobStatuses[item.tobCapabilityId] ??
@@ -417,6 +440,7 @@ class _CrewUserRow {
     required this.assignments,
     required this.tobCapabilities,
     required this.flightStatus,
+    this.tobBaseStatus,
     required this.tobStatuses,
   });
 
@@ -424,6 +448,7 @@ class _CrewUserRow {
   final List<UserCrewAssignment> assignments;
   final List<UserTobCapability> tobCapabilities;
   final CurrencyStatus? flightStatus;
+  final CurrencyStatus? tobBaseStatus;
   final Map<int, CurrencyStatus> tobStatuses;
 
   bool get hasTCrew => assignments.any((item) => item.crewType == 'T');
@@ -435,6 +460,7 @@ class _CrewUserRow {
       statuses.add(flightStatus!);
     }
     if (crewTypeFilter == 'all' || crewTypeFilter == 'TOB') {
+      if (tobBaseStatus != null) statuses.add(tobBaseStatus!);
       for (final entry in tobStatuses.entries) {
         if (capabilityId == null || capabilityId == entry.key) {
           statuses.add(entry.value);

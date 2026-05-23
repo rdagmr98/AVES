@@ -93,6 +93,8 @@ class CurrencyService {
       'criteria_type': c.criteriaType,
       'tob_capability_id': c.tobCapabilityId,
       'period_days': c.periodDays,
+      'period_days_a': c.periodDaysA,
+      'period_days_bc': c.periodDaysBC,
       'min_hours': c.minHours,
       'description': c.description,
       'updated_at': DateTime.now().toIso8601String(),
@@ -101,9 +103,11 @@ class CurrencyService {
     await _db.saveCriteria(criteria);
   }
 
-  Future<void> updateCriteriaById(
+  Future<CurrencyCriteria?> updateCriteriaById(
     int id,
     int periodDays,
+    int? periodDaysA,
+    int? periodDaysBC,
     double? minHours,
     String updatedBy,
   ) async {
@@ -112,18 +116,19 @@ class CurrencyService {
       (item) => item.id == id,
       orElse: () => throw Exception('Criterio non trovato'),
     );
-    await updateCriteria(
-      CurrencyCriteria(
-        id: match.id,
-        criteriaType: match.criteriaType,
-        tobCapabilityId: match.tobCapabilityId,
-        periodDays: periodDays,
-        minHours: minHours,
-        description: match.description,
-        tobCapabilityName: match.tobCapabilityName,
-      ),
-      updatedBy,
+    final updated = CurrencyCriteria(
+      id: match.id,
+      criteriaType: match.criteriaType,
+      tobCapabilityId: match.tobCapabilityId,
+      periodDays: periodDays,
+      periodDaysA: periodDaysA,
+      periodDaysBC: periodDaysBC,
+      minHours: minHours,
+      description: match.description,
+      tobCapabilityName: match.tobCapabilityName,
     );
+    await updateCriteria(updated, updatedBy);
+    return updated;
   }
 
   CurrencyStatus _computeStatus({
@@ -217,13 +222,60 @@ class CurrencyService {
     );
   }
 
+  Future<CurrencyCriteria?> getTobBaseCriteria() async {
+    for (final item in _db.criteria) {
+      if (item['criteria_type'] == 'TOB_BASE') {
+        return CurrencyCriteria.fromJson(item);
+      }
+    }
+    return null;
+  }
+
+  Future<CurrencyStatus> getTobBaseCurrency(String userId, String? fascia) async {
+    final criteria = await getTobBaseCriteria();
+    final periodDays = criteria?.periodForFascia(fascia) ??
+        (fascia == 'A' ? 90 : 120);
+
+    // TOB base uses any validated flight activity
+    final validatedFlights = _db.flightActs
+        .where(
+          (item) => item['user_id'] == userId && item['is_validated'] == true,
+        )
+        .toList()
+      ..sort(
+        (a, b) => DateTime.parse(b['activity_date'] as String).compareTo(
+          DateTime.parse(a['activity_date'] as String),
+        ),
+      );
+    final lastDate = validatedFlights.isEmpty
+        ? null
+        : DateTime.parse(validatedFlights.first['activity_date'] as String);
+
+    return _computeStatus(
+      lastDate: lastDate,
+      periodDays: periodDays,
+      label: 'Currency Base TOB (fascia ${fascia ?? '-'})',
+    );
+  }
+
   Future<CurrencyStatus> getTobCapabilityCurrencyStatus(
     String userId,
     int capabilityId,
-    String capabilityName,
-  ) async {
+    String capabilityName, {
+    String? fascia,
+  }) async {
     final criteria = await getTobCapabilityCriteria(capabilityId);
-    final periodDays = criteria?.periodDays ?? 90;
+
+    // If capability is N/A for this fascia, return noData
+    if (fascia != null && (criteria?.isNAForFascia(fascia) ?? false)) {
+      return CurrencyStatus(
+        status: CurrencyStatusEnum.noData,
+        label: '$capabilityName (N/A fascia $fascia)',
+      );
+    }
+
+    final periodDays =
+        criteria?.periodForFascia(fascia) ?? criteria?.periodDays ?? 90;
     final last = await _activityService.getLastValidatedTobActivity(
       userId,
       capabilityId,
@@ -253,12 +305,27 @@ class CurrencyService {
     }
 
     if (crewTypes.contains('TOB')) {
+      // Get the user's TOB fascia (use the first active TOB assignment's fascia)
+      final tobAssignment = _db.crew.firstWhere(
+        (item) =>
+            item['user_id'] == userId &&
+            item['crew_type'] == 'TOB' &&
+            item['active'] == true,
+        orElse: () => {},
+      );
+      final fascia = tobAssignment['tob_grade'] as String?;
+
+      // TOB base currency (any flight as crew member)
+      result['tob_base'] = await getTobBaseCurrency(userId, fascia);
+
+      // TOB capability-specific currencies
       for (final cap in tobCaps) {
         result['tob_${cap.tobCapabilityId}'] =
             await getTobCapabilityCurrencyStatus(
               userId,
               cap.tobCapabilityId,
               cap.capabilityName,
+              fascia: fascia,
             );
       }
     }
@@ -306,6 +373,9 @@ class CurrencyService {
     }
     if (key == 'flight_t') {
       return expired ? 'FLIGHT_EXPIRED' : 'FLIGHT_EXPIRING';
+    }
+    if (key == 'tob_base') {
+      return expired ? 'TOB_BASE_EXPIRED' : 'TOB_BASE_EXPIRING';
     }
     return expired ? 'TOB_EXPIRED' : 'TOB_EXPIRING';
   }

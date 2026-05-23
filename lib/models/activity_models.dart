@@ -71,9 +71,11 @@ class CurrencyStatus {
 
 class CurrencyCriteria {
   final int? id;
-  final String criteriaType; // 'MAINTENANCE', 'FLIGHT_T', 'TOB_CAPABILITY'
+  final String criteriaType; // 'MAINTENANCE', 'FLIGHT_T', 'TOB_BASE', 'TOB_CAPABILITY'
   final int? tobCapabilityId;
   final int periodDays;
+  final int? periodDaysA;   // period for fascia A (null = use periodDays)
+  final int? periodDaysBC;  // period for fascia B/C (null = not applicable for B/C)
   final double? minHours;
   final String? description;
   final String? tobCapabilityName;
@@ -83,6 +85,8 @@ class CurrencyCriteria {
     required this.criteriaType,
     this.tobCapabilityId,
     required this.periodDays,
+    this.periodDaysA,
+    this.periodDaysBC,
     this.minHours,
     this.description,
     this.tobCapabilityName,
@@ -93,11 +97,33 @@ class CurrencyCriteria {
     criteriaType: j['criteria_type'] as String,
     tobCapabilityId: j['tob_capability_id'] as int?,
     periodDays: j['period_days'] as int,
+    periodDaysA: j['period_days_a'] as int?,
+    periodDaysBC: j['period_days_bc'] as int?,
     minHours: (j['min_hours'] as num?)?.toDouble(),
     description: j['description'] as String?,
     tobCapabilityName:
         (j['tob_capabilities'] as Map<String, dynamic>?)?['name'] as String?,
   );
+
+  /// Returns the effective period for the given fascia.
+  /// Returns null if this capability is not applicable for the given fascia.
+  int? periodForFascia(String? fascia) {
+    if (fascia == 'A') {
+      return periodDaysA ?? periodDays;
+    }
+    if (fascia == 'B' || fascia == 'C') {
+      return periodDaysBC; // null = not applicable
+    }
+    return periodDays; // unknown fascia → fallback
+  }
+
+  bool isNAForFascia(String? fascia) {
+    if (fascia == 'B' || fascia == 'C') {
+      return periodDaysBC == null &&
+          (criteriaType == 'TOB_CAPABILITY' || criteriaType == 'TOB_BASE');
+    }
+    return false;
+  }
 }
 
 class MaintenanceActivity {

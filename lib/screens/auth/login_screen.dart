@@ -71,16 +71,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  width: 120,
+                  height: 120,
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.primary,
                     border: Border.all(color: AppColors.secondary, width: 2),
                   ),
-                  child: const Icon(
-                    Icons.flight,
-                    color: Colors.white,
-                    size: 56,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/aves_logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (ctx, err, _) => const Icon(
+                        Icons.flight,
+                        color: Colors.white,
+                        size: 56,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

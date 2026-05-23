@@ -12,6 +12,7 @@ import '../../services/currency_service.dart';
 import '../../services/pta_service.dart';
 import '../../services/report_service.dart';
 import '../../services/user_service.dart';
+import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 
 class AdminPrivilegesDashboard extends ConsumerStatefulWidget {
@@ -120,6 +121,10 @@ class _AdminPrivilegesDashboardState
 
     return Scaffold(
       appBar: AppBar(
+        leading: const Padding(
+          padding: EdgeInsets.all(6),
+          child: AvesLogoWidget(size: 32),
+        ),
         title: const Text('Dashboard Admin CSL'),
         actions: [
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
