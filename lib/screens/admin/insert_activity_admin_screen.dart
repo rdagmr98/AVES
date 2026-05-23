@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../models/activity_models.dart';
+import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/user_service.dart';
@@ -17,7 +18,7 @@ class InsertActivityAdminScreen extends ConsumerStatefulWidget {
       _InsertActivityAdminScreenState();
 }
 
-enum _AdminInsertTabType { maintenance, flight, tob }
+enum _AdminInsertTabType { maintenance, flight, tob, crewFlight }
 
 class _InsertActivityAdminScreenState
     extends ConsumerState<InsertActivityAdminScreen>
@@ -28,6 +29,8 @@ class _InsertActivityAdminScreenState
   final _flightDescCtrl = TextEditingController();
   final _tobDescCtrl = TextEditingController();
   final _flightHoursCtrl = TextEditingController();
+  final _crewFlightHoursCtrl = TextEditingController();
+  final _crewFlightDescCtrl = TextEditingController();
 
   late final TabController _tabController;
   late final List<_AdminInsertTabType> _tabs;
@@ -50,6 +53,10 @@ class _InsertActivityAdminScreenState
   int? _tobCapabilityId;
   DateTime _tobDate = DateTime.now();
 
+  int? _crewFlightHelicopterId;
+  DateTime _crewFlightDate = DateTime.now();
+  final List<_CrewEntry> _crewEntries = [];
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +64,11 @@ class _InsertActivityAdminScreenState
     if (auth.isAdminPriv) {
       _tabs = const [_AdminInsertTabType.maintenance];
     } else if (auth.isAdminCrew) {
-      _tabs = const [_AdminInsertTabType.flight, _AdminInsertTabType.tob];
+      _tabs = const [
+        _AdminInsertTabType.crewFlight,
+        _AdminInsertTabType.flight,
+        _AdminInsertTabType.tob,
+      ];
     } else {
       _tabs = const [
         _AdminInsertTabType.maintenance,
@@ -76,6 +87,8 @@ class _InsertActivityAdminScreenState
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
     _flightHoursCtrl.dispose();
+    _crewFlightHoursCtrl.dispose();
+    _crewFlightDescCtrl.dispose();
     super.dispose();
   }
 
@@ -153,9 +166,9 @@ class _InsertActivityAdminScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -190,9 +203,9 @@ class _InsertActivityAdminScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -225,9 +238,208 @@ class _InsertActivityAdminScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _addCrewEntry(List<TobCapability> tobCapabilities) async {
+    final helicopterId = _crewFlightHelicopterId;
+    if (helicopterId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona prima un elicottero.')),
+      );
+      return;
+    }
+    final availableUsers = _users
+        .where((u) => !_crewEntries.any((e) => e.user.id == u.id))
+        .toList(growable: false);
+    final roleItems = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(value: 'T', child: Text('T')),
+      const DropdownMenuItem(value: 'TOB', child: Text('TOB')),
+    ];
+    final capabilityItems = tobCapabilities
+        .map(
+          (item) =>
+              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
+        )
+        .toList(growable: false);
+
+    final result = await showDialog<_CrewEntry>(
+      context: context,
+      builder: (ctx) {
+        String? userId;
+        String role = 'T';
+        int? capId;
+        String? capName;
+        return StatefulBuilder(
+          builder: (context, setD) => AlertDialog(
+            scrollable: true,
+            title: const Text('Aggiungi membro equipaggio'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Membro'),
+                  menuMaxHeight: 300,
+                  items: availableUsers
+                      .map(
+                        (u) => DropdownMenuItem<String>(
+                          value: u.id,
+                          child: Text(
+                            '${u.fullName} · ${u.numeroLicenza ?? ''}',
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (v) => setD(() => userId = v),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: role,
+                  decoration: const InputDecoration(labelText: 'Ruolo'),
+                  items: roleItems,
+                  onChanged: (v) => setD(() {
+                    role = v ?? 'T';
+                    capId = null;
+                    capName = null;
+                  }),
+                ),
+                if (role == 'TOB') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(
+                      labelText: 'Capacità TOB',
+                    ),
+                    menuMaxHeight: 300,
+                    items: capabilityItems,
+                    onChanged: (v) {
+                      setD(() {
+                        capId = v;
+                        capName = tobCapabilities
+                            .firstWhere((c) => c.id == v)
+                            .name;
+                      });
+                    },
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (userId == null) {
+                    return;
+                  }
+                  if (role == 'TOB' && capId == null) {
+                    return;
+                  }
+                  final user = _users.firstWhere((u) => u.id == userId);
+                  Navigator.pop(
+                    ctx,
+                    _CrewEntry(
+                      user: user,
+                      role: role,
+                      tobCapabilityId: capId,
+                      tobCapabilityName: capName,
+                    ),
+                  );
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ],
+          ),
         );
+      },
+    );
+    if (result != null && mounted) {
+      setState(() => _crewEntries.add(result));
+    }
+  }
+
+  Future<void> _submitCrewFlight() async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    final helicopterId = _crewFlightHelicopterId;
+    final hours = double.tryParse(
+      _crewFlightHoursCtrl.text.replaceAll(',', '.'),
+    );
+    if (adminId == null || helicopterId == null || _crewEntries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Compila tutti i campi e aggiungi almeno un membro.'),
+        ),
+      );
+      return;
+    }
+    if (_crewEntries.any((e) => e.role == 'T') &&
+        (hours == null || hours <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Inserisci le ore di volo per i membri T.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final desc = _crewFlightDescCtrl.text.trim().isEmpty
+          ? null
+          : _crewFlightDescCtrl.text.trim();
+      for (final entry in _crewEntries) {
+        if (entry.role == 'T') {
+          await _activityService.addFlightActivityValidated(
+            FlightActivity(
+              userId: entry.user.id,
+              helicopterTypeId: helicopterId,
+              activityDate: _crewFlightDate,
+              flightHours: hours ?? 0,
+              description: desc,
+              submittedBy: adminId,
+            ),
+            adminId,
+          );
+        } else if (entry.role == 'TOB' && entry.tobCapabilityId != null) {
+          await _activityService.addTobActivityValidated(
+            TobActivity(
+              userId: entry.user.id,
+              helicopterTypeId: helicopterId,
+              tobCapabilityId: entry.tobCapabilityId!,
+              activityDate: _crewFlightDate,
+              description: desc,
+              submittedBy: adminId,
+            ),
+            adminId,
+          );
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _crewEntries.clear();
+          _crewFlightHelicopterId = null;
+          _crewFlightHoursCtrl.clear();
+          _crewFlightDescCtrl.clear();
+          _crewFlightDate = DateTime.now();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Volo inserito per tutto l\'equipaggio.'),
+          ),
+        );
+        context.go('/admin/validate');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
@@ -242,12 +454,16 @@ class _InsertActivityAdminScreenState
 
   @override
   Widget build(BuildContext context) {
-    final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(_privileges);
+    final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(
+      _privileges,
+    );
     final filteredPrivileges = _privileges
         .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
         .toList();
     final tAssignments = _crews.where((item) => item.crewType == 'T').toList();
-    final tobAssignments = _crews.where((item) => item.crewType == 'TOB').toList();
+    final tobAssignments = _crews
+        .where((item) => item.crewType == 'TOB')
+        .toList();
     final flightHelicopters = _uniqueCrewHelicopters(tAssignments);
     final tobHelicopters = _uniqueCrewHelicopters(tobAssignments);
     final filteredCapabilities = _tobCapabilities
@@ -266,6 +482,7 @@ class _InsertActivityAdminScreenState
                     _AdminInsertTabType.maintenance => 'Manutenzione',
                     _AdminInsertTabType.flight => 'Volo',
                     _AdminInsertTabType.tob => 'TOB',
+                    _AdminInsertTabType.crewFlight => 'Volo Equipaggio',
                   },
                 ),
               )
@@ -279,7 +496,9 @@ class _InsertActivityAdminScreenState
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: _selectedUser?.id,
-                  decoration: const InputDecoration(labelText: 'Seleziona utente'),
+                  decoration: const InputDecoration(
+                    labelText: 'Seleziona utente',
+                  ),
                   items: _users
                       .map(
                         (user) => DropdownMenuItem<String>(
@@ -303,23 +522,152 @@ class _InsertActivityAdminScreenState
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
-                  height: 640,
+                  height: 800,
                   child: TabBarView(
                     controller: _tabController,
                     children: _tabs.map((tab) {
                       switch (tab) {
-                        case _AdminInsertTabType.maintenance:
+                        case _AdminInsertTabType.crewFlight:
+                          final auth = ref.read(authProvider);
+                          final tobCaps = auth.tobCapabilityTypes;
+                          final allHelicopters = auth.helicopterTypes;
+                          final helicopterItems = allHelicopters
+                              .map(
+                                (h) => DropdownMenuItem<int>(
+                                  value: h.id,
+                                  child: Text(h.name),
+                                ),
+                              )
+                              .toList(growable: false);
                           return _AdminActivityTab(
-                            enabled: _selectedUser != null && maintenanceHelicopters.isNotEmpty,
+                            enabled: true,
                             child: _AdminActivityCard(
                               children: [
                                 DropdownButtonFormField<int>(
-                                  initialValue: maintenanceHelicopters.any(
-                                    (item) => item.id == _maintenanceHelicopterId,
+                                  initialValue: _crewFlightHelicopterId,
+                                  menuMaxHeight: 300,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Elicottero',
+                                  ),
+                                  items: helicopterItems,
+                                  onChanged: (v) => setState(() {
+                                    _crewFlightHelicopterId = v;
+                                    _crewEntries.clear();
+                                  }),
+                                ),
+                                const SizedBox(height: 16),
+                                _AdminDateButton(
+                                  label: 'Data volo',
+                                  date: _crewFlightDate,
+                                  onPressed: () => _pickDate(
+                                    (v) => _crewFlightDate = v,
+                                    _crewFlightDate,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _crewFlightHoursCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ore di volo (per membri T)',
+                                    hintText: 'es. 1.5',
+                                  ),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _crewFlightDescCtrl,
+                                  maxLines: 2,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Descrizione (opzionale)',
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Equipaggio (${_crewEntries.length})',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    const Spacer(),
+                                    TextButton.icon(
+                                      onPressed: () => _addCrewEntry(tobCaps),
+                                      icon: const Icon(
+                                        Icons.person_add_outlined,
+                                      ),
+                                      label: const Text('Aggiungi'),
+                                    ),
+                                  ],
+                                ),
+                                if (_crewEntries.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text(
+                                      'Nessun membro aggiunto.',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
                                   )
+                                else
+                                  ...List.generate(_crewEntries.length, (i) {
+                                    final entry = _crewEntries[i];
+                                    return ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: CircleAvatar(
+                                        child: Text(
+                                          entry.role,
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                      ),
+                                      title: Text(entry.user.fullName),
+                                      subtitle: Text(
+                                        entry.role == 'TOB'
+                                            ? 'TOB · ${entry.tobCapabilityName ?? ''}'
+                                            : 'T · Pilota/Equipaggio',
+                                      ),
+                                      trailing: IconButton(
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: () => setState(
+                                          () => _crewEntries.removeAt(i),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                const SizedBox(height: 24),
+                                ElevatedButton.icon(
+                                  onPressed: _saving ? null : _submitCrewFlight,
+                                  icon: const Icon(Icons.save_outlined),
+                                  label: const Text(
+                                    'Inserisci per tutto l\'equipaggio',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        case _AdminInsertTabType.maintenance:
+                          return _AdminActivityTab(
+                            enabled:
+                                _selectedUser != null &&
+                                maintenanceHelicopters.isNotEmpty,
+                            child: _AdminActivityCard(
+                              children: [
+                                DropdownButtonFormField<int>(
+                                  initialValue:
+                                      maintenanceHelicopters.any(
+                                        (item) =>
+                                            item.id == _maintenanceHelicopterId,
+                                      )
                                       ? _maintenanceHelicopterId
                                       : null,
-                                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Elicottero',
+                                  ),
                                   items: maintenanceHelicopters
                                       .map(
                                         (item) => DropdownMenuItem<int>(
@@ -328,17 +676,23 @@ class _InsertActivityAdminScreenState
                                         ),
                                       )
                                       .toList(),
-                                  onChanged: (value) =>
-                                      setState(() => _maintenanceHelicopterId = value),
+                                  onChanged: (value) => setState(
+                                    () => _maintenanceHelicopterId = value,
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<int>(
-                                  initialValue: filteredPrivileges.any(
-                                    (item) => item.privilegeTypeId == _maintenancePrivilegeId,
-                                  )
+                                  initialValue:
+                                      filteredPrivileges.any(
+                                        (item) =>
+                                            item.privilegeTypeId ==
+                                            _maintenancePrivilegeId,
+                                      )
                                       ? _maintenancePrivilegeId
                                       : null,
-                                  decoration: const InputDecoration(labelText: 'Privilegio'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Privilegio',
+                                  ),
                                   items: filteredPrivileges
                                       .map(
                                         (item) => DropdownMenuItem<int>(
@@ -347,8 +701,9 @@ class _InsertActivityAdminScreenState
                                         ),
                                       )
                                       .toList(),
-                                  onChanged: (value) =>
-                                      setState(() => _maintenancePrivilegeId = value),
+                                  onChanged: (value) => setState(
+                                    () => _maintenancePrivilegeId = value,
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                                 _AdminDateButton(
@@ -363,11 +718,15 @@ class _InsertActivityAdminScreenState
                                 TextField(
                                   controller: _maintenanceDescCtrl,
                                   maxLines: 3,
-                                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Descrizione',
+                                  ),
                                 ),
                                 const SizedBox(height: 24),
                                 ElevatedButton(
-                                  onPressed: _saving ? null : _submitMaintenance,
+                                  onPressed: _saving
+                                      ? null
+                                      : _submitMaintenance,
                                   child: const Text('Inserisci come validata'),
                                 ),
                               ],
@@ -375,16 +734,22 @@ class _InsertActivityAdminScreenState
                           );
                         case _AdminInsertTabType.flight:
                           return _AdminActivityTab(
-                            enabled: _selectedUser != null && flightHelicopters.isNotEmpty,
+                            enabled:
+                                _selectedUser != null &&
+                                flightHelicopters.isNotEmpty,
                             child: _AdminActivityCard(
                               children: [
                                 DropdownButtonFormField<int>(
-                                  initialValue: flightHelicopters.any(
-                                    (item) => item.id == _flightHelicopterId,
-                                  )
+                                  initialValue:
+                                      flightHelicopters.any(
+                                        (item) =>
+                                            item.id == _flightHelicopterId,
+                                      )
                                       ? _flightHelicopterId
                                       : null,
-                                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Elicottero',
+                                  ),
                                   items: flightHelicopters
                                       .map(
                                         (item) => DropdownMenuItem<int>(
@@ -393,8 +758,9 @@ class _InsertActivityAdminScreenState
                                         ),
                                       )
                                       .toList(),
-                                  onChanged: (value) =>
-                                      setState(() => _flightHelicopterId = value),
+                                  onChanged: (value) => setState(
+                                    () => _flightHelicopterId = value,
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
                                 _AdminDateButton(
@@ -408,15 +774,21 @@ class _InsertActivityAdminScreenState
                                 const SizedBox(height: 16),
                                 TextField(
                                   controller: _flightHoursCtrl,
-                                  decoration: const InputDecoration(labelText: 'Ore di volo'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ore di volo',
+                                  ),
                                   keyboardType:
-                                      const TextInputType.numberWithOptions(decimal: true),
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
                                 ),
                                 const SizedBox(height: 16),
                                 TextField(
                                   controller: _flightDescCtrl,
                                   maxLines: 3,
-                                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Descrizione',
+                                  ),
                                 ),
                                 const SizedBox(height: 24),
                                 ElevatedButton(
@@ -428,16 +800,21 @@ class _InsertActivityAdminScreenState
                           );
                         case _AdminInsertTabType.tob:
                           return _AdminActivityTab(
-                            enabled: _selectedUser != null && tobHelicopters.isNotEmpty,
+                            enabled:
+                                _selectedUser != null &&
+                                tobHelicopters.isNotEmpty,
                             child: _AdminActivityCard(
                               children: [
                                 DropdownButtonFormField<int>(
-                                  initialValue: tobHelicopters.any(
-                                    (item) => item.id == _tobHelicopterId,
-                                  )
+                                  initialValue:
+                                      tobHelicopters.any(
+                                        (item) => item.id == _tobHelicopterId,
+                                      )
                                       ? _tobHelicopterId
                                       : null,
-                                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Elicottero',
+                                  ),
                                   items: tobHelicopters
                                       .map(
                                         (item) => DropdownMenuItem<int>(
@@ -451,12 +828,17 @@ class _InsertActivityAdminScreenState
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<int>(
-                                  initialValue: filteredCapabilities.any(
-                                    (item) => item.tobCapabilityId == _tobCapabilityId,
-                                  )
+                                  initialValue:
+                                      filteredCapabilities.any(
+                                        (item) =>
+                                            item.tobCapabilityId ==
+                                            _tobCapabilityId,
+                                      )
                                       ? _tobCapabilityId
                                       : null,
-                                  decoration: const InputDecoration(labelText: 'Capacità TOB'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Capacità TOB',
+                                  ),
                                   items: filteredCapabilities
                                       .map(
                                         (item) => DropdownMenuItem<int>(
@@ -481,7 +863,9 @@ class _InsertActivityAdminScreenState
                                 TextField(
                                   controller: _tobDescCtrl,
                                   maxLines: 3,
-                                  decoration: const InputDecoration(labelText: 'Descrizione'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Descrizione',
+                                  ),
                                 ),
                                 const SizedBox(height: 24),
                                 ElevatedButton(
@@ -539,6 +923,20 @@ class _ActivityHelicopterOption {
   final int id;
   final String code;
   final String name;
+}
+
+class _CrewEntry {
+  const _CrewEntry({
+    required this.user,
+    required this.role,
+    this.tobCapabilityId,
+    this.tobCapabilityName,
+  });
+
+  final UserProfile user;
+  final String role;
+  final int? tobCapabilityId;
+  final String? tobCapabilityName;
 }
 
 class _AdminActivityTab extends StatelessWidget {
@@ -599,4 +997,3 @@ class _AdminDateButton extends StatelessWidget {
     );
   }
 }
-

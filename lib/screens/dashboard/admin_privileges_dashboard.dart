@@ -237,7 +237,7 @@ class _AdminPrivilegesDashboardState
                           physics: const NeverScrollableScrollPhysics(),
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 1.35,
+                          childAspectRatio: 1.0,
                           children: statCards,
                         );
                       }
@@ -548,7 +548,7 @@ class _StatCard extends StatelessWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -561,10 +561,15 @@ class _StatCard extends StatelessWidget {
               ),
               child: Icon(icon, color: accent),
             ),
-            const SizedBox(height: 16),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
             Text(
               value,
               style: Theme.of(

@@ -171,10 +171,16 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
 
     final quickActions = <_CrewActionConfig>[
       _CrewActionConfig(
+        label: 'Inserisci Volo',
+        icon: Icons.add_circle_outline,
+        onTap: () => context.go('/admin/insert'),
+        highlighted: true,
+      ),
+      _CrewActionConfig(
         label: 'Valida Attività Volo',
         icon: Icons.verified_outlined,
         onTap: () => context.go('/admin/validate'),
-        highlighted: true,
+        highlighted: false,
       ),
       _CrewActionConfig(
         label: 'Gestione Equipaggi',
@@ -248,7 +254,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                           physics: const NeverScrollableScrollPhysics(),
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 1.4,
+                          childAspectRatio: 1.1,
                           children: statCards,
                         );
                       }
@@ -587,7 +593,7 @@ class _CrewStatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -600,10 +606,15 @@ class _CrewStatCard extends StatelessWidget {
               ),
               child: Icon(icon, color: AppColors.secondary),
             ),
-            const SizedBox(height: 16),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
             Text(value, style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),
