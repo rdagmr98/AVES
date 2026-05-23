@@ -151,18 +151,18 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     final tCrewCount = _rows.where((row) => row.hasTCrew).length;
     final tobCrewCount = _rows.where((row) => row.hasTobCrew).length;
 
-    final statCards = <Widget>[
-      _CrewStatCard(
+    final statCardData = <_CrewStatCardData>[
+      _CrewStatCardData(
         title: 'Attività volo/TOB in attesa',
         value: '$_pendingActivities',
         icon: Icons.pending_actions,
       ),
-      _CrewStatCard(
+      _CrewStatCardData(
         title: 'Equipaggi T',
         value: '$tCrewCount',
         icon: Icons.flight,
       ),
-      _CrewStatCard(
+      _CrewStatCardData(
         title: 'Equipaggi TOB',
         value: '$tobCrewCount',
         icon: Icons.precision_manufacturing_outlined,
@@ -217,8 +217,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     return Scaffold(
       appBar: AppBar(
         leading: const Padding(
-          padding: EdgeInsets.all(6),
-          child: AvesLogoWidget(size: 32),
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: AvesLogoWidget(size: 40),
         ),
         title: const Text('Dashboard Admin Volo'),
         actions: [
@@ -248,22 +248,34 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                     builder: (context, constraints) {
                       final isMobile = constraints.maxWidth < 600;
                       if (isMobile) {
-                        return GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.1,
-                          children: statCards,
+                        return Column(
+                          children: [
+                            for (final data in statCardData)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _CrewStatCard(
+                                  title: data.title,
+                                  value: data.value,
+                                  icon: data.icon,
+                                  compact: true,
+                                ),
+                              ),
+                          ],
                         );
                       }
                       return Wrap(
                         spacing: 16,
                         runSpacing: 16,
                         children: [
-                          for (final card in statCards)
-                            SizedBox(width: 240, child: card),
+                          for (final data in statCardData)
+                            SizedBox(
+                              width: 240,
+                              child: _CrewStatCard(
+                                title: data.title,
+                                value: data.value,
+                                icon: data.icon,
+                              ),
+                            ),
                         ],
                       );
                     },
@@ -578,8 +590,8 @@ class _CrewUserRow {
   }
 }
 
-class _CrewStatCard extends StatelessWidget {
-  const _CrewStatCard({
+class _CrewStatCardData {
+  const _CrewStatCardData({
     required this.title,
     required this.value,
     required this.icon,
@@ -588,12 +600,64 @@ class _CrewStatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
+}
+
+class _CrewStatCard extends StatelessWidget {
+  const _CrewStatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    this.compact = false,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.secondary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: AppColors.secondary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  softWrap: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -606,15 +670,13 @@ class _CrewStatCard extends StatelessWidget {
               ),
               child: Icon(icon, color: AppColors.secondary),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              softWrap: true,
               style: Theme.of(context).textTheme.titleMedium,
+              softWrap: true,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(value, style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Displays the AVES logo with an optional circular background.
 class AvesLogoWidget extends StatelessWidget {
-  const AvesLogoWidget({super.key, this.size = 36, this.withBackground = false});
+  const AvesLogoWidget({
+    super.key,
+    this.size = 36,
+    this.withBackground = false,
+  });
 
   final double size;
   final bool withBackground;
@@ -21,15 +24,11 @@ class AvesLogoWidget extends StatelessWidget {
     if (!withBackground) return img;
 
     return Container(
-      width: size + 8,
-      height: size + 8,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: const Color(0xFF1B4332),
-        border: Border.all(color: const Color(0xFFD4AC0D), width: 1.5),
-      ),
-      child: ClipOval(child: img),
+      width: size + 16,
+      height: size + 16,
+      padding: const EdgeInsets.all(8),
+      decoration: const BoxDecoration(shape: BoxShape.circle),
+      child: img,
     );
   }
 }

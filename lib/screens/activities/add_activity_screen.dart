@@ -28,6 +28,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   int? _maintenanceHelicopterId;
   int? _maintenancePrivilegeId;
   DateTime _maintenanceDate = DateTime.now();
+  String? _maintenanceActivityType;
+  final _maintenanceMatricolaCtrl = TextEditingController();
+  final _maintenanceNumCarrCtrl = TextEditingController();
+  final _maintenanceOrdLavCtrl = TextEditingController();
 
   int? _flightHelicopterId;
   DateTime _flightDate = DateTime.now();
@@ -47,6 +51,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   @override
   void dispose() {
     _maintenanceDescCtrl.dispose();
+    _maintenanceMatricolaCtrl.dispose();
+    _maintenanceNumCarrCtrl.dispose();
+    _maintenanceOrdLavCtrl.dispose();
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
     _flightHoursCtrl.dispose();
@@ -85,6 +92,16 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
           description: _maintenanceDescCtrl.text.trim().isEmpty
               ? null
               : _maintenanceDescCtrl.text.trim(),
+          activityType: _maintenanceActivityType,
+          matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceMatricolaCtrl.text.trim(),
+          numeroCorrozzella: _maintenanceNumCarrCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceNumCarrCtrl.text.trim(),
+          ordineLavoro: _maintenanceOrdLavCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceOrdLavCtrl.text.trim(),
           submittedBy: user.id,
         ),
       );
@@ -155,8 +172,14 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   }
 
   void _finishSubmit() {
-    setState(() => _saving = false);
+    setState(() {
+      _saving = false;
+      _maintenanceActivityType = null;
+    });
     _maintenanceDescCtrl.clear();
+    _maintenanceMatricolaCtrl.clear();
+    _maintenanceNumCarrCtrl.clear();
+    _maintenanceOrdLavCtrl.clear();
     _flightDescCtrl.clear();
     _tobDescCtrl.clear();
     _flightHoursCtrl.clear();
@@ -311,6 +334,42 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   controller: _maintenanceDescCtrl,
                   maxLines: 3,
                   decoration: const InputDecoration(labelText: 'Descrizione'),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _maintenanceActivityType,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo attività (opzionale)',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Linea', child: Text('Linea')),
+                    DropdownMenuItem(value: 'Motori', child: Text('Motori')),
+                    DropdownMenuItem(value: 'Altri', child: Text('Altri')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _maintenanceActivityType = value),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _maintenanceMatricolaCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Matricola militare (opzionale)',
+                    hintText: 'es. MM1234',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _maintenanceNumCarrCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Num. carrozzella (opzionale)',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _maintenanceOrdLavCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Ordine di lavoro (opzionale)',
+                  ),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
+import '../../widgets/aves_logo_widget.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -88,41 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: logoSize,
-                      height: logoSize,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [AppColors.accent, AppColors.primary],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        border: Border.all(
-                          color: AppColors.secondary.withValues(alpha: 0.75),
-                          width: 1.8,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/aves_logo.png',
-                          fit: BoxFit.contain,
-                          errorBuilder: (ctx, err, _) => const Icon(
-                            Icons.flight,
-                            color: Colors.white,
-                            size: 52,
-                          ),
-                        ),
-                      ),
-                    ),
+                    AvesLogoWidget(size: logoSize),
                     const SizedBox(height: 24),
                     Text(
                       'AVES',

@@ -71,11 +71,13 @@ class CurrencyStatus {
 
 class CurrencyCriteria {
   final int? id;
-  final String criteriaType; // 'MAINTENANCE', 'FLIGHT_T', 'TOB_BASE', 'TOB_CAPABILITY'
+  final String
+  criteriaType; // 'MAINTENANCE', 'FLIGHT_T', 'TOB_BASE', 'TOB_CAPABILITY'
   final int? tobCapabilityId;
   final int periodDays;
-  final int? periodDaysA;   // period for fascia A (null = use periodDays)
-  final int? periodDaysBC;  // period for fascia B/C (null = not applicable for B/C)
+  final int? periodDaysA; // period for fascia A (null = use periodDays)
+  final int?
+  periodDaysBC; // period for fascia B/C (null = not applicable for B/C)
   final double? minHours;
   final String? description;
   final String? tobCapabilityName;
@@ -133,6 +135,10 @@ class MaintenanceActivity {
   final int privilegeTypeId;
   final DateTime activityDate;
   final String? description;
+  final String? activityType;
+  final String? matricolaMilitare;
+  final String? numeroCorrozzella;
+  final String? ordineLavoro;
   final bool isValidated;
   final String? validatedBy;
   final DateTime? validatedAt;
@@ -152,6 +158,10 @@ class MaintenanceActivity {
     required this.privilegeTypeId,
     required this.activityDate,
     this.description,
+    this.activityType,
+    this.matricolaMilitare,
+    this.numeroCorrozzella,
+    this.ordineLavoro,
     this.isValidated = false,
     this.validatedBy,
     this.validatedAt,
@@ -172,6 +182,10 @@ class MaintenanceActivity {
     privilegeTypeId: j['privilege_type_id'] as int,
     activityDate: DateTime.parse(j['activity_date'] as String),
     description: j['description'] as String?,
+    activityType: j['activity_type'] as String?,
+    matricolaMilitare: j['matricola_militare'] as String?,
+    numeroCorrozzella: j['numero_corrozzella'] as String?,
+    ordineLavoro: j['ordine_lavoro'] as String?,
     isValidated: j['is_validated'] as bool? ?? false,
     validatedBy: j['validated_by'] as String?,
     validatedAt: j['validated_at'] != null
@@ -204,6 +218,10 @@ class MaintenanceActivity {
     'privilege_type_id': privilegeTypeId,
     'activity_date': activityDate.toIso8601String().split('T').first,
     'description': description,
+    if (activityType != null) 'activity_type': activityType,
+    if (matricolaMilitare != null) 'matricola_militare': matricolaMilitare,
+    if (numeroCorrozzella != null) 'numero_corrozzella': numeroCorrozzella,
+    if (ordineLavoro != null) 'ordine_lavoro': ordineLavoro,
     'submitted_by': submittedBy,
   };
 

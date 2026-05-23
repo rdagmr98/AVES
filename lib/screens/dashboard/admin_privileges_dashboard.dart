@@ -122,30 +122,30 @@ class _AdminPrivilegesDashboardState
     final approvedUsersCount = _rows.length;
     final expiredCount = _rows.where((row) => row.status.isExpired).length;
 
-    final statCards = <Widget>[
-      _StatCard(
+    final statCardData = <_StatCardData>[
+      _StatCardData(
         title: 'Attività manutentive in attesa',
         value: '$_pendingActivities',
         icon: Icons.pending_actions,
       ),
-      _StatCard(
+      _StatCardData(
         title: 'Utenti manutenzione approvati',
         value: '$approvedUsersCount',
         icon: Icons.groups,
       ),
-      _StatCard(
+      _StatCardData(
         title: 'Currency scadute',
         value: '$expiredCount',
         icon: Icons.warning_amber_rounded,
       ),
-      _StatCard(
+      _StatCardData(
         title: 'PTA attive',
         value: '$_activePtaCount',
         icon: Icons.block,
         color: _activePtaCount > 0 ? const Color(0xFF8E44AD) : null,
       ),
       if (_pendingAcksCount > 0)
-        _StatCard(
+        _StatCardData(
           title: 'Prese visione da validare',
           value: '$_pendingAcksCount',
           icon: Icons.pending_actions,
@@ -155,10 +155,16 @@ class _AdminPrivilegesDashboardState
 
     final quickActions = <_DashboardActionConfig>[
       _DashboardActionConfig(
+        label: 'Inserisci Ord. Lavoro',
+        icon: Icons.add_task_outlined,
+        onTap: () => context.go('/admin/insert'),
+        highlighted: true,
+      ),
+      _DashboardActionConfig(
         label: 'Valida Attività',
         icon: Icons.verified_outlined,
         onTap: () => context.go('/admin/validate'),
-        highlighted: true,
+        highlighted: false,
       ),
       _DashboardActionConfig(
         label: 'Gestione Utenti',
@@ -200,8 +206,8 @@ class _AdminPrivilegesDashboardState
     return Scaffold(
       appBar: AppBar(
         leading: const Padding(
-          padding: EdgeInsets.all(6),
-          child: AvesLogoWidget(size: 32),
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: AvesLogoWidget(size: 40),
         ),
         title: const Text('Dashboard Admin CSL'),
         actions: [
@@ -231,22 +237,36 @@ class _AdminPrivilegesDashboardState
                     builder: (context, constraints) {
                       final isMobile = constraints.maxWidth < 600;
                       if (isMobile) {
-                        return GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.0,
-                          children: statCards,
+                        return Column(
+                          children: [
+                            for (final data in statCardData)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _StatCard(
+                                  title: data.title,
+                                  value: data.value,
+                                  icon: data.icon,
+                                  color: data.color,
+                                  compact: true,
+                                ),
+                              ),
+                          ],
                         );
                       }
                       return Wrap(
                         spacing: 16,
                         runSpacing: 16,
                         children: [
-                          for (final card in statCards)
-                            SizedBox(width: 240, child: card),
+                          for (final data in statCardData)
+                            SizedBox(
+                              width: 240,
+                              child: _StatCard(
+                                title: data.title,
+                                value: data.value,
+                                icon: data.icon,
+                                color: data.color,
+                              ),
+                            ),
                         ],
                       );
                     },
@@ -529,8 +549,8 @@ class _MaintenanceUserRow {
   final DateTime? lastActivityDate;
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
+class _StatCardData {
+  const _StatCardData({
     required this.title,
     required this.value,
     required this.icon,
@@ -541,14 +561,68 @@ class _StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color? color;
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    this.color,
+    this.compact = false,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color? color;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final accent = color ?? AppColors.secondary;
+    if (compact) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accent, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  softWrap: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -561,15 +635,13 @@ class _StatCard extends StatelessWidget {
               ),
               child: Icon(icon, color: accent),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              softWrap: true,
               style: Theme.of(context).textTheme.titleMedium,
+              softWrap: true,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               value,
               style: Theme.of(

@@ -18,7 +18,7 @@ class InsertActivityAdminScreen extends ConsumerStatefulWidget {
       _InsertActivityAdminScreenState();
 }
 
-enum _AdminInsertTabType { maintenance, flight, tob, crewFlight }
+enum _AdminInsertTabType { workOrder, maintenance, flight, tob, crewFlight }
 
 class _InsertActivityAdminScreenState
     extends ConsumerState<InsertActivityAdminScreen>
@@ -26,11 +26,18 @@ class _InsertActivityAdminScreenState
   final _activityService = ActivityService();
   final _userService = UserService();
   final _maintenanceDescCtrl = TextEditingController();
+  final _maintenanceMatricolaCtrl = TextEditingController();
+  final _maintenanceNumCarrCtrl = TextEditingController();
+  final _maintenanceOrdLavCtrl = TextEditingController();
   final _flightDescCtrl = TextEditingController();
   final _tobDescCtrl = TextEditingController();
   final _flightHoursCtrl = TextEditingController();
   final _crewFlightHoursCtrl = TextEditingController();
   final _crewFlightDescCtrl = TextEditingController();
+  final _workOrderMatricolaCtrl = TextEditingController();
+  final _workOrderNumCarrCtrl = TextEditingController();
+  final _workOrderOrdLavCtrl = TextEditingController();
+  final _workOrderDescCtrl = TextEditingController();
 
   late final TabController _tabController;
   late final List<_AdminInsertTabType> _tabs;
@@ -45,6 +52,7 @@ class _InsertActivityAdminScreenState
   int? _maintenanceHelicopterId;
   int? _maintenancePrivilegeId;
   DateTime _maintenanceDate = DateTime.now();
+  String? _maintenanceActivityType;
 
   int? _flightHelicopterId;
   DateTime _flightDate = DateTime.now();
@@ -52,6 +60,11 @@ class _InsertActivityAdminScreenState
   int? _tobHelicopterId;
   int? _tobCapabilityId;
   DateTime _tobDate = DateTime.now();
+
+  int? _workOrderHelicopterId;
+  DateTime _workOrderDate = DateTime.now();
+  String? _workOrderActivityType;
+  final List<_TechEntry> _techEntries = [];
 
   int? _crewFlightHelicopterId;
   DateTime _crewFlightDate = DateTime.now();
@@ -62,7 +75,10 @@ class _InsertActivityAdminScreenState
     super.initState();
     final auth = ref.read(authProvider);
     if (auth.isAdminPriv) {
-      _tabs = const [_AdminInsertTabType.maintenance];
+      _tabs = const [
+        _AdminInsertTabType.workOrder,
+        _AdminInsertTabType.maintenance,
+      ];
     } else if (auth.isAdminCrew) {
       _tabs = const [
         _AdminInsertTabType.crewFlight,
@@ -84,11 +100,18 @@ class _InsertActivityAdminScreenState
   void dispose() {
     _tabController.dispose();
     _maintenanceDescCtrl.dispose();
+    _maintenanceMatricolaCtrl.dispose();
+    _maintenanceNumCarrCtrl.dispose();
+    _maintenanceOrdLavCtrl.dispose();
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
     _flightHoursCtrl.dispose();
     _crewFlightHoursCtrl.dispose();
     _crewFlightDescCtrl.dispose();
+    _workOrderMatricolaCtrl.dispose();
+    _workOrderNumCarrCtrl.dispose();
+    _workOrderOrdLavCtrl.dispose();
+    _workOrderDescCtrl.dispose();
     super.dispose();
   }
 
@@ -158,6 +181,16 @@ class _InsertActivityAdminScreenState
           description: _maintenanceDescCtrl.text.trim().isEmpty
               ? null
               : _maintenanceDescCtrl.text.trim(),
+          activityType: _maintenanceActivityType,
+          matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceMatricolaCtrl.text.trim(),
+          numeroCorrozzella: _maintenanceNumCarrCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceNumCarrCtrl.text.trim(),
+          ordineLavoro: _maintenanceOrdLavCtrl.text.trim().isEmpty
+              ? null
+              : _maintenanceOrdLavCtrl.text.trim(),
           submittedBy: adminId,
         ),
         adminId,
@@ -363,6 +396,212 @@ class _InsertActivityAdminScreenState
     }
   }
 
+  Future<void> _addTechEntry() async {
+    final helicopterId = _workOrderHelicopterId;
+    if (helicopterId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona prima un elicottero.')),
+      );
+      return;
+    }
+    final availableUsers = _users
+        .where((u) => !_techEntries.any((e) => e.user.id == u.id))
+        .toList(growable: false);
+    if (availableUsers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nessun tecnico disponibile da aggiungere.'),
+        ),
+      );
+      return;
+    }
+
+    String? selectedUserId;
+    int? selectedPrivilegeId;
+    String? selectedPrivilegeName;
+    List<UserPrivilege> userPrivileges = [];
+
+    final result = await showDialog<_TechEntry>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setD) => AlertDialog(
+            scrollable: true,
+            title: const Text('Aggiungi tecnico'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  menuMaxHeight: 300,
+                  decoration: const InputDecoration(labelText: 'Tecnico'),
+                  items: availableUsers
+                      .map(
+                        (u) => DropdownMenuItem<String>(
+                          value: u.id,
+                          child: Text(
+                            '${u.fullName} · ${u.numeroLicenza ?? ''}',
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) async {
+                    setD(() {
+                      selectedUserId = value;
+                      selectedPrivilegeId = null;
+                      selectedPrivilegeName = null;
+                      userPrivileges = [];
+                    });
+                    if (value != null) {
+                      final privileges = await _userService.getUserPrivileges(
+                        value,
+                      );
+                      final filtered = privileges
+                          .where((p) => p.helicopterTypeId == helicopterId)
+                          .toList(growable: false);
+                      if (ctx.mounted) {
+                        setD(() => userPrivileges = filtered);
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                if (userPrivileges.isNotEmpty)
+                  DropdownButtonFormField<int>(
+                    menuMaxHeight: 300,
+                    decoration: const InputDecoration(
+                      labelText: 'Privilegio esercitato',
+                    ),
+                    items: userPrivileges
+                        .map(
+                          (p) => DropdownMenuItem<int>(
+                            value: p.privilegeTypeId,
+                            child: Text(p.privilegeName),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      final privilege = userPrivileges.firstWhere(
+                        (p) => p.privilegeTypeId == value,
+                      );
+                      setD(() {
+                        selectedPrivilegeId = value;
+                        selectedPrivilegeName = privilege.privilegeName;
+                      });
+                    },
+                  )
+                else if (selectedUserId != null)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Nessun privilegio su questo elicottero.',
+                      style: TextStyle(color: Colors.orange),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Annulla'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (selectedUserId == null || selectedPrivilegeId == null) {
+                    return;
+                  }
+                  final user = _users.firstWhere((u) => u.id == selectedUserId);
+                  Navigator.pop(
+                    ctx,
+                    _TechEntry(
+                      user: user,
+                      privilegeTypeId: selectedPrivilegeId!,
+                      privilegeName: selectedPrivilegeName ?? '',
+                    ),
+                  );
+                },
+                child: const Text('Aggiungi'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result != null && mounted) {
+      setState(() => _techEntries.add(result));
+    }
+  }
+
+  Future<void> _submitWorkOrder() async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    final helicopterId = _workOrderHelicopterId;
+    if (adminId == null || helicopterId == null || _techEntries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Compila elicottero e aggiungi almeno un tecnico.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final desc = _workOrderDescCtrl.text.trim().isEmpty
+          ? null
+          : _workOrderDescCtrl.text.trim();
+      final matricola = _workOrderMatricolaCtrl.text.trim().isEmpty
+          ? null
+          : _workOrderMatricolaCtrl.text.trim();
+      final numCarr = _workOrderNumCarrCtrl.text.trim().isEmpty
+          ? null
+          : _workOrderNumCarrCtrl.text.trim();
+      final ordLav = _workOrderOrdLavCtrl.text.trim().isEmpty
+          ? null
+          : _workOrderOrdLavCtrl.text.trim();
+      for (final entry in _techEntries) {
+        await _activityService.addMaintenanceActivityValidated(
+          MaintenanceActivity(
+            userId: entry.user.id,
+            helicopterTypeId: helicopterId,
+            privilegeTypeId: entry.privilegeTypeId,
+            activityDate: _workOrderDate,
+            description: desc,
+            submittedBy: adminId,
+            activityType: _workOrderActivityType,
+            matricolaMilitare: matricola,
+            numeroCorrozzella: numCarr,
+            ordineLavoro: ordLav,
+          ),
+          adminId,
+        );
+      }
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _techEntries.clear();
+          _workOrderHelicopterId = null;
+          _workOrderMatricolaCtrl.clear();
+          _workOrderNumCarrCtrl.clear();
+          _workOrderOrdLavCtrl.clear();
+          _workOrderDescCtrl.clear();
+          _workOrderActivityType = null;
+          _workOrderDate = DateTime.now();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ordine di lavoro inserito per tutti i tecnici.'),
+          ),
+        );
+        context.go('/admin/validate');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
   Future<void> _submitCrewFlight() async {
     final adminId = ref.read(authProvider).userProfile?.id;
     final helicopterId = _crewFlightHelicopterId;
@@ -479,6 +718,7 @@ class _InsertActivityAdminScreenState
               .map(
                 (tab) => Tab(
                   text: switch (tab) {
+                    _AdminInsertTabType.workOrder => 'Ordine di Lavoro',
                     _AdminInsertTabType.maintenance => 'Manutenzione',
                     _AdminInsertTabType.flight => 'Volo',
                     _AdminInsertTabType.tob => 'TOB',
@@ -494,39 +734,210 @@ class _InsertActivityAdminScreenState
           : ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedUser?.id,
-                  decoration: const InputDecoration(
-                    labelText: 'Seleziona utente',
-                  ),
-                  items: _users
-                      .map(
-                        (user) => DropdownMenuItem<String>(
-                          value: user.id,
-                          child: Text(
-                            '${user.fullName} · ${user.numeroLicenza ?? 'N/A'}',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    UserProfile? user;
-                    for (final item in _users) {
-                      if (item.id == value) {
-                        user = item;
-                        break;
-                      }
+                AnimatedBuilder(
+                  animation: _tabController,
+                  builder: (context, _) {
+                    final currentTab = _tabs[_tabController.index];
+                    final needsUserSelector =
+                        currentTab == _AdminInsertTabType.maintenance ||
+                        currentTab == _AdminInsertTabType.flight ||
+                        currentTab == _AdminInsertTabType.tob;
+                    if (!needsUserSelector) {
+                      return const SizedBox.shrink();
                     }
-                    _selectUser(user);
+                    return Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedUser?.id,
+                          decoration: const InputDecoration(
+                            labelText: 'Seleziona utente',
+                          ),
+                          items: _users
+                              .map(
+                                (user) => DropdownMenuItem<String>(
+                                  value: user.id,
+                                  child: Text(
+                                    '${user.fullName} · ${user.numeroLicenza ?? 'N/A'}',
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            UserProfile? user;
+                            for (final item in _users) {
+                              if (item.id == value) {
+                                user = item;
+                                break;
+                              }
+                            }
+                            _selectUser(user);
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    );
                   },
                 ),
-                const SizedBox(height: 24),
                 SizedBox(
                   height: 800,
                   child: TabBarView(
                     controller: _tabController,
                     children: _tabs.map((tab) {
                       switch (tab) {
+                        case _AdminInsertTabType.workOrder:
+                          final auth = ref.read(authProvider);
+                          final allHelicopters = auth.helicopterTypes;
+                          final helicopterItems = allHelicopters
+                              .map(
+                                (h) => DropdownMenuItem<int>(
+                                  value: h.id,
+                                  child: Text(h.name),
+                                ),
+                              )
+                              .toList(growable: false);
+                          return _AdminActivityTab(
+                            enabled: true,
+                            child: _AdminActivityCard(
+                              children: [
+                                DropdownButtonFormField<int>(
+                                  initialValue: _workOrderHelicopterId,
+                                  menuMaxHeight: 300,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Elicottero',
+                                  ),
+                                  items: helicopterItems,
+                                  onChanged: (value) => setState(() {
+                                    _workOrderHelicopterId = value;
+                                    _techEntries.clear();
+                                  }),
+                                ),
+                                const SizedBox(height: 16),
+                                _AdminDateButton(
+                                  label: 'Data attività',
+                                  date: _workOrderDate,
+                                  onPressed: () => _pickDate(
+                                    (value) => _workOrderDate = value,
+                                    _workOrderDate,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _workOrderActivityType,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Tipo attività (opzionale)',
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'Linea',
+                                      child: Text('Linea'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Motori',
+                                      child: Text('Motori'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Altri',
+                                      child: Text('Altri'),
+                                    ),
+                                  ],
+                                  onChanged: (value) => setState(
+                                    () => _workOrderActivityType = value,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _workOrderMatricolaCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Matricola militare (opzionale)',
+                                    hintText: 'es. MM1234',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _workOrderNumCarrCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Num. carrozzella (opzionale)',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _workOrderOrdLavCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ordine di lavoro (opzionale)',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _workOrderDescCtrl,
+                                  maxLines: 2,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Descrizione (opzionale)',
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Tecnici (${_techEntries.length})',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    const Spacer(),
+                                    TextButton.icon(
+                                      onPressed: _addTechEntry,
+                                      icon: const Icon(
+                                        Icons.person_add_outlined,
+                                      ),
+                                      label: const Text('Aggiungi tecnico'),
+                                    ),
+                                  ],
+                                ),
+                                if (_techEntries.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text(
+                                      'Nessun tecnico aggiunto.',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  )
+                                else
+                                  ...List.generate(_techEntries.length, (i) {
+                                    final entry = _techEntries[i];
+                                    return ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      leading: const CircleAvatar(
+                                        child: Icon(
+                                          Icons.engineering,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      title: Text(entry.user.fullName),
+                                      subtitle: Text(entry.privilegeName),
+                                      trailing: IconButton(
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: () => setState(
+                                          () => _techEntries.removeAt(i),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                const SizedBox(height: 24),
+                                ElevatedButton.icon(
+                                  onPressed: _saving ? null : _submitWorkOrder,
+                                  icon: const Icon(
+                                    Icons.assignment_turned_in_outlined,
+                                  ),
+                                  label: const Text(
+                                    'Inserisci per tutti i tecnici',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
                         case _AdminInsertTabType.crewFlight:
                           final auth = ref.read(authProvider);
                           final tobCaps = auth.tobCapabilityTypes;
@@ -720,6 +1131,52 @@ class _InsertActivityAdminScreenState
                                   maxLines: 3,
                                   decoration: const InputDecoration(
                                     labelText: 'Descrizione',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _maintenanceActivityType,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Tipo attività (opzionale)',
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'Linea',
+                                      child: Text('Linea'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Motori',
+                                      child: Text('Motori'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Altri',
+                                      child: Text('Altri'),
+                                    ),
+                                  ],
+                                  onChanged: (value) => setState(
+                                    () => _maintenanceActivityType = value,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _maintenanceMatricolaCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Matricola militare (opzionale)',
+                                    hintText: 'es. MM1234',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _maintenanceNumCarrCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Num. carrozzella (opzionale)',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _maintenanceOrdLavCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ordine di lavoro (opzionale)',
                                   ),
                                 ),
                                 const SizedBox(height: 24),
@@ -923,6 +1380,18 @@ class _ActivityHelicopterOption {
   final int id;
   final String code;
   final String name;
+}
+
+class _TechEntry {
+  const _TechEntry({
+    required this.user,
+    required this.privilegeTypeId,
+    required this.privilegeName,
+  });
+
+  final UserProfile user;
+  final int privilegeTypeId;
+  final String privilegeName;
 }
 
 class _CrewEntry {
