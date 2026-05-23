@@ -42,6 +42,7 @@ class GhDbService {
       _loadFile('notifications.json'),
       _loadFile('pta.json'),
       _loadFile('pta_acknowledgments.json'),
+      _loadFile('account_deletion_requests.json'),
     ]);
   }
 
@@ -214,6 +215,18 @@ class GhDbService {
 
   Future<void> savePtaAcknowledgments(List<Map<String, dynamic>> data) =>
       _writeFile('pta_acknowledgments.json', data, 'aggiornamento presa visione PTA');
+
+  List<Map<String, dynamic>> get accountDeletionRequests =>
+      List<Map<String, dynamic>>.from(
+        _getData('account_deletion_requests.json') as List? ?? [],
+      );
+
+  Future<void> saveAccountDeletionRequests(List<Map<String, dynamic>> data) =>
+      _writeFile(
+        'account_deletion_requests.json',
+        data,
+        'aggiornamento richieste eliminazione account',
+      );
 
   Future<void> reloadAll() async => init();
 }

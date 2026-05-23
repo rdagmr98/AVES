@@ -215,7 +215,7 @@ class _AdminPrivilegesDashboardState
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: AvesLogoWidget(size: 40),
         ),
-        title: const Text('Admin Manutenzione'),
+        title: const Text('Manutenzione'),
         actions: [
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
           IconButton(

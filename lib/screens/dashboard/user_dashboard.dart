@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
+import '../../data/helicopter_catalog.dart';
 import '../../models/activity_models.dart';
+import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/pta_service.dart';
 import '../../widgets/aves_logo_widget.dart';
@@ -27,6 +29,15 @@ class UserDashboard extends ConsumerWidget {
 
     final hasMaintenanceAccess =
         auth.licenses.isNotEmpty || auth.privileges.isNotEmpty;
+    final helicopterIds = <int>{
+      ...auth.licenses.map((item) => item.helicopterTypeId),
+      ...auth.privileges.map((item) => item.helicopterTypeId),
+      ...auth.crewAssignments.map((item) => item.helicopterTypeId),
+      ...auth.tobCapabilities.map((item) => item.helicopterTypeId),
+    };
+    final assignedHelicopters = auth.helicopterTypes
+        .where((item) => helicopterIds.contains(item.id))
+        .toList();
 
     Future<void> openNotifications() async {
       await showModalBottomSheet<void>(
@@ -281,6 +292,87 @@ class UserDashboard extends ConsumerWidget {
               },
             ),
             const SizedBox(height: 24),
+            if (assignedHelicopters.isNotEmpty) ...[
+              Text(
+                'Flotta personale',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isMobile = constraints.maxWidth < 720;
+                  if (isMobile) {
+                    return Column(
+                      children: [
+                        for (var i = 0; i < assignedHelicopters.length; i++)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: i == assignedHelicopters.length - 1 ? 0 : 12,
+                            ),
+                            child: _HelicopterOverviewCard(
+                              helicopter: assignedHelicopters[i],
+                              licenseCount: auth.licenses
+                                  .where(
+                                    (item) =>
+                                        item.helicopterTypeId ==
+                                        assignedHelicopters[i].id,
+                                  )
+                                  .length,
+                              privilegeCount: auth.privileges
+                                  .where(
+                                    (item) =>
+                                        item.helicopterTypeId ==
+                                        assignedHelicopters[i].id,
+                                  )
+                                  .length,
+                              crewCount: auth.crewAssignments
+                                  .where(
+                                    (item) =>
+                                        item.helicopterTypeId ==
+                                        assignedHelicopters[i].id,
+                                  )
+                                  .length,
+                              onTap: () => context.go(
+                                '/helicopters/${assignedHelicopters[i].id}',
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      for (final helicopter in assignedHelicopters)
+                        SizedBox(
+                          width: 320,
+                          child: _HelicopterOverviewCard(
+                            helicopter: helicopter,
+                            licenseCount: auth.licenses
+                                .where(
+                                  (item) => item.helicopterTypeId == helicopter.id,
+                                )
+                                .length,
+                            privilegeCount: auth.privileges
+                                .where(
+                                  (item) => item.helicopterTypeId == helicopter.id,
+                                )
+                                .length,
+                            crewCount: auth.crewAssignments
+                                .where(
+                                  (item) => item.helicopterTypeId == helicopter.id,
+                                )
+                                .length,
+                            onTap: () => context.go('/helicopters/${helicopter.id}'),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+            ],
             Text(
               'Privilegi assegnati',
               style: Theme.of(context).textTheme.titleLarge,
@@ -595,6 +687,87 @@ class _CurrencyMetaLine extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HelicopterOverviewCard extends StatelessWidget {
+  const _HelicopterOverviewCard({
+    required this.helicopter,
+    required this.licenseCount,
+    required this.privilegeCount,
+    required this.crewCount,
+    required this.onTap,
+  });
+
+  final HelicopterType helicopter;
+  final int licenseCount;
+  final int privilegeCount;
+  final int crewCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = catalogForHelicopter(helicopter);
+    final accent = catalogAccent(helicopter.code);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                accent.withValues(alpha: 0.12),
+                AppColors.surface,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (catalog.imageAsset != null)
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.asset(catalog.imageAsset!, fit: BoxFit.cover),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      helicopter.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      catalog.subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: accent,
+                          ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Chip(label: Text('$licenseCount licenze')),
+                        Chip(label: Text('$privilegeCount privilegi')),
+                        Chip(label: Text('$crewCount ruoli equipaggio')),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

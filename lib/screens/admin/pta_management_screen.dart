@@ -46,21 +46,38 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
 
   // ── Create PTA dialog ────────────────────────────────────────────────────
 
-  Future<void> _showCreateDialog() async {
+  Future<void> _showCreateDialog({PtaRecord? existing}) async {
     final auth = ref.read(authProvider);
     await showDialog<void>(
       context: context,
       builder: (ctx) => _CreatePtaDialog(
-        onCreated: (helicopterTypeId, number, title, issueDate) async {
+        initialPta: existing,
+        onSaved: (helicopterTypeId, number, title, issueDate) async {
           final adminUsername =
               auth.userProfile?.numeroLicenza ?? auth.userProfile?.id ?? '';
-          await _ptaService.createPta(
-            helicopterTypeId: helicopterTypeId,
-            number: number,
-            title: title,
-            issueDate: issueDate,
-            createdBy: adminUsername,
-          );
+          if (existing == null) {
+            await _ptaService.createPta(
+              helicopterTypeId: helicopterTypeId,
+              number: number,
+              title: title,
+              issueDate: issueDate,
+              createdBy: adminUsername,
+            );
+          } else {
+            await _ptaService.updatePta(
+              PtaRecord(
+                id: existing.id,
+                helicopterTypeId: helicopterTypeId,
+                helicopterCode: existing.helicopterCode,
+                number: number,
+                title: title,
+                issueDate: issueDate,
+                createdBy: existing.createdBy,
+                createdAt: existing.createdAt,
+                isClosed: existing.isClosed,
+              ),
+            );
+          }
           await _loadData();
           if (ctx.mounted) Navigator.of(ctx).pop();
         },
@@ -121,6 +138,34 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
     await _loadData();
   }
 
+  Future<void> _deletePta(PtaRecord pta) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elimina PTA'),
+        content: Text(
+          'Eliminare definitivamente la PTA ${pta.number}? Verranno rimosse anche le prese visione collegate.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.currencyExpired,
+            ),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await _ptaService.deletePta(pta.id!);
+    await _loadData();
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -153,7 +198,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateDialog,
+        onPressed: () => _showCreateDialog(),
         icon: const Icon(Icons.add),
         label: const Text('Nuova PTA'),
         backgroundColor: AppColors.currencyExpired,
@@ -213,15 +258,42 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
                 ),
               ],
             ),
-            trailing: pta.isClosed
-                ? Chip(
-                    label: const Text('CHIUSA'),
-                    backgroundColor: Colors.grey.shade700,
-                  )
-                : OutlinedButton(
-                    onPressed: () => _closePta(pta),
-                    child: const Text('Chiudi'),
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'edit':
+                    _showCreateDialog(existing: pta);
+                    break;
+                  case 'close':
+                    _closePta(pta);
+                    break;
+                  case 'delete':
+                    _deletePta(pta);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Text('Modifica PTA'),
+                ),
+                if (!pta.isClosed)
+                  const PopupMenuItem(
+                    value: 'close',
+                    child: Text('Chiudi PTA'),
                   ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Elimina PTA'),
+                ),
+              ],
+              child: pta.isClosed
+                  ? Chip(
+                      label: const Text('CHIUSA'),
+                      backgroundColor: Colors.grey.shade700,
+                    )
+                  : const Icon(Icons.more_horiz),
+            ),
             isThreeLine: true,
           ),
         );
@@ -329,14 +401,15 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
 // ── Create PTA dialog ─────────────────────────────────────────────────────────
 
 class _CreatePtaDialog extends StatefulWidget {
+  final PtaRecord? initialPta;
   final Future<void> Function(
     int helicopterTypeId,
     String number,
     String title,
     DateTime issueDate,
-  ) onCreated;
+  ) onSaved;
 
-  const _CreatePtaDialog({required this.onCreated});
+  const _CreatePtaDialog({required this.onSaved, this.initialPta});
 
   @override
   State<_CreatePtaDialog> createState() => _CreatePtaDialogState();
@@ -362,6 +435,10 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
     _helicopters = List<Map<String, dynamic>>.from(
       (ghDb['helicopterTypes'] as List<dynamic>? ?? const []),
     );
+    _numberCtrl.text = widget.initialPta?.number ?? '';
+    _titleCtrl.text = widget.initialPta?.title ?? '';
+    _issueDate = widget.initialPta?.issueDate ?? DateTime.now();
+    _helicopterTypeId = widget.initialPta?.helicopterTypeId;
   }
 
   @override
@@ -391,7 +468,7 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
     }
     setState(() => _saving = true);
     try {
-      await widget.onCreated(
+      await widget.onSaved(
         _helicopterTypeId!,
         _numberCtrl.text.trim().toUpperCase(),
         _titleCtrl.text.trim(),
@@ -411,7 +488,7 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Nuova PTA'),
+      title: Text(widget.initialPta == null ? 'Nuova PTA' : 'Modifica PTA'),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -485,7 +562,7 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Crea PTA'),
+              : Text(widget.initialPta == null ? 'Crea PTA' : 'Salva PTA'),
         ),
       ],
     );

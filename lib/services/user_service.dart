@@ -58,6 +58,13 @@ class UserService {
     return candidate;
   }
 
+  String _userFullNameFromMap(Map<String, dynamic> user) {
+    final nome = user['nome'] as String? ?? '';
+    final cognome = user['cognome'] as String? ?? '';
+    final fullName = '$nome $cognome'.trim();
+    return fullName.isNotEmpty ? fullName : (user['id'] as String? ?? 'Utente');
+  }
+
   Future<UserProfile?> getUserProfile(String userId) async {
     for (final user in _db.users) {
       if (user['id'] == userId) {
@@ -146,6 +153,156 @@ class UserService {
       type: 'PROFILE_APPROVED',
       message:
           'Il tuo profilo è stato approvato. Puoi ora accedere a tutte le funzionalità.',
+    );
+  }
+
+  Future<List<AccountDeletionRequest>> getDeletionRequests({
+    bool onlyPending = false,
+  }) async {
+    final rows = _db.accountDeletionRequests
+        .where((item) => !onlyPending || item['status'] == 'pending')
+        .map(AccountDeletionRequest.fromJson)
+        .toList()
+      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+    return rows;
+  }
+
+  Future<AccountDeletionRequest?> getPendingDeletionRequestForUser(
+    String userId,
+  ) async {
+    final rows = await getDeletionRequests(onlyPending: true);
+    for (final request in rows) {
+      if (request.userId == userId) {
+        return request;
+      }
+    }
+    return null;
+  }
+
+  Future<void> requestAccountDeletion(
+    String userId, {
+    String? reason,
+  }) async {
+    final user = _db.users.firstWhere(
+      (item) => item['id'] == userId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (user.isEmpty) {
+      throw Exception('Utente non trovato');
+    }
+    if ((user['role'] as String? ?? '') != 'user') {
+      throw Exception('Solo gli utenti standard possono richiedere l\'eliminazione');
+    }
+    if (_db.accountDeletionRequests.any(
+      (item) => item['user_id'] == userId && item['status'] == 'pending',
+    )) {
+      throw Exception('Hai già una richiesta di eliminazione in attesa');
+    }
+
+    final requests = _db.accountDeletionRequests;
+    requests.add(
+      AccountDeletionRequest(
+        id: _nextId(requests),
+        userId: userId,
+        userFullName: _userFullNameFromMap(user),
+        userLicenza: user['numero_licenza'] as String? ?? '',
+        reason: reason,
+        requestedAt: DateTime.now(),
+        status: 'pending',
+      ).toJson(),
+    );
+    await _db.saveAccountDeletionRequests(requests);
+    await _notificationService.notifyAllAdmins(
+      type: 'ACCOUNT_DELETION_PENDING',
+      message:
+          'Richiesta eliminazione account: ${_userFullNameFromMap(user)} (${user['numero_licenza'] as String? ?? userId}).',
+    );
+  }
+
+  Future<void> rejectDeletionRequest(int requestId, String adminId) async {
+    final requests = _db.accountDeletionRequests;
+    final index = requests.indexWhere((item) => item['id'] == requestId);
+    if (index == -1) {
+      throw Exception('Richiesta non trovata');
+    }
+    final request = AccountDeletionRequest.fromJson(requests[index]);
+    requests[index] = {
+      ...requests[index],
+      'status': 'rejected',
+      'handled_by': adminId,
+      'handled_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveAccountDeletionRequests(requests);
+    await _notificationService.createNotification(
+      userId: request.userId,
+      type: 'ACCOUNT_DELETION_REJECTED',
+      message: 'La richiesta di eliminazione account non è stata approvata.',
+    );
+  }
+
+  Future<void> approveDeletionRequest(int requestId, String adminId) async {
+    final requests = _db.accountDeletionRequests;
+    final index = requests.indexWhere((item) => item['id'] == requestId);
+    if (index == -1) {
+      throw Exception('Richiesta non trovata');
+    }
+    final request = AccountDeletionRequest.fromJson(requests[index]);
+    requests[index] = {
+      ...requests[index],
+      'status': 'approved',
+      'handled_by': adminId,
+      'handled_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveAccountDeletionRequests(requests);
+    await deleteUser(request.userId);
+  }
+
+  Future<void> deleteUser(String userId) async {
+    final user = _db.users.firstWhere(
+      (item) => item['id'] == userId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (user.isEmpty) {
+      return;
+    }
+    if ((user['role'] as String? ?? '').startsWith('admin')) {
+      throw Exception('Gli account admin non possono essere eliminati');
+    }
+
+    await _db.saveUsers(
+      _db.users.where((item) => item['id'] != userId).toList(),
+    );
+    await _db.saveLicenses(
+      _db.licenses.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.savePrivileges(
+      _db.privileges.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveCrew(
+      _db.crew.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveTobUserCaps(
+      _db.tobUserCaps.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveMaintenanceActs(
+      _db.maintenanceActs.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveFlightActs(
+      _db.flightActs.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveTobActs(
+      _db.tobActs.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveNotifications(
+      _db.notifications.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.savePtaAcknowledgments(
+      _db.ptaAcknowledgments.where((item) => item['user_id'] != userId).toList(),
+    );
+    await _db.saveAccountDeletionRequests(
+      _db.accountDeletionRequests
+          .where((item) => item['user_id'] != userId)
+          .toList(),
     );
   }
 

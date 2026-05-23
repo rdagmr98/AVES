@@ -711,7 +711,7 @@ class _InsertActivityAdminScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inserisci Attività'),
+        title: const Text('Attività'),
         bottom: TabBar(
           controller: _tabController,
           tabs: _tabs

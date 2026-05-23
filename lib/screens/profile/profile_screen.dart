@@ -20,6 +20,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late final TextEditingController _licenzaCtrl;
   int? _orgUnitId;
   bool _saving = false;
+  AccountDeletionRequest? _pendingDeletionRequest;
 
   @override
   void initState() {
@@ -29,6 +30,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _cognomeCtrl = TextEditingController(text: profile?.cognome ?? '');
     _licenzaCtrl = TextEditingController(text: profile?.numeroLicenza ?? '');
     _orgUnitId = profile?.orgUnitId;
+    _loadDeletionRequest();
   }
 
   @override
@@ -84,6 +86,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       successMessage: 'Profilo aggiornato con successo.',
     );
+  }
+
+  Future<void> _loadDeletionRequest() async {
+    final profile = ref.read(authProvider).userProfile;
+    if (profile == null) {
+      return;
+    }
+    final request = await _userService.getPendingDeletionRequestForUser(profile.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _pendingDeletionRequest = request);
+  }
+
+  Future<void> _showDeleteAccountRequestDialog() async {
+    final profile = ref.read(authProvider).userProfile;
+    if (profile == null) {
+      return;
+    }
+    final reasonCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Richiedi eliminazione account'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'La richiesta verrà inviata agli admin. L\'account sarà eliminato solo dopo approvazione.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opzionale)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Annulla'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await _runMutation(
+                () => _userService.requestAccountDeletion(
+                  profile.id,
+                  reason: reasonCtrl.text.trim(),
+                ),
+                successMessage:
+                    'Richiesta di eliminazione inviata agli admin.',
+              );
+              await _loadDeletionRequest();
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Invia richiesta'),
+          ),
+        ],
+      ),
+    );
+    reasonCtrl.dispose();
   }
 
   Future<void> _showChangePasswordDialog() async {
@@ -480,6 +549,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.all(24),
         children: [
           if (_saving || auth.isLoading) const LinearProgressIndicator(),
+          if (_pendingDeletionRequest != null) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.hourglass_top, color: Colors.amber),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Richiesta di eliminazione account in attesa di approvazione admin.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -725,6 +815,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         )
                         .toList(),
                   ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Gestione account',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Puoi richiedere l\'eliminazione del tuo account. La cancellazione sarà eseguita solo dopo approvazione di un admin.',
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: _pendingDeletionRequest != null
+                        ? null
+                        : _showDeleteAccountRequestDialog,
+                    icon: const Icon(Icons.delete_forever_outlined),
+                    label: Text(
+                      _pendingDeletionRequest != null
+                          ? 'Richiesta già inviata'
+                          : 'Richiedi eliminazione account',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

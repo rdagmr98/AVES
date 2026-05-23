@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../models/reference_models.dart';
@@ -21,6 +22,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   bool _loading = true;
   bool _saving = false;
   List<UserProfile> _users = [];
+  List<AccountDeletionRequest> _deletionRequests = [];
   UserProfile? _selectedUser;
   String _selectedRole = 'user';
   String _search = '';
@@ -49,11 +51,13 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   Future<void> _loadUsers() async {
     setState(() => _loading = true);
     final users = await _service.getAllUsers();
+    final deletionRequests = await _service.getDeletionRequests(onlyPending: true);
     if (!mounted) {
       return;
     }
     setState(() {
       _users = users;
+      _deletionRequests = deletionRequests;
       _loading = false;
     });
     if (users.isNotEmpty) {
@@ -63,6 +67,91 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
         orElse: () => users.first,
       );
       await _selectUser(matched);
+    }
+  }
+
+  Future<void> _rejectDeletionRequest(AccountDeletionRequest request) async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) {
+      return;
+    }
+    try {
+      await _service.rejectDeletionRequest(request.id!, adminId);
+      await _loadUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Richiesta eliminazione rifiutata.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _approveDeletionRequest(AccountDeletionRequest request) async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) {
+      return;
+    }
+    try {
+      await _service.approveDeletionRequest(request.id!, adminId);
+      await _loadUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utente eliminato.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  Future<void> _deleteSelectedUser() async {
+    final user = _selectedUser;
+    if (user == null) {
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elimina utente'),
+        content: Text(
+          'Eliminare definitivamente ${user.fullName}? Verranno rimossi anche attività, notifiche e assegnazioni.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) {
+      return;
+    }
+    try {
+      await _service.deleteUser(user.id);
+      await _loadUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utente eliminato.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
@@ -316,6 +405,80 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                     ),
                   ),
                 ),
+                if (_deletionRequests.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Richieste eliminazione account (${_deletionRequests.length})',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 12),
+                            ..._deletionRequests.map(
+                              (request) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .errorContainer
+                                        .withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${request.userFullName} · ${request.userLicenza}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Richiesta del ${DateFormat('dd/MM/yyyy HH:mm').format(request.requestedAt)}',
+                                      ),
+                                      if (request.reason != null &&
+                                          request.reason!.trim().isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text('Motivo: ${request.reason}'),
+                                      ],
+                                      const SizedBox(height: 12),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          ElevatedButton.icon(
+                                            onPressed: () =>
+                                                _approveDeletionRequest(request),
+                                            icon: const Icon(Icons.delete_forever),
+                                            label: const Text('Approva'),
+                                          ),
+                                          OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _rejectDeletionRequest(request),
+                                            icon: const Icon(Icons.close),
+                                            label: const Text('Rifiuta'),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_deletionRequests.isNotEmpty) const SizedBox(height: 12),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -358,6 +521,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                   setState(() => _tobGrades[helicopterId] = value ?? 'A'),
                               showMaintenanceSections: auth.isAdminPriv || !auth.isAdminCrew,
                               showCrewSections: auth.isAdminCrew || !auth.isAdminPriv,
+                              onDeleteUser: _deleteSelectedUser,
                             );
 
                       if (constraints.maxWidth < 1000) {
@@ -468,6 +632,7 @@ class _UserDetailPanel extends StatelessWidget {
     required this.onRoleChanged,
     required this.onApprove,
     required this.onSave,
+    required this.onDeleteUser,
     required this.helicopterTypes,
     required this.licenseTypes,
     required this.privilegeTypes,
@@ -493,6 +658,7 @@ class _UserDetailPanel extends StatelessWidget {
   final ValueChanged<String?> onRoleChanged;
   final Future<void> Function() onApprove;
   final Future<void> Function()? onSave;
+  final Future<void> Function() onDeleteUser;
   final List<HelicopterType> helicopterTypes;
   final List<LicenseType> licenseTypes;
   final List<PrivilegeType> privilegeTypes;
@@ -548,12 +714,26 @@ class _UserDetailPanel extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (!user.isApproved)
-                      ElevatedButton.icon(
-                        onPressed: onApprove,
-                        icon: const Icon(Icons.verified_user_outlined),
-                        label: const Text('Approva utente'),
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (!user.isApproved)
+                          ElevatedButton.icon(
+                            onPressed: onApprove,
+                            icon: const Icon(Icons.verified_user_outlined),
+                            label: const Text('Approva utente'),
+                          ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: onDeleteUser,
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.redAccent,
+                          ),
+                          label: const Text('Elimina utente'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -756,4 +936,3 @@ class _HelicopterCheckboxGroup extends StatelessWidget {
     );
   }
 }
-

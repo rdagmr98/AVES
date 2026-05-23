@@ -68,6 +68,20 @@ class PtaService {
     return record;
   }
 
+  Future<void> updatePta(PtaRecord record) async {
+    final list = _db.pta;
+    final index = list.indexWhere((item) => item['id'] == record.id);
+    if (index == -1) {
+      throw Exception('PTA non trovata');
+    }
+    list[index] = {
+      ...list[index],
+      ...record.toJson(),
+      'helicopter_code': _helicopterCode(record.helicopterTypeId),
+    };
+    await _db.savePta(list);
+  }
+
   Future<void> closePta(int ptaId) async {
     final list = _db.pta;
     final idx = list.indexWhere((e) => e['id'] == ptaId);
@@ -84,6 +98,21 @@ class PtaService {
               'PTA ${record.number} su ${record.helicopterCode} chiusa. La sospensione manutentiva non è più attiva.',
         ),
       ),
+    );
+  }
+
+  Future<void> deletePta(int ptaId) async {
+    final list = _db.pta;
+    final record = list.firstWhere(
+      (item) => item['id'] == ptaId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (record.isEmpty) {
+      return;
+    }
+    await _db.savePta(list.where((item) => item['id'] != ptaId).toList());
+    await _db.savePtaAcknowledgments(
+      _db.ptaAcknowledgments.where((item) => item['pta_id'] != ptaId).toList(),
     );
   }
 

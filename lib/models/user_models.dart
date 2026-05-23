@@ -324,3 +324,58 @@ class UserTobCapability {
       'expiry_date': expiryDate!.toIso8601String().split('T').first,
   };
 }
+
+class AccountDeletionRequest {
+  final int? id;
+  final String userId;
+  final String userFullName;
+  final String userLicenza;
+  final String? reason;
+  final DateTime requestedAt;
+  final String status;
+  final String? handledBy;
+  final DateTime? handledAt;
+
+  const AccountDeletionRequest({
+    this.id,
+    required this.userId,
+    required this.userFullName,
+    required this.userLicenza,
+    this.reason,
+    required this.requestedAt,
+    required this.status,
+    this.handledBy,
+    this.handledAt,
+  });
+
+  bool get isPending => status == 'pending';
+  bool get isApproved => status == 'approved';
+  bool get isRejected => status == 'rejected';
+
+  factory AccountDeletionRequest.fromJson(Map<String, dynamic> j) =>
+      AccountDeletionRequest(
+        id: j['id'] as int?,
+        userId: j['user_id'] as String,
+        userFullName: j['user_full_name'] as String? ?? '',
+        userLicenza: j['user_licenza'] as String? ?? '',
+        reason: j['reason'] as String?,
+        requestedAt: DateTime.parse(j['requested_at'] as String),
+        status: j['status'] as String? ?? 'pending',
+        handledBy: j['handled_by'] as String?,
+        handledAt: j['handled_at'] != null
+            ? DateTime.parse(j['handled_at'] as String)
+            : null,
+      );
+
+  Map<String, dynamic> toJson() => {
+    if (id != null) 'id': id,
+    'user_id': userId,
+    'user_full_name': userFullName,
+    'user_licenza': userLicenza,
+    if (reason != null && reason!.trim().isNotEmpty) 'reason': reason,
+    'requested_at': requestedAt.toIso8601String(),
+    'status': status,
+    if (handledBy != null) 'handled_by': handledBy,
+    if (handledAt != null) 'handled_at': handledAt!.toIso8601String(),
+  };
+}
