@@ -12,6 +12,15 @@ class CurrencyService {
 
   static const int warningDays = 30;
 
+  int _nextNotificationId(Iterable<Map<String, dynamic>> items) {
+    final ids = items.map((item) => item['id']).whereType<int>().toSet();
+    var candidate = DateTime.now().millisecondsSinceEpoch;
+    while (ids.contains(candidate)) {
+      candidate++;
+    }
+    return candidate;
+  }
+
   Map<String, dynamic>? _findCapability(int? id) {
     if (id == null) {
       return null;
@@ -25,15 +34,6 @@ class CurrencyService {
       }
     }
     return null;
-  }
-
-  int _nextNotificationId(Iterable<Map<String, dynamic>> items) {
-    final ids = items.map((item) => item['id']).whereType<int>().toSet();
-    var candidate = DateTime.now().millisecondsSinceEpoch;
-    while (ids.contains(candidate)) {
-      candidate++;
-    }
-    return candidate;
   }
 
   Future<List<CurrencyCriteria>> getAllCriteria() async {
@@ -162,6 +162,16 @@ class CurrencyService {
   }
 
   Future<CurrencyStatus> getMaintenanceCurrency(String userId) async {
+    final hasMaintenanceQualification =
+        _db.licenses.any((item) => item['user_id'] == userId) ||
+        _db.privileges.any((item) => item['user_id'] == userId);
+    if (!hasMaintenanceQualification) {
+      return const CurrencyStatus(
+        status: CurrencyStatusEnum.noData,
+        label: 'Nessun privilegio manutentivo assegnato',
+      );
+    }
+
     // Check if any active PTA suspends this user's currency
     final blockingPtas = _ptaService.getBlockingPtaForUser(userId);
     if (blockingPtas.isNotEmpty) {
@@ -362,7 +372,7 @@ class CurrencyService {
         );
       }
       if (message != null) {
-        WebNotificationService.showNotification('AVES CSL', message);
+        WebNotificationService.showNotification('AVES Tecnici', message);
       }
     }
   }

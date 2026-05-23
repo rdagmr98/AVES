@@ -5,6 +5,7 @@ class AppColors {
   static const Color primaryDark = Color(0xFF060D14);
   static const Color primaryLight = accent;
   static const Color accent = Color(0xFF1565C0);
+  static const Color accentGlow = Color(0xFF39C5FF);
   static const Color secondary = Color(0xFFFFB300);
 
   static const Color background = Color(0xFF0D1B2A);
@@ -90,6 +91,8 @@ class AppTheme {
         scrolledUnderElevation: 0,
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: AppColors.accentGlow,
         centerTitle: false,
         titleTextStyle: TextStyle(
           color: AppColors.textPrimary,
@@ -100,8 +103,8 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
-        elevation: 10,
-        shadowColor: Colors.black.withValues(alpha: 0.22),
+        elevation: 8,
+        shadowColor: AppColors.accentGlow.withValues(alpha: 0.10),
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
@@ -127,7 +130,8 @@ class AppTheme {
           foregroundColor: AppColors.textPrimary,
           disabledBackgroundColor: AppColors.surfaceVariant,
           disabledForegroundColor: AppColors.textHint,
-          elevation: 0,
+          shadowColor: AppColors.accentGlow.withValues(alpha: 0.35),
+          elevation: 3,
           minimumSize: const Size(double.infinity, 52),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
@@ -150,7 +154,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: const Color(0xFF183148),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
@@ -169,7 +173,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.accent, width: 1.4),
+          borderSide: const BorderSide(color: AppColors.accentGlow, width: 1.6),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -209,7 +213,7 @@ class AppTheme {
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.secondary,
         foregroundColor: AppColors.textDark,
-        elevation: 0,
+        elevation: 4,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.surfaceVariant,

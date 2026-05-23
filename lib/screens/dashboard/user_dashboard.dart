@@ -25,6 +25,9 @@ class UserDashboard extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final hasMaintenanceAccess =
+        auth.licenses.isNotEmpty || auth.privileges.isNotEmpty;
+
     Future<void> openNotifications() async {
       await showModalBottomSheet<void>(
         context: context,
@@ -38,10 +41,11 @@ class UserDashboard extends ConsumerWidget {
     }
 
     final currencyCards = <Widget>[
-      _CurrencyCard(
-        title: 'Manutenzione',
-        status: auth.currency['maintenance'],
-      ),
+      if (hasMaintenanceAccess)
+        _CurrencyCard(
+          title: 'Manutenzione',
+          status: auth.currency['maintenance'],
+        ),
       if (auth.hasTCrew)
         _CurrencyCard(title: 'Volo T', status: auth.currency['flight_t']),
       if (auth.hasTobCrew)
@@ -72,11 +76,12 @@ class UserDashboard extends ConsumerWidget {
         icon: Icons.person_outline,
         onPressed: () => context.go('/profile'),
       ),
-      _DashboardActionButtonData(
-        label: 'PTA',
-        icon: Icons.article_outlined,
-        onPressed: () => context.go('/pta'),
-      ),
+      if (hasMaintenanceAccess)
+        _DashboardActionButtonData(
+          label: 'PTA',
+          icon: Icons.article_outlined,
+          onPressed: () => context.go('/pta'),
+        ),
     ];
 
     return Scaffold(
@@ -85,7 +90,7 @@ class UserDashboard extends ConsumerWidget {
           padding: EdgeInsets.all(6),
           child: AvesLogoWidget(size: 32),
         ),
-        title: const Text('Dashboard Operatore'),
+        title: const Text('AVES Tecnici'),
         actions: [
           IconButton(
             tooltip: 'Notifiche',

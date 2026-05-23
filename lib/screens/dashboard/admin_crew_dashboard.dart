@@ -220,7 +220,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: AvesLogoWidget(size: 40),
         ),
-        title: const Text('Dashboard Admin Volo'),
+        title: const Text('Admin Equipaggi'),
         actions: [
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
           IconButton(

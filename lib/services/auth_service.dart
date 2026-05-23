@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
+import 'notification_service.dart';
 
 class AuthService {
   final _db = GhDbService();
+  final _notificationService = NotificationService();
 
   String _normalizeUsername(String value) => value.trim().toLowerCase();
 
@@ -98,6 +100,11 @@ class AuthService {
     };
 
     await _db.saveUsers([...users, newUser]);
+    await _notificationService.notifyAllAdmins(
+      type: 'PROFILE_PENDING',
+      message:
+          'Nuovo profilo da approvare: $nome $cognome (${licenseNumber.toUpperCase()}).',
+    );
     return UserProfile.fromJson({...newUser, 'org_units': null});
   }
 

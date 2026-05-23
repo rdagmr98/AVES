@@ -1,9 +1,10 @@
 import '../models/activity_models.dart';
 import 'gh_db_service.dart';
-import 'web_notification_service.dart';
+import 'notification_service.dart';
 
 class PtaService {
   final _db = GhDbService();
+  final _notifications = NotificationService();
 
   Map<String, dynamic> get referenceData => _db.referenceData;
 
@@ -71,8 +72,19 @@ class PtaService {
     final list = _db.pta;
     final idx = list.indexWhere((e) => e['id'] == ptaId);
     if (idx == -1) return;
+    final record = PtaRecord.fromJson(list[idx]);
     list[idx] = {...list[idx], 'is_closed': true};
     await _db.savePta(list);
+    await _notifications.createNotifications(
+      _affectedMaintenanceUserIds(record).map(
+        (userId) => (
+          userId: userId,
+          type: 'PTA_CLOSED',
+          message:
+              'PTA ${record.number} su ${record.helicopterCode} chiusa. La sospensione manutentiva non è più attiva.',
+        ),
+      ),
+    );
   }
 
   // ── Acknowledgments ───────────────────────────────────────────────────────
@@ -127,6 +139,24 @@ class PtaService {
       acknowledgedAt: DateTime.now(),
     );
     await _db.savePtaAcknowledgments([...existing, ack.toJson()]);
+    final pta = getAllPta().firstWhere(
+      (item) => item.id == ptaId,
+      orElse: () => PtaRecord(
+        id: ptaId,
+        helicopterTypeId: 0,
+        helicopterCode: '?',
+        number: 'PTA',
+        title: '',
+        issueDate: DateTime.now(),
+        createdBy: '',
+        createdAt: DateTime.now(),
+      ),
+    );
+    await _notifications.notifyMaintenanceAdmins(
+      type: 'PTA_ACK_PENDING',
+      message:
+          'Presa visione PTA da validare: $userFullName (${userLicenza.isNotEmpty ? userLicenza : userId}) · ${pta.number} · ${pta.helicopterCode}.',
+    );
   }
 
   /// Admin validates a user's acknowledgment.
@@ -137,6 +167,7 @@ class PtaService {
     final list = _db.ptaAcknowledgments;
     final idx = list.indexWhere((e) => e['id'] == ackId);
     if (idx == -1) throw Exception('Presa visione non trovata');
+    final acknowledgment = PtaAcknowledgment.fromJson(list[idx]);
     list[idx] = {
       ...list[idx],
       'is_validated': true,
@@ -144,6 +175,25 @@ class PtaService {
       'validated_at': DateTime.now().toIso8601String(),
     };
     await _db.savePtaAcknowledgments(list);
+    final pta = getAllPta().firstWhere(
+      (item) => item.id == acknowledgment.ptaId,
+      orElse: () => PtaRecord(
+        id: acknowledgment.ptaId,
+        helicopterTypeId: 0,
+        helicopterCode: '?',
+        number: 'PTA',
+        title: '',
+        issueDate: DateTime.now(),
+        createdBy: '',
+        createdAt: DateTime.now(),
+      ),
+    );
+    await _notifications.createNotification(
+      userId: acknowledgment.userId,
+      type: 'PTA_ACK_VALIDATED',
+      message:
+          'Presa visione PTA validata: ${pta.number} · ${pta.helicopterCode}. I privilegi manutentivi tornano utilizzabili.',
+    );
   }
 
   /// Returns active PTAs for which the user has license/privilege but no
@@ -175,7 +225,21 @@ class PtaService {
   // ── Notifications ─────────────────────────────────────────────────────────
 
   Future<void> _notifyAffectedUsers(PtaRecord pta) async {
-    // Find all approved users with licenses/privileges on this helicopter
+    final affectedUserIds = _affectedMaintenanceUserIds(pta);
+    if (affectedUserIds.isEmpty) return;
+    await _notifications.createNotifications(
+      affectedUserIds.map(
+        (uid) => (
+          userId: uid,
+          type: 'PTA_ISSUED',
+          message:
+              'Nuova PTA ${pta.number} su ${pta.helicopterCode}: "${pta.title}". Currency manutentiva sospesa fino a presa visione validata.',
+        ),
+      ),
+    );
+  }
+
+  Set<String> _affectedMaintenanceUserIds(PtaRecord pta) {
     final affectedUserIds = <String>{};
     for (final lic in _db.licenses) {
       if (lic['helicopter_type_id'] == pta.helicopterTypeId) {
@@ -187,36 +251,6 @@ class PtaService {
         affectedUserIds.add(priv['user_id'] as String);
       }
     }
-    if (affectedUserIds.isEmpty) return;
-
-    final notifications = _db.notifications;
-    final now = DateTime.now().toIso8601String();
-    final ids = notifications.map((e) => e['id']).whereType<int>().toSet();
-    var candidate = DateTime.now().millisecondsSinceEpoch % 1000000000 + 1;
-
-    for (final uid in affectedUserIds) {
-      while (ids.contains(candidate)) {
-        candidate++;
-      }
-      ids.add(candidate);
-      notifications.add({
-        'id': candidate,
-        'user_id': uid,
-        'type': 'PTA_ISSUED',
-        'message':
-            '🔴 Nuova PTA ${pta.number} su ${pta.helicopterCode}: "${pta.title}". Currency manutentiva SOSPESA fino a presa visione validata.',
-        'is_read': false,
-        'created_at': now,
-      });
-      candidate++;
-    }
-
-    await _db.saveNotifications(notifications);
-
-    // Browser notification for current session if applicable
-    WebNotificationService.showNotification(
-      'AVES CSL – Nuova PTA',
-      'PTA ${pta.number} su ${pta.helicopterCode}: currency sospesa.',
-    );
+    return affectedUserIds;
   }
 }

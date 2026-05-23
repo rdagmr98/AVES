@@ -1,8 +1,12 @@
+import 'package:intl/intl.dart';
+
 import '../models/activity_models.dart';
 import 'gh_db_service.dart';
+import 'notification_service.dart';
 
 class ActivityService {
   final _db = GhDbService();
+  final _notifications = NotificationService();
 
   Map<String, dynamic>? _findReference(String key, int? id) {
     if (id == null) {
@@ -30,6 +34,33 @@ class ActivityService {
 
   DateTime _parseDate(Map<String, dynamic> item, String key) =>
       DateTime.parse(item[key] as String);
+
+  String _formatDate(DateTime date) => DateFormat('dd/MM/yyyy').format(date);
+
+  String _userName(String userId) {
+    final user = _findUser(userId);
+    final nome = user?['nome'] as String? ?? '';
+    final cognome = user?['cognome'] as String? ?? '';
+    final fullName = '$nome $cognome'.trim();
+    return fullName.isNotEmpty ? fullName : userId;
+  }
+
+  String _helicopterLabel(int? helicopterTypeId) {
+    final ref = _findReference('helicopterTypes', helicopterTypeId);
+    return ref?['code'] as String? ??
+        ref?['name'] as String? ??
+        (helicopterTypeId?.toString() ?? 'elicottero');
+  }
+
+  String _privilegeLabel(int? privilegeTypeId) {
+    final ref = _findReference('privilegeTypes', privilegeTypeId);
+    return ref?['name'] as String? ?? 'privilegio';
+  }
+
+  String _tobCapabilityLabel(int? capabilityId) {
+    final ref = _findReference('tobCapabilities', capabilityId);
+    return ref?['name'] as String? ?? 'capacità TOB';
+  }
 
   int _nextId(Iterable<Map<String, dynamic>> existing) {
     final ids = existing
@@ -91,6 +122,11 @@ class ActivityService {
       'created_at': now,
     });
     await _db.saveMaintenanceActs(rows);
+    await _notifications.notifyMaintenanceAdmins(
+      type: 'MAINTENANCE_PENDING',
+      message:
+          'Richiesta da validare: ${_userName(act.userId)} · ${_helicopterLabel(act.helicopterTypeId)} · ${_privilegeLabel(act.privilegeTypeId)} · ${_formatDate(act.activityDate)}.',
+    );
   }
 
   Future<void> addMaintenanceActivityValidated(
@@ -108,6 +144,12 @@ class ActivityService {
       'created_at': now,
     });
     await _db.saveMaintenanceActs(rows);
+    await _notifications.createNotification(
+      userId: act.userId,
+      type: 'MAINTENANCE_INSERTED_BY_ADMIN',
+      message:
+          'Attività manutentiva inserita e validata dall\'admin: ${_helicopterLabel(act.helicopterTypeId)} · ${_privilegeLabel(act.privilegeTypeId)} · ${_formatDate(act.activityDate)}.',
+    );
   }
 
   Future<void> validateMaintenanceActivity(int id, String adminId) async {
@@ -116,6 +158,7 @@ class ActivityService {
     if (index == -1) {
       throw Exception('Attività manutentiva non trovata');
     }
+    final activity = _toMaintenance(rows[index]);
     rows[index] = {
       ...rows[index],
       'is_validated': true,
@@ -123,11 +166,30 @@ class ActivityService {
       'validated_at': DateTime.now().toIso8601String(),
     };
     await _db.saveMaintenanceActs(rows);
+    await _notifications.createNotification(
+      userId: activity.userId,
+      type: 'MAINTENANCE_VALIDATED',
+      message:
+          'Attività manutentiva approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_privilegeLabel(activity.privilegeTypeId)} · ${_formatDate(activity.activityDate)}.',
+    );
   }
 
   Future<void> rejectMaintenanceActivity(int id) async {
+    final current = _db.maintenanceActs.firstWhere(
+      (item) => item['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
     final rows = _db.maintenanceActs.where((item) => item['id'] != id).toList();
     await _db.saveMaintenanceActs(rows);
+    if (current.isNotEmpty) {
+      final activity = _toMaintenance(current);
+      await _notifications.createNotification(
+        userId: activity.userId,
+        type: 'MAINTENANCE_REJECTED',
+        message:
+            'Attività manutentiva non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_privilegeLabel(activity.privilegeTypeId)} · ${_formatDate(activity.activityDate)}.',
+      );
+    }
   }
 
   Future<List<MaintenanceActivity>> getUserMaintenanceActivities(
@@ -189,6 +251,11 @@ class ActivityService {
       'created_at': now,
     });
     await _db.saveFlightActs(rows);
+    await _notifications.notifyCrewAdmins(
+      type: 'FLIGHT_PENDING',
+      message:
+          'Richiesta volo da validare: ${_userName(act.userId)} · ${_helicopterLabel(act.helicopterTypeId)} · ${_formatDate(act.activityDate)}.',
+    );
   }
 
   Future<void> addFlightActivityValidated(
@@ -206,6 +273,12 @@ class ActivityService {
       'created_at': now,
     });
     await _db.saveFlightActs(rows);
+    await _notifications.createNotification(
+      userId: act.userId,
+      type: 'FLIGHT_INSERTED_BY_ADMIN',
+      message:
+          'Attività di volo inserita e validata dall\'admin: ${_helicopterLabel(act.helicopterTypeId)} · ${_formatDate(act.activityDate)}.',
+    );
   }
 
   Future<void> validateFlightActivity(int id, String adminId) async {
@@ -214,6 +287,7 @@ class ActivityService {
     if (index == -1) {
       throw Exception('Attività di volo non trovata');
     }
+    final activity = _toFlight(rows[index]);
     rows[index] = {
       ...rows[index],
       'is_validated': true,
@@ -221,11 +295,30 @@ class ActivityService {
       'validated_at': DateTime.now().toIso8601String(),
     };
     await _db.saveFlightActs(rows);
+    await _notifications.createNotification(
+      userId: activity.userId,
+      type: 'FLIGHT_VALIDATED',
+      message:
+          'Attività di volo approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_formatDate(activity.activityDate)}.',
+    );
   }
 
   Future<void> rejectFlightActivity(int id) async {
+    final current = _db.flightActs.firstWhere(
+      (item) => item['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
     final rows = _db.flightActs.where((item) => item['id'] != id).toList();
     await _db.saveFlightActs(rows);
+    if (current.isNotEmpty) {
+      final activity = _toFlight(current);
+      await _notifications.createNotification(
+        userId: activity.userId,
+        type: 'FLIGHT_REJECTED',
+        message:
+            'Attività di volo non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_formatDate(activity.activityDate)}.',
+      );
+    }
   }
 
   Future<List<FlightActivity>> getUserFlightActivities(String userId) async {
@@ -281,6 +374,11 @@ class ActivityService {
       'created_at': now,
     });
     await _db.saveTobActs(rows);
+    await _notifications.notifyCrewAdmins(
+      type: 'TOB_PENDING',
+      message:
+          'Richiesta TOB da validare: ${_userName(act.userId)} · ${_helicopterLabel(act.helicopterTypeId)} · ${_tobCapabilityLabel(act.tobCapabilityId)} · ${_formatDate(act.activityDate)}.',
+    );
   }
 
   Future<void> addTobActivityValidated(TobActivity act, String adminId) async {
@@ -295,6 +393,12 @@ class ActivityService {
       'created_at': now,
     });
     await _db.saveTobActs(rows);
+    await _notifications.createNotification(
+      userId: act.userId,
+      type: 'TOB_INSERTED_BY_ADMIN',
+      message:
+          'Attività TOB inserita e validata dall\'admin: ${_helicopterLabel(act.helicopterTypeId)} · ${_tobCapabilityLabel(act.tobCapabilityId)} · ${_formatDate(act.activityDate)}.',
+    );
   }
 
   Future<void> validateTobActivity(int id, String adminId) async {
@@ -303,6 +407,7 @@ class ActivityService {
     if (index == -1) {
       throw Exception('Attività TOB non trovata');
     }
+    final activity = _toTob(rows[index]);
     rows[index] = {
       ...rows[index],
       'is_validated': true,
@@ -310,11 +415,30 @@ class ActivityService {
       'validated_at': DateTime.now().toIso8601String(),
     };
     await _db.saveTobActs(rows);
+    await _notifications.createNotification(
+      userId: activity.userId,
+      type: 'TOB_VALIDATED',
+      message:
+          'Attività TOB approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_tobCapabilityLabel(activity.tobCapabilityId)} · ${_formatDate(activity.activityDate)}.',
+    );
   }
 
   Future<void> rejectTobActivity(int id) async {
+    final current = _db.tobActs.firstWhere(
+      (item) => item['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
     final rows = _db.tobActs.where((item) => item['id'] != id).toList();
     await _db.saveTobActs(rows);
+    if (current.isNotEmpty) {
+      final activity = _toTob(current);
+      await _notifications.createNotification(
+        userId: activity.userId,
+        type: 'TOB_REJECTED',
+        message:
+            'Attività TOB non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_tobCapabilityLabel(activity.tobCapabilityId)} · ${_formatDate(activity.activityDate)}.',
+      );
+    }
   }
 
   Future<List<TobActivity>> getUserTobActivities(String userId) async {

@@ -119,9 +119,13 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.read(authProvider);
+    final hasMaintenanceAccess =
+        auth.licenses.isNotEmpty || auth.privileges.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('PTA — Prescrizioni Tecniche'),
+        title: const Text('PTA Manutenzione'),
         actions: [
           IconButton(
             onPressed: _loadData,
@@ -131,6 +135,16 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : !hasMaintenanceAccess
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Nessun privilegio manutentivo assegnato. Le PTA si applicano solo alla currency manutentiva.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
           : RefreshIndicator(
               onRefresh: _loadData,
               child: _allUserPta.isEmpty && _blocking.isEmpty

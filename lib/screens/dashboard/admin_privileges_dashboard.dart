@@ -200,12 +200,13 @@ class _AdminPrivilegesDashboardState
       ...auth.licenseTypes.map(
         (item) => DropdownMenuItem<int?>(
           value: item.id,
-          child: Text(
-            item.name,
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text(item.name),
         ),
       ),
+    ];
+    final licenseTypeLabels = <String>[
+      'Tutte',
+      ...auth.licenseTypes.map((item) => item.name),
     ];
 
     return Scaffold(
@@ -214,7 +215,7 @@ class _AdminPrivilegesDashboardState
           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: AvesLogoWidget(size: 40),
         ),
-        title: const Text('Admin CSL'),
+        title: const Text('Admin Manutenzione'),
         actions: [
           IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
           IconButton(
@@ -376,6 +377,22 @@ class _AdminPrivilegesDashboardState
                                       isExpanded: true,
                                       initialValue: _licenseTypeId,
                                       menuMaxHeight: 300,
+                                      selectedItemBuilder: (context) =>
+                                          licenseTypeLabels
+                                              .map(
+                                                (label) => Align(
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  child: Text(
+                                                    label,
+                                                    maxLines: 3,
+                                                    overflow:
+                                                        TextOverflow.visible,
+                                                    softWrap: true,
+                                                  ),
+                                                ),
+                                              )
+                                              .toList(),
                                       decoration: const InputDecoration(
                                         labelText: 'Tipo licenza',
                                       ),

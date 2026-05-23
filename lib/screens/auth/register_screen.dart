@@ -190,6 +190,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
+                isExpanded: true,
                 initialValue: licenseTypeId,
                 menuMaxHeight: 300,
                 decoration: const InputDecoration(labelText: 'Tipo licenza'),

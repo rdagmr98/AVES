@@ -69,6 +69,7 @@ class AuthProvider extends ChangeNotifier {
       final session = await _authService.loadSession();
       final userId = session?['userId'];
       if (userId != null) {
+        await WebNotificationService.requestPermission();
         await _loadUserData(userId);
         if (_userProfile == null) {
           await _authService.signOut();
@@ -119,9 +120,9 @@ class AuthProvider extends ChangeNotifier {
       ]);
 
       _currency = await _currencyService.getFullCurrency(userId, _tobCapabilities);
-      _unreadNotifications = await _notifService.getUnreadCount(userId);
       await _currencyService.checkAndNotify(userId, _tobCapabilities);
       _unreadNotifications = await _notifService.getUnreadCount(userId);
+      await _notifService.syncUnreadSystemNotifications(userId);
     }
   }
 
@@ -139,8 +140,8 @@ class AuthProvider extends ChangeNotifier {
 
       await _loadReferenceData();
       await _authService.saveSession(_userProfile!.id, _userProfile!.role);
-      await _loadUserData(_userProfile!.id);
       await WebNotificationService.requestPermission();
+      await _loadUserData(_userProfile!.id);
       return true;
     } catch (e) {
       _error = _parseError(e);

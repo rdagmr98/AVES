@@ -185,6 +185,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: licenseTypeId,
                   decoration: const InputDecoration(labelText: 'Tipo licenza'),
                   items: licenseTypes
@@ -772,4 +773,3 @@ class _EditableSection extends StatelessWidget {
     );
   }
 }
-

@@ -1,9 +1,11 @@
 import '../models/reference_models.dart';
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
+import 'notification_service.dart';
 
 class UserService {
   final _db = GhDbService();
+  final _notificationService = NotificationService();
 
   String _normalizeUsername(String value) => value.trim().toLowerCase();
 
@@ -139,19 +141,12 @@ class UserService {
       'approved_by': adminId,
     };
     await _db.saveUsers(users);
-
-    final notifications = _db.notifications;
-    final now = DateTime.now().toIso8601String();
-    notifications.add({
-      'id': _nextId(notifications),
-      'user_id': userId,
-      'type': 'PROFILE_APPROVED',
-      'message':
+    await _notificationService.createNotification(
+      userId: userId,
+      type: 'PROFILE_APPROVED',
+      message:
           'Il tuo profilo è stato approvato. Puoi ora accedere a tutte le funzionalità.',
-      'is_read': false,
-      'created_at': now,
-    });
-    await _db.saveNotifications(notifications);
+    );
   }
 
   Future<List<UserProfile>> getAllUsers() async {
