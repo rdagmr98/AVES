@@ -56,14 +56,16 @@ class HelicopterDetailScreen extends ConsumerWidget {
             accent: accent,
           ),
           const SizedBox(height: 16),
-          if (catalog.normalModelAsset != null && catalog.hologramModelAsset != null)
+          if (catalog.normalModelAsset != null &&
+              catalog.hologramModelAsset != null)
             HelicopterViewerWidget(
               normalModelAsset: catalog.normalModelAsset!,
               hologramModelAsset: catalog.hologramModelAsset!,
               accent: accent,
               alt: 'Modello 3D ${helicopter.name}',
             ),
-          if (catalog.normalModelAsset != null && catalog.hologramModelAsset != null)
+          if (catalog.normalModelAsset != null &&
+              catalog.hologramModelAsset != null)
             const SizedBox(height: 16),
           _SpecsCard(specs: catalog.specs, accent: accent),
           const SizedBox(height: 16),
@@ -78,7 +80,9 @@ class HelicopterDetailScreen extends ConsumerWidget {
               ),
               _AssignmentGroup(
                 label: 'Privilegi',
-                values: userPrivileges.map((item) => item.privilegeName).toList(),
+                values: userPrivileges
+                    .map((item) => item.privilegeName)
+                    .toList(),
               ),
               _AssignmentGroup(
                 label: 'Equipaggi',
@@ -147,10 +151,7 @@ class _HeroCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              accent.withValues(alpha: 0.14),
-              AppColors.surface,
-            ],
+            colors: [accent.withValues(alpha: 0.14), AppColors.surface],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -161,7 +162,11 @@ class _HeroCard extends StatelessWidget {
             if (imageAsset != null)
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: Image.asset(imageAsset!, fit: BoxFit.cover),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  padding: const EdgeInsets.all(14),
+                  child: Image.asset(imageAsset!, fit: BoxFit.contain),
+                ),
               ),
             Padding(
               padding: const EdgeInsets.all(20),
@@ -175,9 +180,9 @@ class _HeroCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     subtitle,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: accent,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: accent),
                   ),
                   const SizedBox(height: 10),
                   Text(description),
@@ -205,7 +210,10 @@ class _SpecsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Caratteristiche', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Caratteristiche',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 12,
@@ -219,14 +227,17 @@ class _SpecsCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: AppColors.surfaceVariant.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: accent.withValues(alpha: 0.35)),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             spec.$1,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
                                   color: accent,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -268,7 +279,9 @@ class _AssignmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleGroups = groups.where((group) => group.values.isNotEmpty).toList();
+    final visibleGroups = groups
+        .where((group) => group.values.isNotEmpty)
+        .toList();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -288,9 +301,9 @@ class _AssignmentCard extends StatelessWidget {
                     children: [
                       Text(
                         group.label,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: accent,
-                            ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(color: accent),
                       ),
                       const SizedBox(height: 8),
                       Wrap(
