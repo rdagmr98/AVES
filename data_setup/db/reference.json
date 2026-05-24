@@ -47,6 +47,18 @@
       "code": "AW109",
       "name": "AW-109",
       "active": true
+    },
+    {
+      "id": 9,
+      "code": "AB212",
+      "name": "AB-212",
+      "active": true
+    },
+    {
+      "id": 10,
+      "code": "AB412",
+      "name": "AB-412",
+      "active": true
     }
   ],
   "licenseTypes": [

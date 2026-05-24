@@ -161,6 +161,40 @@ const _catalog = <String, HelicopterCatalogEntry>{
       ('Profilo AVES', 'Leggero ad alta mobilità'),
     ],
   ),
+  'AB212': HelicopterCatalogEntry(
+    code: 'AB212',
+    title: 'AB-212',
+    subtitle: 'Twin Huey – utility biturbina ad alta affidabilità',
+    description:
+        'Versione bimotore del classico UH-1, dotata di due turbine Pratt & Whitney PT6T-3 in una caratteristica navicella gemella. Impiegato per trasporto, SAR, supporto tattico e ricerca in ambito AVES.',
+    imageAsset: 'assets/images/helicopters/ab212.jpg',
+    normalModelAsset: 'assets/models/helicopters/ab212_normal.glb',
+    hologramModelAsset: 'assets/models/helicopters/ab212_hologram.glb',
+    specs: [
+      ('Categoria', 'Elicottero utility medio'),
+      ('Propulsione', 'Biturbina PT6T-3 accoppiata'),
+      ('Rotore principale', '2 pale semi-rigide'),
+      ('Impiego', 'Trasporto, SAR, utility, addestramento'),
+      ('Profilo AVES', 'Piattaforma biturbina consolidata'),
+    ],
+  ),
+  'AB412': HelicopterCatalogEntry(
+    code: 'AB412',
+    title: 'AB-412',
+    subtitle: 'Griffone – rotore quadripala composito, alta capacità',
+    description:
+        "Evoluzione dell'AB-212 con rotore quadripala semi-rigido in materiale composito. Impronta acustica ridotta, migliori prestazioni e carico utile aumentato. Impiegato per SAR, trasporto tattico e supporto logistico.",
+    imageAsset: 'assets/images/helicopters/ab412.jpg',
+    normalModelAsset: 'assets/models/helicopters/ab412_normal.glb',
+    hologramModelAsset: 'assets/models/helicopters/ab412_hologram.glb',
+    specs: [
+      ('Categoria', 'Elicottero utility medio-pesante'),
+      ('Propulsione', 'Biturbina PT6T-3B'),
+      ('Rotore principale', '4 pale composite semi-rigide'),
+      ('Impiego', 'SAR, trasporto tattico, logistica, utility'),
+      ('Profilo AVES', 'Evoluzione potenziata del Twin Huey'),
+    ],
+  ),
 };
 
 HelicopterCatalogEntry catalogForHelicopter(HelicopterType helicopter) {
@@ -201,6 +235,10 @@ Color catalogAccent(String code) {
       return const Color(0xFFE0B24A);
     case 'AW109':
       return const Color(0xFFA98BFF);
+    case 'AB212':
+      return const Color(0xFF64B5F6);
+    case 'AB412':
+      return const Color(0xFF81C784);
     default:
       return const Color(0xFFFFB300);
   }
