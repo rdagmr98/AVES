@@ -59,10 +59,7 @@ class UserService {
   };
 
   int _nextId(Iterable<Map<String, dynamic>> existing) {
-    final ids = existing
-        .map((item) => item['id'])
-        .whereType<int>()
-        .toSet();
+    final ids = existing.map((item) => item['id']).whereType<int>().toSet();
     var candidate = DateTime.now().microsecondsSinceEpoch;
     while (ids.contains(candidate)) {
       candidate++;
@@ -92,6 +89,8 @@ class UserService {
     required String nome,
     required String cognome,
     String? numeroLicenza,
+    String? email,
+    String? profilePhotoBase64,
     String role = 'user',
   }) async {
     final users = _db.users;
@@ -122,6 +121,8 @@ class UserService {
       'nome': nome,
       'cognome': cognome,
       'numero_licenza': normalizedLicense,
+      'email': email,
+      'profile_photo_base64': profilePhotoBase64,
       'org_unit_id': null,
       'role': role,
       'is_approved': role != 'user',
@@ -185,11 +186,12 @@ class UserService {
   Future<List<AccountDeletionRequest>> getDeletionRequests({
     bool onlyPending = false,
   }) async {
-    final rows = _db.accountDeletionRequests
-        .where((item) => !onlyPending || item['status'] == 'pending')
-        .map(AccountDeletionRequest.fromJson)
-        .toList()
-      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+    final rows =
+        _db.accountDeletionRequests
+            .where((item) => !onlyPending || item['status'] == 'pending')
+            .map(AccountDeletionRequest.fromJson)
+            .toList()
+          ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
     return rows;
   }
 
@@ -205,10 +207,7 @@ class UserService {
     return null;
   }
 
-  Future<void> requestAccountDeletion(
-    String userId, {
-    String? reason,
-  }) async {
+  Future<void> requestAccountDeletion(String userId, {String? reason}) async {
     final user = _db.users.firstWhere(
       (item) => item['id'] == userId,
       orElse: () => <String, dynamic>{},
@@ -217,7 +216,9 @@ class UserService {
       throw Exception('Utente non trovato');
     }
     if ((user['role'] as String? ?? '') != 'user') {
-      throw Exception('Solo gli utenti standard possono richiedere l\'eliminazione');
+      throw Exception(
+        'Solo gli utenti standard possono richiedere l\'eliminazione',
+      );
     }
     if (_db.accountDeletionRequests.any(
       (item) => item['user_id'] == userId && item['status'] == 'pending',
@@ -323,7 +324,9 @@ class UserService {
       _db.notifications.where((item) => item['user_id'] != userId).toList(),
     );
     await _db.savePtaAcknowledgments(
-      _db.ptaAcknowledgments.where((item) => item['user_id'] != userId).toList(),
+      _db.ptaAcknowledgments
+          .where((item) => item['user_id'] != userId)
+          .toList(),
     );
     await _db.saveAccountDeletionRequests(
       _db.accountDeletionRequests
@@ -353,10 +356,11 @@ class UserService {
   }
 
   Future<List<HelicopterType>> getHelicopterTypes() async {
-    final items = _referenceList('helicopterTypes')
-        .where((item) => item['active'] != false)
-        .toList()
-      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    final items =
+        _referenceList(
+            'helicopterTypes',
+          ).where((item) => item['active'] != false).toList()
+          ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
     return items.map(HelicopterType.fromJson).toList();
   }
 
@@ -419,7 +423,9 @@ class UserService {
   ) async {
     final now = DateTime.now().toIso8601String();
     final existing = _db.licenses;
-    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    final updated = existing
+        .where((item) => item['user_id'] != userId)
+        .toList();
     for (final item in licenses) {
       updated.add({
         'id': _nextId(updated),
@@ -467,7 +473,9 @@ class UserService {
   ) async {
     final now = DateTime.now().toIso8601String();
     final existing = _db.privileges;
-    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    final updated = existing
+        .where((item) => item['user_id'] != userId)
+        .toList();
     for (final item in privileges) {
       updated.add({
         'id': _nextId(updated),
@@ -510,7 +518,9 @@ class UserService {
   ) async {
     final now = DateTime.now().toIso8601String();
     final existing = _db.crew;
-    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    final updated = existing
+        .where((item) => item['user_id'] != userId)
+        .toList();
     for (final item in assignments) {
       updated.add({
         'id': _nextId(updated),
@@ -557,7 +567,9 @@ class UserService {
   ) async {
     final now = DateTime.now().toIso8601String();
     final existing = _db.tobUserCaps;
-    final updated = existing.where((item) => item['user_id'] != userId).toList();
+    final updated = existing
+        .where((item) => item['user_id'] != userId)
+        .toList();
     for (final item in caps) {
       updated.add({
         'id': _nextId(updated),

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
+import '../../widgets/admin_app_bar_leading.dart';
 import '../../services/pta_service.dart';
 
 class PtaManagementScreen extends ConsumerStatefulWidget {
@@ -104,9 +105,9 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     }
   }
@@ -172,6 +173,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const AdminAppBarLeading(),
         title: const Text('Gestione PTA'),
         bottom: TabBar(
           controller: _tabs,
@@ -184,7 +186,9 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
               text: 'Prese visione (${_pendingAcks.length})',
               icon: Icon(
                 Icons.pending_actions,
-                color: _pendingAcks.isNotEmpty ? AppColors.currencyExpired : null,
+                color: _pendingAcks.isNotEmpty
+                    ? AppColors.currencyExpired
+                    : null,
               ),
             ),
           ],
@@ -214,9 +218,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
 
   Widget _buildPtaList() {
     if (_allPta.isEmpty) {
-      return const Center(
-        child: Text('Nessuna PTA inserita'),
-      );
+      return const Center(child: Text('Nessuna PTA inserita'));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -229,8 +231,9 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor:
-                  pta.isClosed ? Colors.grey : AppColors.currencyExpired,
+              backgroundColor: pta.isClosed
+                  ? Colors.grey
+                  : AppColors.currencyExpired,
               child: Text(
                 pta.helicopterCode.length > 3
                     ? pta.helicopterCode.substring(0, 3)
@@ -273,10 +276,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Modifica PTA'),
-                ),
+                const PopupMenuItem(value: 'edit', child: Text('Modifica PTA')),
                 if (!pta.isClosed)
                   const PopupMenuItem(
                     value: 'close',
@@ -303,9 +303,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
 
   Widget _buildAckList() {
     if (_pendingAcks.isEmpty) {
-      return const Center(
-        child: Text('Nessuna presa visione da validare'),
-      );
+      return const Center(child: Text('Nessuna presa visione da validare'));
     }
     // Group by PTA
     final byPta = <int, List<PtaAcknowledgment>>{};
@@ -407,7 +405,8 @@ class _CreatePtaDialog extends StatefulWidget {
     String number,
     String title,
     DateTime issueDate,
-  ) onSaved;
+  )
+  onSaved;
 
   const _CreatePtaDialog({required this.onSaved, this.initialPta});
 
@@ -540,9 +539,7 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.calendar_today),
                 title: const Text('Data emissione'),
-                subtitle: Text(
-                  DateFormat('dd/MM/yyyy').format(_issueDate),
-                ),
+                subtitle: Text(DateFormat('dd/MM/yyyy').format(_issueDate)),
                 onTap: _pickDate,
               ),
             ],

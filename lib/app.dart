@@ -20,6 +20,7 @@ import 'screens/dashboard/admin_crew_dashboard.dart';
 import 'screens/dashboard/admin_privileges_dashboard.dart';
 import 'screens/dashboard/user_dashboard.dart';
 import 'screens/helicopters/helicopter_detail_screen.dart';
+import 'screens/helicopters/my_fleet_screen.dart';
 import 'screens/profile/profile_screen.dart';
 
 final authProvider = ChangeNotifierProvider<AuthProvider>(
@@ -94,9 +95,10 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         path: '/admin/pta',
         builder: (context, state) => const PtaManagementScreen(),
       ),
+      GoRoute(path: '/pta', builder: (context, state) => const PtaScreen()),
       GoRoute(
-        path: '/pta',
-        builder: (context, state) => const PtaScreen(),
+        path: '/helicopters/fleet',
+        builder: (context, state) => const MyFleetScreen(),
       ),
       GoRoute(
         path: '/helicopters/:id',
@@ -150,14 +152,12 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         return defaultHome();
       }
 
-      if ((location == '/admin/priv' ||
-              location == '/admin/pta') &&
+      if ((location == '/admin/priv' || location == '/admin/pta') &&
           !auth.isAdminPriv) {
         return defaultHome();
       }
 
-      if ((location == '/admin/settings') &&
-          !auth.isAdmin) {
+      if ((location == '/admin/settings') && !auth.isAdmin) {
         return defaultHome();
       }
 

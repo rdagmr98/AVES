@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -97,41 +98,56 @@ class GhDbService {
 
   String _getSha(String fileName) => _cache[fileName]?['sha'] as String? ?? '';
 
-  Future<void> _writeFile(String fileName, dynamic data, String commitMsg) async {
-    final body = <String, dynamic>{
-      'message': commitMsg,
-      'content': base64.encode(utf8.encode(jsonEncode(data))),
-    };
-    final sha = _getSha(fileName);
-    if (sha.isNotEmpty) {
-      body['sha'] = sha;
+  Future<void> _writeFile(
+    String fileName,
+    dynamic data,
+    String commitMsg,
+  ) async {
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      final body = <String, dynamic>{
+        'message': commitMsg,
+        'content': base64.encode(utf8.encode(jsonEncode(data))),
+      };
+      final sha = _getSha(fileName);
+      if (sha.isNotEmpty) {
+        body['sha'] = sha;
+      }
+
+      final response = await http.put(
+        Uri.parse('$_base/$fileName'),
+        headers: {
+          'Authorization': 'Bearer ${GhConfig.readPat}',
+          'Accept': 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final respJson = jsonDecode(response.body) as Map<String, dynamic>;
+        final newSha =
+            (respJson['content'] as Map<String, dynamic>)['sha'] as String;
+        _cache[fileName] = {'data': data, 'sha': newSha};
+        return;
+      }
+
+      if (response.statusCode == 409) {
+        await _loadFile(fileName);
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(const Duration(seconds: 1));
+          continue;
+        }
+        throw ConflictException(
+          'Conflitto di scrittura dopo $maxAttempts tentativi. Riprova tra qualche secondo.',
+        );
+      }
+
+      throw Exception(
+        'Errore GitHub API ${response.statusCode}: ${response.body}',
+      );
     }
-
-    final response = await http.put(
-      Uri.parse('$_base/$fileName'),
-      headers: {
-        'Authorization': 'Bearer ${GhConfig.readPat}',
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: jsonEncode(body),
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final respJson = jsonDecode(response.body) as Map<String, dynamic>;
-      final newSha =
-          (respJson['content'] as Map<String, dynamic>)['sha'] as String;
-      _cache[fileName] = {'data': data, 'sha': newSha};
-      return;
-    }
-
-    if (response.statusCode == 409) {
-      await _loadFile(fileName);
-      throw ConflictException('Conflitto di scrittura. Riprova.');
-    }
-
-    throw Exception('Errore GitHub API ${response.statusCode}: ${response.body}');
   }
 
   Map<String, dynamic> get referenceData =>
@@ -143,9 +159,8 @@ class GhDbService {
   Future<void> saveUsers(List<Map<String, dynamic>> data) =>
       _writeFile('users.json', data, 'aggiornamento profili utenti');
 
-  List<Map<String, dynamic>> get licenses => List<Map<String, dynamic>>.from(
-    _getData('licenses.json') as List? ?? [],
-  );
+  List<Map<String, dynamic>> get licenses =>
+      List<Map<String, dynamic>>.from(_getData('licenses.json') as List? ?? []);
 
   Future<void> saveLicenses(List<Map<String, dynamic>> data) =>
       _writeFile('licenses.json', data, 'aggiornamento licenze');
@@ -175,11 +190,12 @@ class GhDbService {
         _getData('maintenance.json') as List? ?? [],
       );
 
-  Future<void> saveMaintenanceActs(List<Map<String, dynamic>> data) => _writeFile(
-    'maintenance.json',
-    data,
-    'aggiornamento attività manutentive',
-  );
+  Future<void> saveMaintenanceActs(List<Map<String, dynamic>> data) =>
+      _writeFile(
+        'maintenance.json',
+        data,
+        'aggiornamento attività manutentive',
+      );
 
   List<Map<String, dynamic>> get flightActs =>
       List<Map<String, dynamic>>.from(_getData('flight.json') as List? ?? []);
@@ -205,9 +221,10 @@ class GhDbService {
   Future<void> saveCriteria(List<Map<String, dynamic>> data) =>
       _writeFile('criteria.json', data, 'aggiornamento criteri currency');
 
-  List<Map<String, dynamic>> get notifications => List<Map<String, dynamic>>.from(
-    _getData('notifications.json') as List? ?? [],
-  );
+  List<Map<String, dynamic>> get notifications =>
+      List<Map<String, dynamic>>.from(
+        _getData('notifications.json') as List? ?? [],
+      );
 
   Future<void> saveNotifications(List<Map<String, dynamic>> data) =>
       _writeFile('notifications.json', data, 'aggiornamento notifiche');
@@ -224,7 +241,11 @@ class GhDbService {
       );
 
   Future<void> savePtaAcknowledgments(List<Map<String, dynamic>> data) =>
-      _writeFile('pta_acknowledgments.json', data, 'aggiornamento presa visione PTA');
+      _writeFile(
+        'pta_acknowledgments.json',
+        data,
+        'aggiornamento presa visione PTA',
+      );
 
   List<Map<String, dynamic>> get accountDeletionRequests =>
       List<Map<String, dynamic>>.from(

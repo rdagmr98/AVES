@@ -6,6 +6,9 @@ import '../../app.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
+import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/privilege_selection_dialog.dart';
+import '../../widgets/user_avatar.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Main screen: filters + list only
@@ -48,7 +51,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   Future<void> _loadUsers() async {
     setState(() => _loading = true);
     final users = await _service.getAllUsers();
-    final deletionRequests = await _service.getDeletionRequests(onlyPending: true);
+    final deletionRequests = await _service.getDeletionRequests(
+      onlyPending: true,
+    );
     if (!mounted) return;
     setState(() {
       _users = users;
@@ -79,9 +84,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -94,14 +99,14 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       await _service.approveDeletionRequest(request.id!, adminId);
       await _loadUsers();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Utente eliminato.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Utente eliminato.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -159,7 +164,10 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     final isWide = MediaQuery.sizeOf(context).width >= 700;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Gestione Utenti')),
+      appBar: AppBar(
+        leading: const AdminAppBarLeading(),
+        title: const Text('Gestione Utenti'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -225,16 +233,21 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                   ),
                                   items: const [
                                     DropdownMenuItem(
-                                        value: 'all', child: Text('Tutti')),
+                                      value: 'all',
+                                      child: Text('Tutti'),
+                                    ),
                                     DropdownMenuItem(
-                                        value: 'approved',
-                                        child: Text('Approvati')),
+                                      value: 'approved',
+                                      child: Text('Approvati'),
+                                    ),
                                     DropdownMenuItem(
-                                        value: 'pending',
-                                        child: Text('In attesa')),
+                                      value: 'pending',
+                                      child: Text('In attesa'),
+                                    ),
                                   ],
                                   onChanged: (v) => setState(
-                                      () => _approvalFilter = v ?? 'all'),
+                                    () => _approvalFilter = v ?? 'all',
+                                  ),
                                 ),
                               ),
                             ],
@@ -262,8 +275,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                               child: _UserList(
                                 users: filteredUsers,
                                 selected: _selectedUser,
-                                onSelected: (u) =>
-                                    _openUserDetail(context, u),
+                                onSelected: (u) => _openUserDetail(context, u),
                               ),
                             ),
                             const VerticalDivider(width: 1),
@@ -285,8 +297,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                       helicopterTypes: auth.helicopterTypes,
                                       licenseTypes: auth.licenseTypes,
                                       privilegeTypes: auth.privilegeTypes,
-                                      tobCapabilities:
-                                          auth.tobCapabilityTypes,
+                                      tobCapabilities: auth.tobCapabilityTypes,
                                       onSaved: _loadUsers,
                                     ),
                             ),
@@ -302,7 +313,6 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
             ),
     );
   }
-
 }
 
 class _UserList extends StatelessWidget {
@@ -332,7 +342,9 @@ class _UserList extends StatelessWidget {
           color: isSelected
               ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.18)
               : !user.isApproved
-              ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.25)
+              ? Theme.of(
+                  context,
+                ).colorScheme.errorContainer.withValues(alpha: 0.25)
               : null,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -341,19 +353,16 @@ class _UserList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  // Avatar circle
-                  CircleAvatar(
+                  UserAvatar(
+                    user: user,
                     radius: 22,
                     backgroundColor: user.isApproved
                         ? Theme.of(context).colorScheme.primary
                         : Colors.amber.shade700,
-                    child: Text(
-                      user.cognome.isNotEmpty ? user.cognome[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    textStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -364,28 +373,27 @@ class _UserList extends StatelessWidget {
                       children: [
                         Text(
                           user.fullName,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           user.numeroLicenza ?? 'Licenza non indicata',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.65),
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.65),
+                              ),
                         ),
                         Text(
                           user.orgUnitName,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.55),
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.55),
+                              ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -395,8 +403,16 @@ class _UserList extends StatelessWidget {
                   // Status badge
                   const SizedBox(width: 8),
                   user.isApproved
-                      ? const Icon(Icons.verified_rounded, color: Colors.green, size: 22)
-                      : const Icon(Icons.pending_rounded, color: Colors.amber, size: 22),
+                      ? const Icon(
+                          Icons.verified_rounded,
+                          color: Colors.green,
+                          size: 22,
+                        )
+                      : const Icon(
+                          Icons.pending_rounded,
+                          color: Colors.amber,
+                          size: 22,
+                        ),
                   const SizedBox(width: 4),
                   const Icon(Icons.chevron_right, size: 18),
                 ],
@@ -429,7 +445,9 @@ class _DeletionRequestsBanner extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Card(
-        color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35),
+        color: Theme.of(
+          context,
+        ).colorScheme.errorContainer.withValues(alpha: 0.35),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -448,11 +466,13 @@ class _DeletionRequestsBanner extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              ...requests.map((r) => _DeletionRequestRow(
-                request: r,
-                onApprove: () => onApprove(r),
-                onReject: () => onReject(r),
-              )),
+              ...requests.map(
+                (r) => _DeletionRequestRow(
+                  request: r,
+                  onApprove: () => onApprove(r),
+                  onReject: () => onReject(r),
+                ),
+              ),
             ],
           ),
         ),
@@ -494,8 +514,10 @@ class _DeletionRequestRow extends StatelessWidget {
           if (request.reason != null && request.reason!.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('Motivo: ${request.reason}',
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                'Motivo: ${request.reason}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           const SizedBox(height: 8),
           Wrap(
@@ -508,7 +530,10 @@ class _DeletionRequestRow extends StatelessWidget {
                 label: const Text('Elimina utente'),
                 style: FilledButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.error,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   textStyle: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -517,7 +542,10 @@ class _DeletionRequestRow extends StatelessWidget {
                 icon: const Icon(Icons.close, size: 16),
                 label: const Text('Rifiuta'),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   textStyle: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -621,6 +649,39 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   void _toggleI(Set<int> set, int k) =>
       set.contains(k) ? set.remove(k) : set.add(k);
 
+  Set<int> _selectedPrivilegeIdsFor(int helicopterTypeId) {
+    return _privilegeKeys
+        .where((key) => key.startsWith('$helicopterTypeId:'))
+        .map((key) => int.parse(key.split(':')[1]))
+        .toSet();
+  }
+
+  Future<void> _editPrivilegesForHelicopter(HelicopterType helicopter) async {
+    final selectionsByHelicopter = <int, Set<int>>{
+      for (final item in widget.helicopterTypes)
+        item.id: _selectedPrivilegeIdsFor(item.id),
+    };
+    final result = await showPrivilegeSelectionDialog(
+      context: context,
+      helicopterTypes: widget.helicopterTypes,
+      privilegeTypes: widget.privilegeTypes,
+      selectionsByHelicopter: selectionsByHelicopter,
+      initialHelicopterTypeId: helicopter.id,
+      title: 'Seleziona privilegi manutentivi',
+    );
+    if (result == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _privilegeKeys.removeWhere(
+        (key) => key.startsWith('${result.helicopterTypeId}:'),
+      );
+      for (final privilegeTypeId in result.selectedPrivilegeTypeIds) {
+        _privilegeKeys.add('${result.helicopterTypeId}:$privilegeTypeId');
+      }
+    });
+  }
+
   Future<void> _approve() async {
     final adminId = ref.read(authProvider).userProfile?.id;
     if (adminId == null) return;
@@ -629,13 +690,15 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       if (!mounted) return;
       final updated = _user.copyWith(isApproved: true);
       setState(() => _user = updated);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Utente approvato.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Utente approvato.')));
       widget.onSaved?.call();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -691,8 +754,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       widget.onSaved?.call();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -725,14 +789,16 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     try {
       await widget.service.deleteUser(_user.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Utente eliminato.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Utente eliminato.')));
       widget.onSaved?.call();
       Navigator.of(context).maybePop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -740,10 +806,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _user.fullName,
-          overflow: TextOverflow.ellipsis,
-        ),
+        leading: const AdminAppBarLeading(),
+        title: Text(_user.fullName, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -764,7 +828,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.amber.shade700.withValues(alpha: 0.18),
                       border: Border.all(color: Colors.amber.shade700),
@@ -775,8 +841,11 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.pending_rounded,
-                                color: Colors.amber, size: 20),
+                            const Icon(
+                              Icons.pending_rounded,
+                              color: Colors.amber,
+                              size: 20,
+                            ),
                             const SizedBox(width: 8),
                             const Expanded(
                               child: Text(
@@ -809,31 +878,45 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        UserAvatar(user: _user, radius: 34),
+                        const SizedBox(height: 12),
                         Text(
                           _user.fullName,
                           style: Theme.of(context).textTheme.titleLarge,
+                          textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 4),
                         Text(
                           _user.numeroLicenza ?? 'Licenza non indicata',
                           style: Theme.of(context).textTheme.bodyMedium,
+                          textAlign: TextAlign.center,
                         ),
                         Text(
                           _user.orgUnitName,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.65),
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.65),
+                              ),
                         ),
+                        if (_user.email != null &&
+                            _user.email!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _user.email!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                         if (_user.username != null) ...[
                           const SizedBox(height: 4),
                           Text(
                             'Username: ${_user.username}',
                             style: Theme.of(context).textTheme.bodySmall,
+                            textAlign: TextAlign.center,
                           ),
                         ],
                         const SizedBox(height: 14),
@@ -847,13 +930,17 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                           ),
                           items: const [
                             DropdownMenuItem(
-                                value: 'user', child: Text('Utente')),
+                              value: 'user',
+                              child: Text('Utente'),
+                            ),
                             DropdownMenuItem(
-                                value: 'admin_priv',
-                                child: Text('Admin privilegi')),
+                              value: 'admin_priv',
+                              child: Text('Admin privilegi'),
+                            ),
                             DropdownMenuItem(
-                                value: 'admin_crew',
-                                child: Text('Admin equipaggi')),
+                              value: 'admin_crew',
+                              child: Text('Admin equipaggi'),
+                            ),
                           ],
                           onChanged: (v) =>
                               setState(() => _selectedRole = v ?? 'user'),
@@ -868,39 +955,84 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                   _Section(
                     title: 'Licenze',
                     children: widget.helicopterTypes
-                        .map((h) => _ChipGroup(
-                              title: h.name,
-                              chips: widget.licenseTypes
-                                  .map((l) => FilterChip(
-                                        selected: _licenseKeys
-                                            .contains('${h.id}:${l.id}'),
-                                        label: Text(l.name),
-                                        onSelected: (_) => setState(() =>
-                                            _toggle(_licenseKeys,
-                                                '${h.id}:${l.id}')),
-                                      ))
-                                  .toList(),
-                            ))
+                        .map(
+                          (h) => _ChipGroup(
+                            title: h.name,
+                            chips: widget.licenseTypes
+                                .map(
+                                  (l) => FilterChip(
+                                    selected: _licenseKeys.contains(
+                                      '${h.id}:${l.id}',
+                                    ),
+                                    label: Text(l.name),
+                                    onSelected: (_) => setState(
+                                      () => _toggle(
+                                        _licenseKeys,
+                                        '${h.id}:${l.id}',
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        )
                         .toList(),
                   ),
                   const SizedBox(height: 16),
                   _Section(
                     title: 'Privilegi manutentivi',
-                    children: widget.helicopterTypes
-                        .map((h) => _ChipGroup(
-                              title: h.name,
-                              chips: widget.privilegeTypes
-                                  .map((p) => FilterChip(
-                                        selected: _privilegeKeys
-                                            .contains('${h.id}:${p.id}'),
-                                        label: Text(p.name),
-                                        onSelected: (_) => setState(() =>
-                                            _toggle(_privilegeKeys,
-                                                '${h.id}:${p.id}')),
-                                      ))
-                                  .toList(),
-                            ))
-                        .toList(),
+                    children: widget.helicopterTypes.map((h) {
+                      final selectedPrivileges = widget.privilegeTypes
+                          .where(
+                            (p) => _privilegeKeys.contains('${h.id}:${p.id}'),
+                          )
+                          .toList();
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                h.name,
+                                style: Theme.of(context).textTheme.titleSmall,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              if (selectedPrivileges.isEmpty)
+                                const Text(
+                                  'Nessun privilegio selezionato.',
+                                  textAlign: TextAlign.center,
+                                )
+                              else
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: selectedPrivileges
+                                      .map(
+                                        (item) => Chip(
+                                          label: Text(
+                                            '${item.code} · ${item.name}',
+                                            softWrap: true,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    _editPrivilegesForHelicopter(h),
+                                icon: const Icon(Icons.checklist_outlined),
+                                label: const Text('Modifica privilegi'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ],
                 // ── Crew sections ─────────────────────────────────────────
@@ -926,7 +1058,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                 title: const Text('Equipaggio T'),
                                 value: _tCrewHelicopters.contains(h.id),
                                 onChanged: (_) => setState(
-                                    () => _toggleI(_tCrewHelicopters, h.id)),
+                                  () => _toggleI(_tCrewHelicopters, h.id),
+                                ),
                               ),
                               CheckboxListTile(
                                 contentPadding: EdgeInsets.zero,
@@ -942,7 +1075,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 8),
                                   child: DropdownButtonFormField<String>(
-                                    key: ValueKey('${h.id}_${_tobGrades[h.id]}'),
+                                    key: ValueKey(
+                                      '${h.id}_${_tobGrades[h.id]}',
+                                    ),
                                     initialValue: _tobGrades[h.id] ?? 'A',
                                     isExpanded: true,
                                     decoration: const InputDecoration(
@@ -951,14 +1086,21 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                     ),
                                     items: const [
                                       DropdownMenuItem(
-                                          value: 'A', child: Text('A')),
+                                        value: 'A',
+                                        child: Text('A'),
+                                      ),
                                       DropdownMenuItem(
-                                          value: 'B', child: Text('B')),
+                                        value: 'B',
+                                        child: Text('B'),
+                                      ),
                                       DropdownMenuItem(
-                                          value: 'C', child: Text('C')),
+                                        value: 'C',
+                                        child: Text('C'),
+                                      ),
                                     ],
                                     onChanged: (v) => setState(
-                                        () => _tobGrades[h.id] = v ?? 'A'),
+                                      () => _tobGrades[h.id] = v ?? 'A',
+                                    ),
                                   ),
                                 ),
                             ],
@@ -971,19 +1113,27 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                   _Section(
                     title: 'Capacità TOB',
                     children: widget.helicopterTypes
-                        .map((h) => _ChipGroup(
-                              title: h.name,
-                              chips: widget.tobCapabilities
-                                  .map((c) => FilterChip(
-                                        selected: _tobCapabilityKeys
-                                            .contains('${h.id}:${c.id}'),
-                                        label: Text(c.name),
-                                        onSelected: (_) => setState(() =>
-                                            _toggle(_tobCapabilityKeys,
-                                                '${h.id}:${c.id}')),
-                                      ))
-                                  .toList(),
-                            ))
+                        .map(
+                          (h) => _ChipGroup(
+                            title: h.name,
+                            chips: widget.tobCapabilities
+                                .map(
+                                  (c) => FilterChip(
+                                    selected: _tobCapabilityKeys.contains(
+                                      '${h.id}:${c.id}',
+                                    ),
+                                    label: Text(c.name),
+                                    onSelected: (_) => setState(
+                                      () => _toggle(
+                                        _tobCapabilityKeys,
+                                        '${h.id}:${c.id}',
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        )
                         .toList(),
                   ),
                 ],
@@ -1026,9 +1176,12 @@ class _Section extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            )),
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             ...children,
           ],
@@ -1050,9 +1203,12 @@ class _ChipGroup extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          )),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 6, children: chips),
         ],

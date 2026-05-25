@@ -108,18 +108,21 @@ class AuthProvider extends ChangeNotifier {
     if (_userProfile!.isUser || _userProfile!.isApproved) {
       await Future.wait([
         _userService.getUserLicenses(userId).then((value) => _licenses = value),
-        _userService.getUserPrivileges(userId).then(
-          (value) => _privileges = value,
-        ),
-        _userService.getUserCrewAssignments(userId).then(
-          (value) => _crewAssignments = value,
-        ),
-        _userService.getUserTobCapabilities(userId).then(
-          (value) => _tobCapabilities = value,
-        ),
+        _userService
+            .getUserPrivileges(userId)
+            .then((value) => _privileges = value),
+        _userService
+            .getUserCrewAssignments(userId)
+            .then((value) => _crewAssignments = value),
+        _userService
+            .getUserTobCapabilities(userId)
+            .then((value) => _tobCapabilities = value),
       ]);
 
-      _currency = await _currencyService.getFullCurrency(userId, _tobCapabilities);
+      _currency = await _currencyService.getFullCurrency(
+        userId,
+        _tobCapabilities,
+      );
       await _currencyService.checkAndNotify(userId, _tobCapabilities);
       _unreadNotifications = await _notifService.getUnreadCount(userId);
       await _notifService.syncUnreadSystemNotifications(userId);
@@ -157,6 +160,7 @@ class AuthProvider extends ChangeNotifier {
     required String nome,
     required String cognome,
     required String numeroLicenza,
+    required String email,
   }) async {
     _isLoading = true;
     _error = null;
@@ -168,6 +172,7 @@ class AuthProvider extends ChangeNotifier {
         nome: nome,
         cognome: cognome,
         numeroLicenza: numeroLicenza,
+        email: email,
       );
       await _loadReferenceData();
       await _authService.saveSession(_userProfile!.id, _userProfile!.role);
@@ -218,7 +223,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> updateProfile(UserProfile updated) async {
-    await _userService.updateProfile(updated);
+    await _authService.updateProfile(updated);
     final refreshed = await _userService.getUserProfile(updated.id);
     if (refreshed == null) {
       throw Exception('Profilo non trovato dopo l\'aggiornamento');

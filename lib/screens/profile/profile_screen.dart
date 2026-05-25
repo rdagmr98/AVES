@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 
 import '../../app.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
+import '../../widgets/privilege_selection_dialog.dart';
+import '../../widgets/user_avatar.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -15,11 +21,15 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _userService = UserService();
+  final _imagePicker = ImagePicker();
   late final TextEditingController _nomeCtrl;
   late final TextEditingController _cognomeCtrl;
   late final TextEditingController _licenzaCtrl;
+  late final TextEditingController _emailCtrl;
   int? _orgUnitId;
   bool _saving = false;
+  String? _emailError;
+  String? _profilePhotoBase64;
   AccountDeletionRequest? _pendingDeletionRequest;
 
   @override
@@ -29,6 +39,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _nomeCtrl = TextEditingController(text: profile?.nome ?? '');
     _cognomeCtrl = TextEditingController(text: profile?.cognome ?? '');
     _licenzaCtrl = TextEditingController(text: profile?.numeroLicenza ?? '');
+    _emailCtrl = TextEditingController(text: profile?.email ?? '');
+    _profilePhotoBase64 = profile?.profilePhotoBase64;
     _orgUnitId = profile?.orgUnitId;
     _loadDeletionRequest();
   }
@@ -38,7 +50,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _nomeCtrl.dispose();
     _cognomeCtrl.dispose();
     _licenzaCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
+  }
+
+  String? _validateInstitutionalEmail(String? value) {
+    final email = value?.trim().toLowerCase() ?? '';
+    if (email.isEmpty) {
+      return 'Campo obbligatorio';
+    }
+    if (!email.endsWith('@esercito.difesa.it')) {
+      return 'Usa un indirizzo @esercito.difesa.it';
+    }
+    return null;
   }
 
   Future<void> _runMutation(
@@ -76,11 +100,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return;
     }
 
+    final emailError = _validateInstitutionalEmail(_emailCtrl.text);
+    if (emailError != null) {
+      setState(() => _emailError = emailError);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(emailError)));
+      return;
+    }
+
+    setState(() => _emailError = null);
     await _runMutation(
       () => auth.updateProfile(
         profile.copyWith(
           nome: _nomeCtrl.text.trim(),
           cognome: _cognomeCtrl.text.trim(),
+          email: _emailCtrl.text.trim().toLowerCase(),
+          profilePhotoBase64: _profilePhotoBase64,
           orgUnitId: _orgUnitId,
         ),
       ),
@@ -93,7 +129,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (profile == null) {
       return;
     }
-    final request = await _userService.getPendingDeletionRequestForUser(profile.id);
+    final request = await _userService.getPendingDeletionRequestForUser(
+      profile.id,
+    );
     if (!mounted) {
       return;
     }
@@ -138,8 +176,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   profile.id,
                   reason: reasonCtrl.text.trim(),
                 ),
-                successMessage:
-                    'Richiesta di eliminazione inviata agli admin.',
+                successMessage: 'Richiesta di eliminazione inviata agli admin.',
               );
               await _loadDeletionRequest();
               if (dialogContext.mounted) {
@@ -196,7 +233,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 return;
               }
               try {
-                await ref.read(authProvider).changePassword(newPasswordCtrl.text);
+                await ref
+                    .read(authProvider)
+                    .changePassword(newPasswordCtrl.text);
                 if (!mounted || !dialogContext.mounted) {
                   return;
                 }
@@ -294,74 +333,89 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Future<Map<String, int>?> _showPrivilegeDialog(
+  Map<int, Set<int>> _currentPrivilegeSelections(
+    List<UserPrivilege> privileges,
+  ) {
+    final selections = <int, Set<int>>{};
+    for (final item in privileges) {
+      selections
+          .putIfAbsent(item.helicopterTypeId, () => <int>{})
+          .add(item.privilegeTypeId);
+    }
+    return selections;
+  }
+
+  Future<void> _managePrivileges(
+    UserProfile profile,
+    List<UserPrivilege> privileges,
     List<HelicopterType> helicopterTypes,
     List<PrivilegeType> privilegeTypes,
   ) async {
-    return showDialog<Map<String, int>>(
+    final result = await showPrivilegeSelectionDialog(
       context: context,
-      builder: (dialogContext) {
-        int? helicopterId;
-        int? privilegeTypeId;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Aggiungi privilegio'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: helicopterId,
-                  decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: helicopterTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text(item.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => helicopterId = value),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: privilegeTypeId,
-                  decoration: const InputDecoration(labelText: 'Privilegio'),
-                  items: privilegeTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text(item.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => privilegeTypeId = value),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (helicopterId == null || privilegeTypeId == null) {
-                    return;
-                  }
-                  Navigator.of(dialogContext).pop({
-                    'helicopterTypeId': helicopterId!,
-                    'privilegeTypeId': privilegeTypeId!,
-                  });
-                },
-                child: const Text('Aggiungi'),
-              ),
-            ],
-          ),
-        );
-      },
+      helicopterTypes: helicopterTypes,
+      privilegeTypes: privilegeTypes,
+      selectionsByHelicopter: _currentPrivilegeSelections(privileges),
+      title: 'Seleziona privilegi manutentivi',
     );
+    if (result == null) {
+      return;
+    }
+
+    final updatedPrivileges = privileges
+        .where((item) => item.helicopterTypeId != result.helicopterTypeId)
+        .map(
+          (item) => {
+            'helicopter_type_id': item.helicopterTypeId,
+            'privilege_type_id': item.privilegeTypeId,
+          },
+        )
+        .toList();
+    for (final privilegeTypeId in result.selectedPrivilegeTypeIds) {
+      updatedPrivileges.add({
+        'helicopter_type_id': result.helicopterTypeId,
+        'privilege_type_id': privilegeTypeId,
+      });
+    }
+
+    await _runMutation(
+      () => _userService.setUserPrivileges(profile.id, updatedPrivileges),
+      successMessage: 'Privilegi aggiornati.',
+    );
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    try {
+      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (file == null) {
+        return;
+      }
+      final bytes = await file.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw Exception('Immagine non valida');
+      }
+      final resized = decoded.width > 200 || decoded.height > 200
+          ? img.copyResize(
+              decoded,
+              width: decoded.width >= decoded.height ? 200 : null,
+              height: decoded.height > decoded.width ? 200 : null,
+              interpolation: img.Interpolation.average,
+            )
+          : decoded;
+      final jpgBytes = img.encodeJpg(resized, quality: 30);
+      if (!mounted) {
+        return;
+      }
+      setState(() => _profilePhotoBase64 = base64Encode(jpgBytes));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Errore foto profilo: $e')));
+    }
   }
 
   Future<Map<String, dynamic>?> _showCrewDialog(
@@ -396,7 +450,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: crewType,
-                  decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo equipaggio',
+                  ),
                   items: const [
                     DropdownMenuItem(value: 'T', child: Text('T')),
                     DropdownMenuItem(value: 'TOB', child: Text('TOB')),
@@ -533,6 +589,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (_licenzaCtrl.text != (profile.numeroLicenza ?? '')) {
       _licenzaCtrl.text = profile.numeroLicenza ?? '';
     }
+    if (_emailCtrl.text != (profile.email ?? '')) {
+      _emailCtrl.text = profile.email ?? '';
+    }
+    _profilePhotoBase64 ??= profile.profilePhotoBase64;
     _orgUnitId ??= profile.orgUnitId;
 
     return Scaffold(
@@ -545,309 +605,361 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          if (_saving || auth.isLoading) const LinearProgressIndicator(),
-          if (_pendingDeletionRequest != null) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.hourglass_top, color: Colors.amber),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Richiesta di eliminazione account in attesa di approvazione admin.',
-                        style: Theme.of(context).textTheme.bodyLarge,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: ListView(
+            shrinkWrap: false,
+            padding: const EdgeInsets.all(24),
+            children: [
+              if (_saving || auth.isLoading) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                Text(
+                  'Salvataggio...',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (_pendingDeletionRequest != null) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.hourglass_top, color: Colors.amber),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Richiesta di eliminazione account in attesa di approvazione admin.',
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: _saving ? null : _pickProfilePhoto,
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            UserAvatar(
+                              user: profile.copyWith(
+                                profilePhotoBase64: _profilePhotoBase64,
+                              ),
+                              radius: 44,
+                            ),
+                            const CircleAvatar(
+                              radius: 14,
+                              child: Icon(
+                                Icons.photo_camera_outlined,
+                                size: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Tocca l\'avatar per aggiornare la foto profilo.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Dati anagrafici',
+                        style: Theme.of(context).textTheme.titleLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _nomeCtrl,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(labelText: 'Nome'),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _cognomeCtrl,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(labelText: 'Cognome'),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _licenzaCtrl,
+                        readOnly: true,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          labelText: 'Numero licenza',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        textAlign: TextAlign.center,
+                        decoration: InputDecoration(
+                          labelText: 'Email istituzionale',
+                          hintText: 'nome.cognome@esercito.difesa.it',
+                          errorText: _emailError,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int>(
+                        initialValue: _orgUnitId,
+                        alignment: Alignment.center,
+                        decoration: const InputDecoration(
+                          labelText: 'Unità organizzativa',
+                        ),
+                        items: auth.orgUnits
+                            .map(
+                              (item) => DropdownMenuItem<int>(
+                                value: item.id,
+                                child: Text(
+                                  item.name,
+                                  textAlign: TextAlign.center,
+                                  softWrap: true,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setState(() => _orgUnitId = value),
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: _showChangePasswordDialog,
+                        icon: const Icon(Icons.lock_reset_outlined),
+                        label: const Text('Cambia password'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _EditableSection(
+                title: 'Licenze',
+                addLabel: 'Aggiungi',
+                onAdd: () async {
+                  final result = await _showLicenseDialog(
+                    auth.helicopterTypes,
+                    auth.licenseTypes,
+                  );
+                  if (result == null) {
+                    return;
+                  }
+                  await _runMutation(
+                    () => _userService.addUserLicense(
+                      UserLicense(
+                        userId: profile.id,
+                        helicopterTypeId: result['helicopterTypeId']!,
+                        licenseTypeId: result['licenseTypeId']!,
                       ),
                     ),
-                  ],
+                    successMessage: 'Licenza aggiunta.',
+                  );
+                },
+                child: auth.licenses.isEmpty
+                    ? const Text('Nessuna licenza assegnata.')
+                    : Column(
+                        children: auth.licenses
+                            .map(
+                              (item) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  '${item.helicopterCode} · ${item.licenseName}',
+                                ),
+                                trailing: IconButton(
+                                  onPressed: item.id == null
+                                      ? null
+                                      : () => _runMutation(
+                                          () => _userService.deleteUserLicense(
+                                            item.id!,
+                                          ),
+                                          successMessage: 'Licenza rimossa.',
+                                        ),
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              _EditableSection(
+                title: 'Privilegi manutentivi',
+                addLabel: 'Gestisci',
+                onAdd: () => _managePrivileges(
+                  profile,
+                  auth.privileges,
+                  auth.helicopterTypes,
+                  auth.privilegeTypes,
+                ),
+                child: auth.privileges.isEmpty
+                    ? const Text(
+                        'Nessun privilegio assegnato.',
+                        textAlign: TextAlign.center,
+                      )
+                    : Column(
+                        children: auth.privileges
+                            .map(
+                              (item) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  '${item.helicopterCode} · ${item.privilegeName}',
+                                  textAlign: TextAlign.center,
+                                  softWrap: true,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              _EditableSection(
+                title: 'Equipaggi di volo',
+                addLabel: 'Aggiungi',
+                onAdd: () async {
+                  final result = await _showCrewDialog(auth.helicopterTypes);
+                  if (result == null) {
+                    return;
+                  }
+                  await _runMutation(
+                    () => _userService.addUserCrewAssignment(
+                      UserCrewAssignment(
+                        userId: profile.id,
+                        helicopterTypeId: result['helicopterTypeId'] as int,
+                        crewType: result['crewType'] as String,
+                        fascia: result['fascia'] as String?,
+                      ),
+                    ),
+                    successMessage: 'Equipaggio aggiunto.',
+                  );
+                },
+                child: auth.crewAssignments.isEmpty
+                    ? const Text('Nessun equipaggio assegnato.')
+                    : Column(
+                        children: auth.crewAssignments
+                            .map(
+                              (item) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  '${item.helicopterCode} · ${item.crewType}',
+                                ),
+                                subtitle: item.crewType == 'TOB'
+                                    ? Text('Fascia ${item.fascia ?? '-'}')
+                                    : null,
+                                trailing: IconButton(
+                                  onPressed: item.id == null
+                                      ? null
+                                      : () => _runMutation(
+                                          () => _userService
+                                              .deleteUserCrewAssignment(
+                                                item.id!,
+                                              ),
+                                          successMessage: 'Equipaggio rimosso.',
+                                        ),
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              _EditableSection(
+                title: 'Capacità TOB',
+                addLabel: 'Aggiungi',
+                onAdd: () async {
+                  final result = await _showTobCapabilityDialog(
+                    auth.helicopterTypes,
+                    auth.tobCapabilityTypes,
+                  );
+                  if (result == null) {
+                    return;
+                  }
+                  await _runMutation(
+                    () => _userService.addUserTobCapability(
+                      UserTobCapability(
+                        userId: profile.id,
+                        helicopterTypeId: result['helicopterTypeId']!,
+                        tobCapabilityId: result['capabilityId']!,
+                      ),
+                    ),
+                    successMessage: 'Capacità TOB aggiunta.',
+                  );
+                },
+                child: auth.tobCapabilities.isEmpty
+                    ? const Text('Nessuna capacità TOB assegnata.')
+                    : Column(
+                        children: auth.tobCapabilities
+                            .map(
+                              (item) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  '${item.helicopterCode} · ${item.capabilityName}',
+                                ),
+                                trailing: IconButton(
+                                  onPressed: item.id == null
+                                      ? null
+                                      : () => _runMutation(
+                                          () => _userService
+                                              .deleteUserTobCapability(
+                                                item.id!,
+                                              ),
+                                          successMessage:
+                                              'Capacità TOB rimossa.',
+                                        ),
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Gestione account',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Puoi richiedere l\'eliminazione del tuo account. La cancellazione sarà eseguita solo dopo approvazione di un admin.',
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: _pendingDeletionRequest != null
+                            ? null
+                            : _showDeleteAccountRequestDialog,
+                        icon: const Icon(Icons.delete_forever_outlined),
+                        label: Text(
+                          _pendingDeletionRequest != null
+                              ? 'Richiesta già inviata'
+                              : 'Richiedi eliminazione account',
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Dati anagrafici',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _nomeCtrl,
-                    decoration: const InputDecoration(labelText: 'Nome'),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _cognomeCtrl,
-                    decoration: const InputDecoration(labelText: 'Cognome'),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _licenzaCtrl,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Numero licenza',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    initialValue: _orgUnitId,
-                    decoration: const InputDecoration(
-                      labelText: 'Unità organizzativa',
-                    ),
-                    items: auth.orgUnits
-                        .map(
-                          (item) => DropdownMenuItem<int>(
-                            value: item.id,
-                            child: Text(item.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => _orgUnitId = value),
-                  ),
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: _showChangePasswordDialog,
-                      icon: const Icon(Icons.lock_reset_outlined),
-                      label: const Text('Cambia password'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _EditableSection(
-            title: 'Licenze',
-            addLabel: 'Aggiungi',
-            onAdd: () async {
-              final result = await _showLicenseDialog(
-                auth.helicopterTypes,
-                auth.licenseTypes,
-              );
-              if (result == null) {
-                return;
-              }
-              await _runMutation(
-                () => _userService.addUserLicense(
-                  UserLicense(
-                    userId: profile.id,
-                    helicopterTypeId: result['helicopterTypeId']!,
-                    licenseTypeId: result['licenseTypeId']!,
-                  ),
-                ),
-                successMessage: 'Licenza aggiunta.',
-              );
-            },
-            child: auth.licenses.isEmpty
-                ? const Text('Nessuna licenza assegnata.')
-                : Column(
-                    children: auth.licenses
-                        .map(
-                          (item) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('${item.helicopterCode} · ${item.licenseName}'),
-                            trailing: IconButton(
-                              onPressed: item.id == null
-                                  ? null
-                                  : () => _runMutation(
-                                        () => _userService.deleteUserLicense(
-                                          item.id!,
-                                        ),
-                                        successMessage: 'Licenza rimossa.',
-                                      ),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          _EditableSection(
-            title: 'Privilegi manutentivi',
-            addLabel: 'Aggiungi',
-            onAdd: () async {
-              final result = await _showPrivilegeDialog(
-                auth.helicopterTypes,
-                auth.privilegeTypes,
-              );
-              if (result == null) {
-                return;
-              }
-              await _runMutation(
-                () => _userService.addUserPrivilege(
-                  UserPrivilege(
-                    userId: profile.id,
-                    helicopterTypeId: result['helicopterTypeId']!,
-                    privilegeTypeId: result['privilegeTypeId']!,
-                  ),
-                ),
-                successMessage: 'Privilegio aggiunto.',
-              );
-            },
-            child: auth.privileges.isEmpty
-                ? const Text('Nessun privilegio assegnato.')
-                : Column(
-                    children: auth.privileges
-                        .map(
-                          (item) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('${item.helicopterCode} · ${item.privilegeName}'),
-                            trailing: IconButton(
-                              onPressed: item.id == null
-                                  ? null
-                                  : () => _runMutation(
-                                        () => _userService.deleteUserPrivilege(
-                                          item.id!,
-                                        ),
-                                        successMessage: 'Privilegio rimosso.',
-                                      ),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          _EditableSection(
-            title: 'Equipaggi di volo',
-            addLabel: 'Aggiungi',
-            onAdd: () async {
-              final result = await _showCrewDialog(auth.helicopterTypes);
-              if (result == null) {
-                return;
-              }
-              await _runMutation(
-                () => _userService.addUserCrewAssignment(
-                  UserCrewAssignment(
-                    userId: profile.id,
-                    helicopterTypeId: result['helicopterTypeId'] as int,
-                    crewType: result['crewType'] as String,
-                    fascia: result['fascia'] as String?,
-                  ),
-                ),
-                successMessage: 'Equipaggio aggiunto.',
-              );
-            },
-            child: auth.crewAssignments.isEmpty
-                ? const Text('Nessun equipaggio assegnato.')
-                : Column(
-                    children: auth.crewAssignments
-                        .map(
-                          (item) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('${item.helicopterCode} · ${item.crewType}'),
-                            subtitle: item.crewType == 'TOB'
-                                ? Text('Fascia ${item.fascia ?? '-'}')
-                                : null,
-                            trailing: IconButton(
-                              onPressed: item.id == null
-                                  ? null
-                                  : () => _runMutation(
-                                        () => _userService.deleteUserCrewAssignment(
-                                          item.id!,
-                                        ),
-                                        successMessage: 'Equipaggio rimosso.',
-                                      ),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          _EditableSection(
-            title: 'Capacità TOB',
-            addLabel: 'Aggiungi',
-            onAdd: () async {
-              final result = await _showTobCapabilityDialog(
-                auth.helicopterTypes,
-                auth.tobCapabilityTypes,
-              );
-              if (result == null) {
-                return;
-              }
-              await _runMutation(
-                () => _userService.addUserTobCapability(
-                  UserTobCapability(
-                    userId: profile.id,
-                    helicopterTypeId: result['helicopterTypeId']!,
-                    tobCapabilityId: result['capabilityId']!,
-                  ),
-                ),
-                successMessage: 'Capacità TOB aggiunta.',
-              );
-            },
-            child: auth.tobCapabilities.isEmpty
-                ? const Text('Nessuna capacità TOB assegnata.')
-                : Column(
-                    children: auth.tobCapabilities
-                        .map(
-                          (item) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('${item.helicopterCode} · ${item.capabilityName}'),
-                            trailing: IconButton(
-                              onPressed: item.id == null
-                                  ? null
-                                  : () => _runMutation(
-                                        () => _userService.deleteUserTobCapability(
-                                          item.id!,
-                                        ),
-                                        successMessage: 'Capacità TOB rimossa.',
-                                      ),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Gestione account',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Puoi richiedere l\'eliminazione del tuo account. La cancellazione sarà eseguita solo dopo approvazione di un admin.',
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: _pendingDeletionRequest != null
-                        ? null
-                        : _showDeleteAccountRequestDialog,
-                    icon: const Icon(Icons.delete_forever_outlined),
-                    label: Text(
-                      _pendingDeletionRequest != null
-                          ? 'Richiesta già inviata'
-                          : 'Richiedi eliminazione account',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -877,7 +989,10 @@ class _EditableSection extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                 ),
                 OutlinedButton.icon(
                   onPressed: onAdd,

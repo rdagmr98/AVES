@@ -5,7 +5,6 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../data/helicopter_catalog.dart';
 import '../../models/reference_models.dart';
-import '../../widgets/helicopter_viewer_widget.dart';
 
 class HelicopterDetailScreen extends ConsumerWidget {
   const HelicopterDetailScreen({super.key, required this.helicopterId});
@@ -45,85 +44,85 @@ class HelicopterDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(helicopter.name)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _HeroCard(
-            helicopter: helicopter,
-            subtitle: catalog.subtitle,
-            description: catalog.description,
-            imageAsset: catalog.imageAsset,
-            accent: accent,
-          ),
-          const SizedBox(height: 16),
-          if (catalog.normalModelAsset != null &&
-              catalog.hologramModelAsset != null)
-            HelicopterViewerWidget(
-              normalModelAsset: catalog.normalModelAsset!,
-              hologramModelAsset: catalog.hologramModelAsset!,
-              accent: accent,
-              alt: 'Modello 3D ${helicopter.name}',
-            ),
-          if (catalog.normalModelAsset != null &&
-              catalog.hologramModelAsset != null)
-            const SizedBox(height: 16),
-          _SpecsCard(specs: catalog.specs, accent: accent),
-          const SizedBox(height: 16),
-          _AssignmentCard(
-            title: 'Abilitazioni utente',
-            accent: accent,
-            emptyText: 'Nessuna abilitazione associata a questo elicottero.',
-            groups: [
-              _AssignmentGroup(
-                label: 'Licenze',
-                values: userLicenses.map((item) => item.licenseName).toList(),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: ListView(
+            shrinkWrap: false,
+            padding: const EdgeInsets.all(16),
+            children: [
+              _HeroCard(
+                helicopter: helicopter,
+                subtitle: catalog.subtitle,
+                description: catalog.description,
+                imageAsset: catalog.imageAsset,
+                accent: accent,
               ),
-              _AssignmentGroup(
-                label: 'Privilegi',
-                values: userPrivileges
-                    .map((item) => item.privilegeName)
-                    .toList(),
+              const SizedBox(height: 16),
+              _SpecsCard(specs: catalog.specs, accent: accent),
+              const SizedBox(height: 16),
+              _AssignmentCard(
+                title: 'Abilitazioni utente',
+                accent: accent,
+                emptyText:
+                    'Nessuna abilitazione associata a questo elicottero.',
+                groups: [
+                  _AssignmentGroup(
+                    label: 'Licenze',
+                    values: userLicenses
+                        .map((item) => item.licenseName)
+                        .toList(),
+                  ),
+                  _AssignmentGroup(
+                    label: 'Privilegi',
+                    values: userPrivileges
+                        .map((item) => item.privilegeName)
+                        .toList(),
+                  ),
+                  _AssignmentGroup(
+                    label: 'Equipaggi',
+                    values: crews
+                        .map(
+                          (item) => item.crewType == 'TOB'
+                              ? 'TOB fascia ${item.fascia ?? '-'}'
+                              : 'T',
+                        )
+                        .toList(),
+                  ),
+                  _AssignmentGroup(
+                    label: 'Capacità TOB',
+                    values: tobCaps.map((item) => item.capabilityName).toList(),
+                  ),
+                ],
               ),
-              _AssignmentGroup(
-                label: 'Equipaggi',
-                values: crews
-                    .map(
-                      (item) => item.crewType == 'TOB'
-                          ? 'TOB fascia ${item.fascia ?? '-'}'
-                          : 'T',
-                    )
-                    .toList(),
-              ),
-              _AssignmentGroup(
-                label: 'Capacità TOB',
-                values: tobCaps.map((item) => item.capabilityName).toList(),
+              const SizedBox(height: 16),
+              _AssignmentCard(
+                title: 'Stato operativo sintetico',
+                accent: accent,
+                emptyText: 'Nessun dato operativo disponibile.',
+                groups: [
+                  if (userLicenses.isNotEmpty || userPrivileges.isNotEmpty)
+                    _AssignmentGroup(
+                      label: 'Currency manutenzione',
+                      values: [
+                        auth.currency['maintenance']?.statusText ?? 'N/D',
+                      ],
+                    ),
+                  if (crews.any((item) => item.crewType == 'T'))
+                    _AssignmentGroup(
+                      label: 'Currency T',
+                      values: [auth.currency['flight_t']?.statusText ?? 'N/D'],
+                    ),
+                  if (crews.any((item) => item.crewType == 'TOB'))
+                    _AssignmentGroup(
+                      label: 'Currency TOB base',
+                      values: [auth.currency['tob_base']?.statusText ?? 'N/D'],
+                    ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _AssignmentCard(
-            title: 'Stato operativo sintetico',
-            accent: accent,
-            emptyText: 'Nessun dato operativo disponibile.',
-            groups: [
-              if (userLicenses.isNotEmpty || userPrivileges.isNotEmpty)
-                _AssignmentGroup(
-                  label: 'Currency manutenzione',
-                  values: [auth.currency['maintenance']?.statusText ?? 'N/D'],
-                ),
-              if (crews.any((item) => item.crewType == 'T'))
-                _AssignmentGroup(
-                  label: 'Currency T',
-                  values: [auth.currency['flight_t']?.statusText ?? 'N/D'],
-                ),
-              if (crews.any((item) => item.crewType == 'TOB'))
-                _AssignmentGroup(
-                  label: 'Currency TOB base',
-                  values: [auth.currency['tob_base']?.statusText ?? 'N/D'],
-                ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -171,11 +170,12 @@ class _HeroCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     helicopter.name,
                     style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -183,9 +183,10 @@ class _HeroCard extends StatelessWidget {
                     style: Theme.of(
                       context,
                     ).textTheme.titleMedium?.copyWith(color: accent),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 10),
-                  Text(description),
+                  Text(description, textAlign: TextAlign.center),
                 ],
               ),
             ),
@@ -208,14 +209,16 @@ class _SpecsCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               'Caratteristiche',
               style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Wrap(
+              alignment: WrapAlignment.center,
               spacing: 12,
               runSpacing: 12,
               children: [
@@ -232,7 +235,7 @@ class _SpecsCard extends StatelessWidget {
                         ),
                       ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
                             spec.$1,
@@ -243,7 +246,7 @@ class _SpecsCard extends StatelessWidget {
                                 ),
                           ),
                           const SizedBox(height: 6),
-                          Text(spec.$2),
+                          Text(spec.$2, textAlign: TextAlign.center),
                         ],
                       ),
                     ),
@@ -286,12 +289,16 @@ class _AssignmentCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             if (visibleGroups.isEmpty)
-              Text(emptyText)
+              Text(emptyText, textAlign: TextAlign.center)
             else
               ...visibleGroups.map(
                 (group) => Padding(
@@ -307,6 +314,7 @@ class _AssignmentCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Wrap(
+                        alignment: WrapAlignment.center,
                         spacing: 8,
                         runSpacing: 8,
                         children: [

@@ -9,6 +9,7 @@ import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/user_service.dart';
+import '../../widgets/admin_app_bar_leading.dart';
 
 class InsertActivityAdminScreen extends ConsumerStatefulWidget {
   const InsertActivityAdminScreen({super.key});
@@ -754,6 +755,7 @@ class _InsertActivityAdminScreenState
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AdminAppBarLeading(),
         title: const Text('Attività'),
         bottom: TabBar(
           controller: _tabController,
@@ -1236,12 +1238,15 @@ class _InsertActivityAdminScreenState
                           );
                         case _AdminInsertTabType.seminar:
                           return _AdminActivityTab(
-                            enabled: _selectedUser != null && _privileges.isNotEmpty,
+                            enabled:
+                                _selectedUser != null && _privileges.isNotEmpty,
                             child: _AdminActivityCard(
                               children: [
                                 Text(
                                   'Seminario NAM e MHF',
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(

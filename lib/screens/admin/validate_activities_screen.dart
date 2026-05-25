@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
+import '../../widgets/admin_app_bar_leading.dart';
 
 class ValidateActivitiesScreen extends ConsumerStatefulWidget {
   const ValidateActivitiesScreen({super.key});
@@ -34,7 +35,10 @@ class _ValidateActivitiesScreenState
     super.initState();
     final auth = ref.read(authProvider);
     if (auth.isAdminPriv) {
-      _tabs = const [_ValidationTabType.maintenance, _ValidationTabType.seminar];
+      _tabs = const [
+        _ValidationTabType.maintenance,
+        _ValidationTabType.seminar,
+      ];
     } else if (auth.isAdminCrew) {
       _tabs = const [_ValidationTabType.flight, _ValidationTabType.tob];
     } else {
@@ -157,6 +161,7 @@ class _ValidateActivitiesScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const AdminAppBarLeading(),
         title: const Text('Valida Attività'),
         bottom: TabBar(
           controller: _tabController,
@@ -206,8 +211,7 @@ class _ValidateActivitiesScreenState
       case _ValidationTabType.seminar:
         return _ValidationList<SeminarActivity>(
           items: _seminars,
-          titleBuilder: (item) =>
-              '${item.userFullName} · ${item.userLicenza}',
+          titleBuilder: (item) => '${item.userFullName} · ${item.userLicenza}',
           subtitleBuilder: (item) =>
               'Seminario NAM/MHF\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.seminarDate,

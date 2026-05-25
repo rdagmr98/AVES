@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app.dart';
 import '../../models/activity_models.dart';
+import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/admin_write_pat_button.dart';
 
 class CurrencySettingsScreen extends ConsumerStatefulWidget {
@@ -28,14 +29,17 @@ class _CurrencySettingsScreenState
     final isAdminCrew = auth.isAdminCrew;
 
     // Admin priv edits MAINTENANCE; admin crew edits TOB_BASE and TOB_CAPABILITY and FLIGHT_T
-    final canEdit = (auth.isAdminPriv && criteria.criteriaType == 'MAINTENANCE') ||
+    final canEdit =
+        (auth.isAdminPriv && criteria.criteriaType == 'MAINTENANCE') ||
         (isAdminCrew &&
             (criteria.criteriaType == 'FLIGHT_T' ||
                 criteria.criteriaType == 'TOB_BASE' ||
                 criteria.criteriaType == 'TOB_CAPABILITY'));
     if (!canEdit) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Non hai i permessi per modificare questo criterio.')),
+        const SnackBar(
+          content: Text('Non hai i permessi per modificare questo criterio.'),
+        ),
       );
       return;
     }
@@ -45,7 +49,8 @@ class _CurrencySettingsScreenState
       text: criteria.minHours == null ? '' : '${criteria.minHours}',
     );
     // Fascia-specific fields (only for TOB_BASE and TOB_CAPABILITY)
-    final hasFascia = criteria.criteriaType == 'TOB_BASE' ||
+    final hasFascia =
+        criteria.criteriaType == 'TOB_BASE' ||
         criteria.criteriaType == 'TOB_CAPABILITY';
     final periodACtrl = TextEditingController(
       text: criteria.periodDaysA != null ? '${criteria.periodDaysA}' : '',
@@ -67,8 +72,9 @@ class _CurrencySettingsScreenState
                 TextField(
                   controller: periodCtrl,
                   keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: 'Periodo (giorni)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Periodo (giorni)',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -76,8 +82,9 @@ class _CurrencySettingsScreenState
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration:
-                      const InputDecoration(labelText: 'Ore minime (volo)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Ore minime (volo)',
+                  ),
                 ),
               ] else ...[
                 const Text(
@@ -99,7 +106,8 @@ class _CurrencySettingsScreenState
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Fascia B/C (giorni) — vuoto = N/A',
-                    helperText: 'Lasciare vuoto se non applicabile per fascia B/C',
+                    helperText:
+                        'Lasciare vuoto se non applicabile per fascia B/C',
                   ),
                 ),
               ],
@@ -118,13 +126,15 @@ class _CurrencySettingsScreenState
               try {
                 if (hasFascia) {
                   final periodA =
-                      int.tryParse(periodACtrl.text.trim()) ?? criteria.periodDays;
-                  final periodBC =
-                      periodBCCtrl.text.trim().isEmpty
-                          ? null
-                          : int.tryParse(periodBCCtrl.text.trim());
+                      int.tryParse(periodACtrl.text.trim()) ??
+                      criteria.periodDays;
+                  final periodBC = periodBCCtrl.text.trim().isEmpty
+                      ? null
+                      : int.tryParse(periodBCCtrl.text.trim());
                   // Use period A as the main period for backward compat
-                  await ref.read(currencyProviderProv).updateCriteriaFascia(
+                  await ref
+                      .read(currencyProviderProv)
+                      .updateCriteriaFascia(
                         criteria,
                         periodA,
                         periodBC,
@@ -134,11 +144,11 @@ class _CurrencySettingsScreenState
                   final period = int.tryParse(periodCtrl.text);
                   final hours = hoursCtrl.text.trim().isEmpty
                       ? null
-                      : double.tryParse(
-                          hoursCtrl.text.replaceAll(',', '.'),
-                        );
+                      : double.tryParse(hoursCtrl.text.replaceAll(',', '.'));
                   if (period == null) return;
-                  await ref.read(currencyProviderProv).updateCriteria(
+                  await ref
+                      .read(currencyProviderProv)
+                      .updateCriteria(
                         CurrencyCriteria(
                           id: criteria.id,
                           criteriaType: criteria.criteriaType,
@@ -158,9 +168,9 @@ class _CurrencySettingsScreenState
                 );
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.toString())),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.toString())));
               }
             },
             child: const Text('Salva'),
@@ -194,6 +204,7 @@ class _CurrencySettingsScreenState
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AdminAppBarLeading(),
         title: const Text('Impostazioni Currency'),
         actions: const [
           Padding(

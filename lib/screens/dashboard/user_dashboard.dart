@@ -5,27 +5,71 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
-import '../../data/helicopter_catalog.dart';
 import '../../models/activity_models.dart';
-import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/pta_service.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/privilege_grid_widget.dart';
+import '../../widgets/user_avatar.dart';
 
-class UserDashboard extends ConsumerWidget {
+class UserDashboard extends ConsumerStatefulWidget {
   const UserDashboard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UserDashboard> createState() => _UserDashboardState();
+}
+
+class _UserDashboardState extends ConsumerState<UserDashboard> {
+  bool _emailDialogOpen = false;
+
+  void _promptInstitutionalEmail(UserProfile user) {
+    if (_emailDialogOpen || user.hasInstitutionalEmail) {
+      return;
+    }
+    _emailDialogOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text(
+            'Email istituzionale richiesta',
+            textAlign: TextAlign.center,
+          ),
+          content: const Text(
+            'Per continuare ad utilizzare l\'app è necessario inserire il tuo indirizzo email istituzionale (@esercito.difesa.it). Vai al profilo per completare i dati.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                context.go('/profile');
+              },
+              child: const Text('Vai al Profilo'),
+            ),
+          ],
+        ),
+      );
+      _emailDialogOpen = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final user = auth.userProfile;
 
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
+    _promptInstitutionalEmail(user);
 
     final hasMaintenanceAccess =
         auth.licenses.isNotEmpty || auth.privileges.isNotEmpty;
@@ -93,6 +137,12 @@ class UserDashboard extends ConsumerWidget {
           icon: Icons.article_outlined,
           onPressed: () => context.go('/pta'),
         ),
+      if (assignedHelicopters.isNotEmpty)
+        _DashboardActionButtonData(
+          label: 'La Mia Flotta',
+          icon: Icons.flight,
+          onPressed: () => context.go('/helicopters/fleet'),
+        ),
     ];
 
     return Scaffold(
@@ -126,260 +176,194 @@ class UserDashboard extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(authProvider).refreshUserData(),
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          children: [
-            _UserHeaderCard(
-              user: user,
-              unreadNotifications: auth.unreadNotifications,
-            ),
-            if (!user.isApproved) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.currencyWarning.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.currencyWarning),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: ListView(
+              shrinkWrap: false,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              children: [
+                _UserHeaderCard(
+                  user: user,
+                  unreadNotifications: auth.unreadNotifications,
                 ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.pending_actions,
-                      color: AppColors.currencyWarning,
+                if (!user.isApproved) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.currencyWarning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.currencyWarning),
                     ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'In attesa di approvazione. Alcune funzionalità saranno abilitate dopo la verifica del profilo.',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            Builder(
-              builder: (context) {
-                final blockingPta = PtaService().getBlockingPtaForUser(user.id);
-                if (blockingPta.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                final ptaNumbers = blockingPta.map((p) => p.number).join(', ');
-                return Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: InkWell(
-                    onTap: () => context.go('/pta'),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF8E44AD).withValues(alpha: 0.2),
-                            AppColors.surface,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.pending_actions,
+                          color: AppColors.currencyWarning,
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF8E44AD)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.block, color: Color(0xFF8E44AD)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'CURRENCY SOSPESA — PTA attiva',
-                                  style: TextStyle(
-                                    color: Color(0xFFCE93D8),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'PTA: $ptaNumbers — Tocca per prendere visione',
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ],
-                            ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'In attesa di approvazione. Alcune funzionalità saranno abilitate dopo la verifica del profilo.',
                           ),
-                          const Icon(
-                            Icons.chevron_right,
-                            color: Color(0xFFCE93D8),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Stato Currency',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isMobile = constraints.maxWidth < 500;
-                if (isMobile) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < currencyCards.length; i++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: i == currencyCards.length - 1 ? 0 : 12,
+                ],
+                Builder(
+                  builder: (context) {
+                    final blockingPta = PtaService().getBlockingPtaForUser(
+                      user.id,
+                    );
+                    if (blockingPta.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final ptaNumbers = blockingPta
+                        .map((p) => p.number)
+                        .join(', ');
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: InkWell(
+                        onTap: () => context.go('/pta'),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF8E44AD).withValues(alpha: 0.2),
+                                AppColors.surface,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFF8E44AD)),
                           ),
-                          child: currencyCards[i],
-                        ),
-                    ],
-                  );
-                }
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    for (final card in currencyCards)
-                      SizedBox(width: 300, child: card),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Azioni rapide',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isMobile = constraints.maxWidth < 500;
-                if (isMobile) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < quickActions.length; i++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            bottom: i == quickActions.length - 1 ? 0 : 8,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.block, color: Color(0xFF8E44AD)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'CURRENCY SOSPESA — PTA attiva',
+                                      style: TextStyle(
+                                        color: Color(0xFFCE93D8),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'PTA: $ptaNumbers — Tocca per prendere visione',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right,
+                                color: Color(0xFFCE93D8),
+                              ),
+                            ],
                           ),
-                          child: _DashboardActionButton(data: quickActions[i]),
-                        ),
-                    ],
-                  );
-                }
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final action in quickActions)
-                      SizedBox(
-                        width: 220,
-                        child: _DashboardActionButton(
-                          data: action,
-                          compact: true,
                         ),
                       ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            if (assignedHelicopters.isNotEmpty) ...[
-              Text(
-                'Flotta personale',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isMobile = constraints.maxWidth < 720;
-                  if (isMobile) {
-                    return Column(
-                      children: [
-                        for (var i = 0; i < assignedHelicopters.length; i++)
-                          Padding(
-                            padding: EdgeInsets.only(
-                              bottom: i == assignedHelicopters.length - 1 ? 0 : 12,
-                            ),
-                            child: _HelicopterOverviewCard(
-                              helicopter: assignedHelicopters[i],
-                              licenseCount: auth.licenses
-                                  .where(
-                                    (item) =>
-                                        item.helicopterTypeId ==
-                                        assignedHelicopters[i].id,
-                                  )
-                                  .length,
-                              privilegeCount: auth.privileges
-                                  .where(
-                                    (item) =>
-                                        item.helicopterTypeId ==
-                                        assignedHelicopters[i].id,
-                                  )
-                                  .length,
-                              crewCount: auth.crewAssignments
-                                  .where(
-                                    (item) =>
-                                        item.helicopterTypeId ==
-                                        assignedHelicopters[i].id,
-                                  )
-                                  .length,
-                              onTap: () => context.go(
-                                '/helicopters/${assignedHelicopters[i].id}',
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Stato Currency',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isMobile = constraints.maxWidth < 500;
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < currencyCards.length; i++)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                bottom: i == currencyCards.length - 1 ? 0 : 12,
                               ),
+                              child: currencyCards[i],
+                            ),
+                        ],
+                      );
+                    }
+                    return Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        for (final card in currencyCards)
+                          SizedBox(width: 300, child: card),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Azioni rapide',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isMobile = constraints.maxWidth < 500;
+                    if (isMobile) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < quickActions.length; i++)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                bottom: i == quickActions.length - 1 ? 0 : 8,
+                              ),
+                              child: _DashboardActionButton(
+                                data: quickActions[i],
+                              ),
+                            ),
+                        ],
+                      );
+                    }
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        for (final action in quickActions)
+                          SizedBox(
+                            width: 220,
+                            child: _DashboardActionButton(
+                              data: action,
+                              compact: true,
                             ),
                           ),
                       ],
                     );
-                  }
-                  return Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      for (final helicopter in assignedHelicopters)
-                        SizedBox(
-                          width: 320,
-                          child: _HelicopterOverviewCard(
-                            helicopter: helicopter,
-                            licenseCount: auth.licenses
-                                .where(
-                                  (item) => item.helicopterTypeId == helicopter.id,
-                                )
-                                .length,
-                            privilegeCount: auth.privileges
-                                .where(
-                                  (item) => item.helicopterTypeId == helicopter.id,
-                                )
-                                .length,
-                            crewCount: auth.crewAssignments
-                                .where(
-                                  (item) => item.helicopterTypeId == helicopter.id,
-                                )
-                                .length,
-                            onTap: () => context.go('/helicopters/${helicopter.id}'),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-            ],
-            Text(
-              'Privilegi assegnati',
-              style: Theme.of(context).textTheme.titleLarge,
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Privilegi assegnati',
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                PrivilegeGridWidget(privileges: auth.privileges),
+              ],
             ),
-            const SizedBox(height: 12),
-            PrivilegeGridWidget(privileges: auth.privileges),
-          ],
+          ),
         ),
       ),
     );
@@ -397,8 +381,6 @@ class _UserHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initials = _buildInitials('${user.nome} ${user.cognome}');
-
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -421,38 +403,21 @@ class _UserHeaderCard extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isMobile = constraints.maxWidth < 420;
-            final avatar = Container(
-              width: 62,
-              height: 62,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.accent, AppColors.primary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                initials,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            );
+            final avatar = UserAvatar(user: user, radius: 31);
 
             final info = Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
                   'Benvenuto ${user.nome}',
                   style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   user.orgUnitName,
                   style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -461,7 +426,18 @@ class _UserHeaderCard extends StatelessWidget {
                     color: AppColors.textSecondary,
                     fontWeight: FontWeight.w600,
                   ),
+                  textAlign: TextAlign.center,
                 ),
+                if (user.email != null && user.email!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    user.email!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ],
             );
 
@@ -492,7 +468,7 @@ class _UserHeaderCard extends StatelessWidget {
 
             if (isMobile) {
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Row(
                     children: [
@@ -689,100 +665,4 @@ class _CurrencyMetaLine extends StatelessWidget {
       ],
     );
   }
-}
-
-class _HelicopterOverviewCard extends StatelessWidget {
-  const _HelicopterOverviewCard({
-    required this.helicopter,
-    required this.licenseCount,
-    required this.privilegeCount,
-    required this.crewCount,
-    required this.onTap,
-  });
-
-  final HelicopterType helicopter;
-  final int licenseCount;
-  final int privilegeCount;
-  final int crewCount;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final catalog = catalogForHelicopter(helicopter);
-    final accent = catalogAccent(helicopter.code);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                accent.withValues(alpha: 0.12),
-                AppColors.surface,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (catalog.imageAsset != null)
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.asset(catalog.imageAsset!, fit: BoxFit.cover),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      helicopter.name,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      catalog.subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: accent,
-                          ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        Chip(label: Text('$licenseCount licenze')),
-                        Chip(label: Text('$privilegeCount privilegi')),
-                        Chip(label: Text('$crewCount ruoli equipaggio')),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-String _buildInitials(String value) {
-  final parts = value
-      .split(RegExp(r'\s+'))
-      .where((part) => part.trim().isNotEmpty)
-      .toList();
-  if (parts.isEmpty) {
-    return 'AV';
-  }
-  if (parts.length == 1) {
-    return parts.first.substring(0, 1).toUpperCase();
-  }
-  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-      .toUpperCase();
 }

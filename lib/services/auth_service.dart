@@ -6,10 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
 import 'notification_service.dart';
+import 'user_service.dart';
 
 class AuthService {
   final _db = GhDbService();
   final _notificationService = NotificationService();
+  final _userService = UserService();
 
   String _normalizeUsername(String value) => value.trim().toLowerCase();
 
@@ -72,6 +74,7 @@ class AuthService {
     required String nome,
     required String cognome,
     required String numeroLicenza,
+    required String email,
   }) async {
     final users = _db.users;
     final licenseNumber = numeroLicenza.trim().toUpperCase();
@@ -94,6 +97,8 @@ class AuthService {
       'nome': nome,
       'cognome': cognome,
       'numero_licenza': normalizedLicense,
+      'email': email.trim().toLowerCase(),
+      'profile_photo_base64': null,
       'org_unit_id': null,
       'role': 'user',
       'is_approved': false,
@@ -156,6 +161,10 @@ class AuthService {
       'updated_at': DateTime.now().toIso8601String(),
     };
     await _db.saveUsers(users);
+  }
+
+  Future<void> updateProfile(UserProfile profile) async {
+    await _userService.updateProfile(profile);
   }
 
   String _generateId() {

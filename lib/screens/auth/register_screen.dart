@@ -7,6 +7,7 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../services/user_service.dart';
+import '../../widgets/privilege_selection_dialog.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -22,6 +23,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _cognomeCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _licenseCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
 
   final List<Map<String, dynamic>> _pendingLicenses = [];
   final List<Map<String, dynamic>> _pendingCrew = [];
@@ -37,7 +39,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _cognomeCtrl.dispose();
     _passwordCtrl.dispose();
     _licenseCtrl.dispose();
+    _emailCtrl.dispose();
     super.dispose();
+  }
+
+  String? _validateInstitutionalEmail(String? value) {
+    final email = value?.trim().toLowerCase() ?? '';
+    if (email.isEmpty) {
+      return 'Campo obbligatorio';
+    }
+    if (!email.endsWith('@esercito.difesa.it')) {
+      return 'Usa un indirizzo @esercito.difesa.it';
+    }
+    return null;
   }
 
   Future<void> _register() async {
@@ -58,6 +72,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       nome: _nomeCtrl.text.trim(),
       cognome: _cognomeCtrl.text.trim(),
       numeroLicenza: numeroLicenza,
+      email: _emailCtrl.text.trim().toLowerCase(),
     );
 
     if (!mounted) {
@@ -81,6 +96,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         auth.userProfile!.copyWith(
           username: numeroLicenza,
           numeroLicenza: numeroLicenza,
+          email: _emailCtrl.text.trim().toLowerCase(),
           orgUnitId: _orgUnitId,
         ),
       );
@@ -343,94 +359,43 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     setState(() => _pendingCrew.add(result));
   }
 
-  Future<void> _addPrivilege(
+  Map<int, Set<int>> _pendingPrivilegesByHelicopter() {
+    final map = <int, Set<int>>{};
+    for (final item in _pendingPrivileges) {
+      final helicopterId = item['helicopter_type_id'] as int;
+      final privilegeId = item['privilege_type_id'] as int;
+      map.putIfAbsent(helicopterId, () => <int>{}).add(privilegeId);
+    }
+    return map;
+  }
+
+  Future<void> _managePrivileges(
     List<HelicopterType> helicopterTypes,
     List<PrivilegeType> privilegeTypes,
   ) async {
-    final helicopterItems = helicopterTypes
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-    final privilegeItems = privilegeTypes
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showPrivilegeSelectionDialog(
       context: context,
-      builder: (dialogContext) {
-        int? helicopterId;
-        int? privilegeTypeId;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Aggiungi privilegio'),
-            scrollable: true,
-            content: _buildDialogContent([
-              DropdownButtonFormField<int>(
-                initialValue: helicopterId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Elicottero'),
-                items: helicopterItems,
-                onChanged: (value) =>
-                    setDialogState(() => helicopterId = value),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: privilegeTypeId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(
-                  labelText: 'Privilegio manutentivo',
-                ),
-                items: privilegeItems,
-                onChanged: (value) =>
-                    setDialogState(() => privilegeTypeId = value),
-              ),
-            ]),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                style: _dialogActionStyle(),
-                onPressed: () {
-                  if (helicopterId == null || privilegeTypeId == null) {
-                    return;
-                  }
-                  Navigator.of(dialogContext).pop({
-                    'helicopter_type_id': helicopterId,
-                    'privilege_type_id': privilegeTypeId,
-                  });
-                },
-                child: const Text('Aggiungi'),
-              ),
-            ],
-          ),
-        );
-      },
+      helicopterTypes: helicopterTypes,
+      privilegeTypes: privilegeTypes,
+      selectionsByHelicopter: _pendingPrivilegesByHelicopter(),
+      title: 'Seleziona privilegi manutentivi',
     );
 
     if (result == null || !mounted) {
       return;
     }
 
-    final exists = _pendingPrivileges.any(
-      (item) =>
-          item['helicopter_type_id'] == result['helicopter_type_id'] &&
-          item['privilege_type_id'] == result['privilege_type_id'],
-    );
-    if (exists) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Privilegio già presente.')));
-      return;
-    }
-
-    setState(() => _pendingPrivileges.add(result));
+    setState(() {
+      _pendingPrivileges.removeWhere(
+        (item) => item['helicopter_type_id'] == result.helicopterTypeId,
+      );
+      for (final privilegeTypeId in result.selectedPrivilegeTypeIds) {
+        _pendingPrivileges.add({
+          'helicopter_type_id': result.helicopterTypeId,
+          'privilege_type_id': privilegeTypeId,
+        });
+      }
+    });
   }
 
   Future<void> _addTobCapability(
@@ -649,6 +614,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
+                        controller: _emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'Email istituzionale',
+                          hintText: 'nome.cognome@esercito.difesa.it',
+                        ),
+                        validator: _validateInstitutionalEmail,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
                         controller: _passwordCtrl,
                         obscureText: _obscure,
                         decoration: InputDecoration(
@@ -737,10 +712,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       _PendingSection(
                         title: 'Privilegi Manutentivi',
                         itemCount: _pendingPrivileges.length,
-                        emptyText: 'Nessun privilegio aggiunto.',
+                        emptyText: 'Nessun privilegio selezionato.',
                         onAdd: () =>
-                            _addPrivilege(helicopterTypes, privilegeTypes),
-                        addLabel: 'Aggiungi privilegio',
+                            _managePrivileges(helicopterTypes, privilegeTypes),
+                        addLabel: 'Gestisci privilegi',
                         children: _pendingPrivileges
                             .asMap()
                             .entries
@@ -845,15 +820,12 @@ class _PendingSection extends StatelessWidget {
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 16),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        title: Text('$title ($itemCount)'),
+        title: Text('$title ($itemCount)', textAlign: TextAlign.center),
         children: [
           if (children.isEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(emptyText),
-              ),
+              child: Text(emptyText, textAlign: TextAlign.center),
             )
           else
             ...children,

@@ -8,8 +8,6 @@ class HelicopterCatalogEntry {
   final String subtitle;
   final String description;
   final String? imageAsset;
-  final String? normalModelAsset;
-  final String? hologramModelAsset;
   final List<(String label, String value)> specs;
 
   const HelicopterCatalogEntry({
@@ -18,8 +16,6 @@ class HelicopterCatalogEntry {
     required this.subtitle,
     required this.description,
     this.imageAsset,
-    this.normalModelAsset,
-    this.hologramModelAsset,
     required this.specs,
   });
 }
@@ -32,8 +28,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Velivolo leggero storico della linea AVES, adatto a collegamento, osservazione, mantenimento capacità basiche e supporto addestrativo.',
     imageAsset: 'assets/images/helicopters/ab206.jpg',
-    normalModelAsset: 'assets/models/helicopters/ab206_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/ab206_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero leggero utility'),
       ('Propulsione', 'Monoturbina'),
@@ -49,8 +43,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Macchina robusta e polivalente, impiegata per trasporto leggero, supporto operativo, addestramento e missioni di utility generale.',
     imageAsset: 'assets/images/helicopters/uh205.jpg',
-    normalModelAsset: 'assets/models/helicopters/uh205_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/uh205_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero utility medio'),
       ('Propulsione', 'Monoturbina'),
@@ -66,8 +58,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Configurazione ideale per familiarizzazione operativa, training e missioni utility leggere. Cabina digitale, profilo moderno e impiego versatile.',
     imageAsset: 'assets/images/helicopters/aw169b.jpg',
-    normalModelAsset: 'assets/models/helicopters/uh169b_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/uh169b_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero utility leggero'),
       ('Propulsione', 'Bimotore'),
@@ -83,8 +73,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Versione orientata all’impiego operativo, con configurazione adatta a missioni utility, supporto tattico e profili avanzati su piattaforma moderna.',
     imageAsset: 'assets/images/helicopters/aw169d.jpg',
-    normalModelAsset: 'assets/models/helicopters/uh169d_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/uh169d_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero multiruolo'),
       ('Propulsione', 'Bimotore'),
@@ -100,8 +88,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Elicottero bimotore digitale adatto a missioni tattiche, trasporto, supporto e proiezione operativa con elevato livello di integrazione avionica.',
     imageAsset: 'assets/images/helicopters/nh90.jpg',
-    normalModelAsset: 'assets/models/helicopters/nh90_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/nh90_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero tattico multiruolo'),
       ('Propulsione', 'Bimotore'),
@@ -117,8 +103,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Configurazione dedicata a ricognizione armata, protezione, supporto tattico e missioni ad alta manovrabilità nel dominio operativo AVES.',
     imageAsset: 'assets/images/helicopters/aw129.jpg',
-    normalModelAsset: 'assets/models/helicopters/aw129_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/aw129_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero da attacco'),
       ('Propulsione', 'Bimotore'),
@@ -134,8 +118,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Velivolo ad alta capacità per trasporto uomini, materiali e carichi esterni, ideale per missioni logistiche, recupero e supporto pesante.',
     imageAsset: 'assets/images/helicopters/ch47.jpg',
-    normalModelAsset: 'assets/models/helicopters/ch47_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/ch47_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero heavy lift'),
       ('Propulsione', 'Bimotore tandem'),
@@ -151,8 +133,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Elicottero leggero e veloce, utilizzabile per collegamento, utility rapida, ricognizione e supporto missione con impronta compatta.',
     imageAsset: 'assets/images/helicopters/aw109.jpg',
-    normalModelAsset: 'assets/models/helicopters/aw109_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/aw109_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero leggero bimotore'),
       ('Propulsione', 'Bimotore'),
@@ -168,8 +148,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         'Versione bimotore del classico UH-1, dotata di due turbine Pratt & Whitney PT6T-3 in una caratteristica navicella gemella. Impiegato per trasporto, SAR, supporto tattico e ricerca in ambito AVES.',
     imageAsset: 'assets/images/helicopters/ab212.jpg',
-    normalModelAsset: 'assets/models/helicopters/ab212_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/ab212_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero utility medio'),
       ('Propulsione', 'Biturbina PT6T-3 accoppiata'),
@@ -185,8 +163,6 @@ const _catalog = <String, HelicopterCatalogEntry>{
     description:
         "Evoluzione dell'AB-212 con rotore quadripala semi-rigido in materiale composito. Impronta acustica ridotta, migliori prestazioni e carico utile aumentato. Impiegato per SAR, trasporto tattico e supporto logistico.",
     imageAsset: 'assets/images/helicopters/ab412.jpg',
-    normalModelAsset: 'assets/models/helicopters/ab412_normal.glb',
-    hologramModelAsset: 'assets/models/helicopters/ab412_hologram.glb',
     specs: [
       ('Categoria', 'Elicottero utility medio-pesante'),
       ('Propulsione', 'Biturbina PT6T-3B'),
@@ -205,10 +181,6 @@ HelicopterCatalogEntry catalogForHelicopter(HelicopterType helicopter) {
         subtitle: 'Piattaforma assegnata al profilo utente',
         description:
             'Scheda sintetica del velivolo con qualifiche, ruoli equipaggio e privilegi associati al tuo profilo.',
-        normalModelAsset:
-            'assets/models/helicopters/${helicopter.code.toLowerCase()}_normal.glb',
-        hologramModelAsset:
-            'assets/models/helicopters/${helicopter.code.toLowerCase()}_hologram.glb',
         specs: [
           ('Codice', helicopter.code),
           ('Denominazione', helicopter.name),

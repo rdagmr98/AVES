@@ -4,6 +4,8 @@ class UserProfile {
   final String cognome;
   final String? username;
   final String? numeroLicenza;
+  final String? email;
+  final String? profilePhotoBase64;
   final int? orgUnitId;
   final String orgUnitName;
   final String role;
@@ -19,6 +21,8 @@ class UserProfile {
     required this.cognome,
     this.username,
     this.numeroLicenza,
+    this.email,
+    this.profilePhotoBase64,
     this.orgUnitId,
     this.orgUnitName = '',
     required this.role,
@@ -30,6 +34,11 @@ class UserProfile {
   });
 
   String get fullName => '$cognome $nome'.trim();
+  bool get hasInstitutionalEmail =>
+      email != null &&
+      email!.trim().toLowerCase().endsWith('@esercito.difesa.it');
+  bool get hasProfilePhoto =>
+      profilePhotoBase64 != null && profilePhotoBase64!.trim().isNotEmpty;
   bool get isAdminPriv => role == 'admin_priv';
   bool get isAdminCrew => role == 'admin_crew';
   bool get isAdmin => isAdminPriv || isAdminCrew;
@@ -41,6 +50,8 @@ class UserProfile {
     cognome: j['cognome'] as String? ?? '',
     username: j['username'] as String?,
     numeroLicenza: j['numero_licenza'] as String?,
+    email: j['email'] as String?,
+    profilePhotoBase64: j['profile_photo_base64'] as String?,
     orgUnitId: j['org_unit_id'] as int?,
     orgUnitName:
         (j['org_units'] as Map<String, dynamic>?)?['name'] as String? ?? '',
@@ -61,6 +72,8 @@ class UserProfile {
     'cognome': cognome,
     'username': username,
     'numero_licenza': numeroLicenza,
+    'email': email,
+    'profile_photo_base64': profilePhotoBase64,
     'org_unit_id': orgUnitId,
     'role': role,
     'is_approved': isApproved,
@@ -73,6 +86,8 @@ class UserProfile {
     String? cognome,
     String? username,
     String? numeroLicenza,
+    String? email,
+    String? profilePhotoBase64,
     int? orgUnitId,
     String? orgUnitName,
     String? role,
@@ -85,6 +100,8 @@ class UserProfile {
     cognome: cognome ?? this.cognome,
     username: username ?? this.username,
     numeroLicenza: numeroLicenza ?? this.numeroLicenza,
+    email: email ?? this.email,
+    profilePhotoBase64: profilePhotoBase64 ?? this.profilePhotoBase64,
     orgUnitId: orgUnitId ?? this.orgUnitId,
     orgUnitName: orgUnitName ?? this.orgUnitName,
     role: role ?? this.role,

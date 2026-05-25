@@ -22,7 +22,9 @@ dependencies:
   shared_preferences: ^2.3.3
   uuid: ^4.5.1
   pdf: ^3.11.0
-  model_viewer_plus: ^1.10.0
+  url_launcher: ^6.3.1
+  image_picker: ^1.1.2
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:
@@ -34,4 +36,3 @@ flutter:
   assets:
     - assets/images/aves_logo.png
     - assets/images/helicopters/
-    - assets/models/helicopters/
