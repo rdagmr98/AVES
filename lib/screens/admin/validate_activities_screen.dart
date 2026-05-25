@@ -14,7 +14,7 @@ class ValidateActivitiesScreen extends ConsumerStatefulWidget {
       _ValidateActivitiesScreenState();
 }
 
-enum _ValidationTabType { maintenance, flight, tob }
+enum _ValidationTabType { maintenance, seminar, flight, tob }
 
 class _ValidateActivitiesScreenState
     extends ConsumerState<ValidateActivitiesScreen>
@@ -25,6 +25,7 @@ class _ValidateActivitiesScreenState
   late final List<_ValidationTabType> _tabs;
   bool _loading = true;
   List<MaintenanceActivity> _maintenance = [];
+  List<SeminarActivity> _seminars = [];
   List<FlightActivity> _flight = [];
   List<TobActivity> _tob = [];
 
@@ -33,12 +34,13 @@ class _ValidateActivitiesScreenState
     super.initState();
     final auth = ref.read(authProvider);
     if (auth.isAdminPriv) {
-      _tabs = const [_ValidationTabType.maintenance];
+      _tabs = const [_ValidationTabType.maintenance, _ValidationTabType.seminar];
     } else if (auth.isAdminCrew) {
       _tabs = const [_ValidationTabType.flight, _ValidationTabType.tob];
     } else {
       _tabs = const [
         _ValidationTabType.maintenance,
+        _ValidationTabType.seminar,
         _ValidationTabType.flight,
         _ValidationTabType.tob,
       ];
@@ -58,6 +60,9 @@ class _ValidateActivitiesScreenState
     final maintenance = _tabs.contains(_ValidationTabType.maintenance)
         ? await _service.getPendingMaintenanceActivities()
         : <MaintenanceActivity>[];
+    final seminars = _tabs.contains(_ValidationTabType.seminar)
+        ? await _service.getPendingSeminarActivities()
+        : <SeminarActivity>[];
     final flight = _tabs.contains(_ValidationTabType.flight)
         ? await _service.getPendingFlightActivities()
         : <FlightActivity>[];
@@ -69,6 +74,7 @@ class _ValidateActivitiesScreenState
     }
     setState(() {
       _maintenance = maintenance;
+      _seminars = seminars;
       _flight = flight;
       _tob = tob;
       _loading = false;
@@ -82,6 +88,24 @@ class _ValidateActivitiesScreenState
     }
     try {
       await _service.validateMaintenanceActivity(id, adminId);
+      await _load();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _validateSeminar(int id) async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) {
+      return;
+    }
+    try {
+      await _service.validateSeminarActivity(id, adminId);
       await _load();
     } catch (e) {
       if (!mounted) {
@@ -142,6 +166,7 @@ class _ValidateActivitiesScreenState
                 (tab) => Tab(
                   text: switch (tab) {
                     _ValidationTabType.maintenance => 'Manutenzione',
+                    _ValidationTabType.seminar => 'Seminari',
                     _ValidationTabType.flight => 'Volo',
                     _ValidationTabType.tob => 'TOB',
                   },
@@ -175,6 +200,20 @@ class _ValidateActivitiesScreenState
           onValidate: (item) => _validateMaintenance(item.id!),
           onReject: (item) async {
             await _service.rejectMaintenanceActivity(item.id!);
+            await _load();
+          },
+        );
+      case _ValidationTabType.seminar:
+        return _ValidationList<SeminarActivity>(
+          items: _seminars,
+          titleBuilder: (item) =>
+              '${item.userFullName} · ${item.userLicenza}',
+          subtitleBuilder: (item) =>
+              'Seminario NAM/MHF\n${item.description ?? 'Nessuna descrizione'}',
+          dateBuilder: (item) => item.seminarDate,
+          onValidate: (item) => _validateSeminar(item.id!),
+          onReject: (item) async {
+            await _service.rejectSeminarActivity(item.id!);
             await _load();
           },
         );

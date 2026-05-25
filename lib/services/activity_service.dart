@@ -110,6 +110,12 @@ class ActivityService {
     'user_profiles': _findUser(item['user_id'] as String),
   });
 
+  SeminarActivity _toSeminar(Map<String, dynamic> item) =>
+      SeminarActivity.fromJson({
+        ...item,
+        'user_profiles': _findUser(item['user_id'] as String),
+      });
+
   Future<void> addMaintenanceActivity(MaintenanceActivity act) async {
     final rows = _db.maintenanceActs;
     final now = DateTime.now().toIso8601String();
@@ -490,12 +496,146 @@ class ActivityService {
     return _toTob(items.first);
   }
 
+  Future<void> addSeminarActivity(SeminarActivity act) async {
+    final rows = _db.seminars;
+    final now = DateTime.now().toIso8601String();
+    rows.add({
+      'id': _nextId(rows),
+      ...act.toInsertJson(),
+      'is_validated': false,
+      'validated_by': null,
+      'validated_at': null,
+      'created_at': now,
+    });
+    await _db.saveSeminars(rows);
+    await _notifications.notifyMaintenanceAdmins(
+      type: 'SEMINAR_PENDING',
+      message:
+          'Seminario NAM/MHF da validare: ${_userName(act.userId)} · ${_formatDate(act.seminarDate)}.',
+    );
+  }
+
+  Future<void> addSeminarActivityValidated(
+    SeminarActivity act,
+    String adminId,
+  ) async {
+    final rows = _db.seminars;
+    final now = DateTime.now().toIso8601String();
+    rows.add({
+      'id': _nextId(rows),
+      ...act.toInsertJson(),
+      'is_validated': true,
+      'validated_by': adminId,
+      'validated_at': now,
+      'created_at': now,
+    });
+    await _db.saveSeminars(rows);
+    await _notifications.createNotification(
+      userId: act.userId,
+      type: 'SEMINAR_INSERTED_BY_ADMIN',
+      message:
+          'Seminario NAM/MHF inserito e validato dall\'admin: ${_formatDate(act.seminarDate)}.',
+    );
+  }
+
+  Future<void> validateSeminarActivity(int id, String adminId) async {
+    final rows = _db.seminars;
+    final index = rows.indexWhere((item) => item['id'] == id);
+    if (index == -1) throw Exception('Seminario non trovato');
+    final activity = _toSeminar(rows[index]);
+    rows[index] = {
+      ...rows[index],
+      'is_validated': true,
+      'validated_by': adminId,
+      'validated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveSeminars(rows);
+    await _notifications.createNotification(
+      userId: activity.userId,
+      type: 'SEMINAR_VALIDATED',
+      message:
+          'Seminario NAM/MHF approvato: ${_formatDate(activity.seminarDate)}.',
+    );
+  }
+
+  Future<void> rejectSeminarActivity(int id) async {
+    final current = _db.seminars.firstWhere(
+      (item) => item['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
+    final rows = _db.seminars.where((item) => item['id'] != id).toList();
+    await _db.saveSeminars(rows);
+    if (current.isNotEmpty) {
+      final activity = _toSeminar(current);
+      await _notifications.createNotification(
+        userId: activity.userId,
+        type: 'SEMINAR_REJECTED',
+        message:
+            'Seminario NAM/MHF non approvato: ${_formatDate(activity.seminarDate)}.',
+      );
+    }
+  }
+
+  Future<List<SeminarActivity>> getUserSeminarActivities(String userId) async {
+    final items = _db.seminars.where((item) => item['user_id'] == userId).toList()
+      ..sort(
+        (a, b) => _parseDate(b, 'seminar_date').compareTo(
+          _parseDate(a, 'seminar_date'),
+        ),
+      );
+    return items.map(_toSeminar).toList();
+  }
+
+  Future<List<SeminarActivity>> getPendingSeminarActivities() async {
+    final items = _db.seminars
+        .where((item) => item['is_validated'] != true)
+        .toList()
+      ..sort(
+        (a, b) => DateTime.parse(
+          b['created_at'] as String? ?? b['seminar_date'] as String,
+        ).compareTo(
+          DateTime.parse(
+            a['created_at'] as String? ?? a['seminar_date'] as String,
+          ),
+        ),
+      );
+    return items.map(_toSeminar).toList();
+  }
+
+  Future<SeminarActivity?> getLastValidatedSeminar(String userId) async {
+    final items = _db.seminars
+        .where((item) => item['user_id'] == userId && item['is_validated'] == true)
+        .toList()
+      ..sort(
+        (a, b) => _parseDate(b, 'seminar_date').compareTo(
+          _parseDate(a, 'seminar_date'),
+        ),
+      );
+    if (items.isEmpty) return null;
+    return _toSeminar(items.first);
+  }
+
+  Future<List<SeminarActivity>> getAllSeminarActivities() async {
+    final items = _db.seminars.toList()
+      ..sort(
+        (a, b) => DateTime.parse(
+          b['created_at'] as String? ?? b['seminar_date'] as String,
+        ).compareTo(
+          DateTime.parse(
+            a['created_at'] as String? ?? a['seminar_date'] as String,
+          ),
+        ),
+      );
+    return items.map(_toSeminar).toList();
+  }
+
   Future<int> getPendingActivitiesCount() async {
     final maintenance = _db.maintenanceActs.where(
       (item) => item['is_validated'] != true,
     );
     final flight = _db.flightActs.where((item) => item['is_validated'] != true);
     final tob = _db.tobActs.where((item) => item['is_validated'] != true);
-    return maintenance.length + flight.length + tob.length;
+    final seminars = _db.seminars.where((item) => item['is_validated'] != true);
+    return maintenance.length + flight.length + tob.length + seminars.length;
   }
 }

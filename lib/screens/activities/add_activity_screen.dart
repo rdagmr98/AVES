@@ -21,6 +21,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   final _maintenanceDescCtrl = TextEditingController();
   final _flightDescCtrl = TextEditingController();
   final _tobDescCtrl = TextEditingController();
+  final _seminarDescCtrl = TextEditingController();
   final _flightHoursCtrl = TextEditingController();
 
   late final TabController _tabController;
@@ -39,13 +40,14 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   int? _tobHelicopterId;
   int? _tobCapabilityId;
   DateTime _tobDate = DateTime.now();
+  DateTime _seminarDate = DateTime.now();
 
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -56,6 +58,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
     _maintenanceOrdLavCtrl.dispose();
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
+    _seminarDescCtrl.dispose();
     _flightHoursCtrl.dispose();
     _tabController.dispose();
     super.dispose();
@@ -171,6 +174,36 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
     }
   }
 
+  Future<void> _submitSeminar(UserProfile user) async {
+    setState(() => _saving = true);
+    try {
+      await _service.addSeminarActivity(
+        SeminarActivity(
+          userId: user.id,
+          seminarType: 'NAM_MHF',
+          seminarDate: _seminarDate,
+          description: _seminarDescCtrl.text.trim().isEmpty
+              ? null
+              : _seminarDescCtrl.text.trim(),
+          submittedBy: user.id,
+        ),
+      );
+      if (mounted) {
+        setState(() => _saving = false);
+        _seminarDescCtrl.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Seminario inviato per la validazione.'),
+          ),
+        );
+        context.go('/activities/my');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _saving = false);
+      _showMessage(e.toString());
+    }
+  }
+
   void _finishSubmit() {
     setState(() {
       _saving = false;
@@ -272,6 +305,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             Tab(text: 'Manutenzione'),
             Tab(text: 'Volo'),
             Tab(text: 'TOB'),
+            Tab(text: 'Seminario NAM/MHF'),
           ],
         ),
       ),
@@ -496,6 +530,49 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                           child: CircularProgressIndicator(strokeWidth: 2.2),
                         )
                       : const Text('Invia attività TOB'),
+                ),
+              ],
+            ),
+          ),
+          _ActivityTab(
+            enabled: auth.privileges.isNotEmpty,
+            disabledMessage: 'Nessun privilegio manutentivo assegnato.',
+            child: _ActivityFormCard(
+              children: [
+                Text(
+                  'Aggiornamento Seminario NAM e MHF',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Inserisci la partecipazione al seminario biennale di Normativa Aeronautica Militare (NAM) e Military Human Factor (MHF) come da AER P 2005.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                _DateSelector(
+                  label: 'Data seminario',
+                  date: _seminarDate,
+                  onPressed: () =>
+                      _pickDate((value) => _seminarDate = value, _seminarDate),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _seminarDescCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Note (opzionale)',
+                    hintText: 'es. Sede: CAAE Viterbo - Nr. ordine giornale ...',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _saving ? null : () => _submitSeminar(user),
+                  child: _saving
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                        )
+                      : const Text('Invia richiesta seminario NAM/MHF'),
                 ),
               ],
             ),

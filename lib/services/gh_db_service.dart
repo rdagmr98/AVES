@@ -43,6 +43,7 @@ class GhDbService {
       _loadFile('pta.json'),
       _loadFile('pta_acknowledgments.json'),
       _loadFile('account_deletion_requests.json'),
+      _loadFile('seminars.json'),
     ]);
   }
 
@@ -85,6 +86,9 @@ class GhDbService {
   dynamic _emptyDataFor(String fileName) {
     if (fileName == 'reference.json') {
       return <String, dynamic>{};
+    }
+    if (fileName == 'seminars.json') {
+      return <dynamic>[];
     }
     return <dynamic>[];
   }
@@ -188,6 +192,12 @@ class GhDbService {
 
   Future<void> saveTobActs(List<Map<String, dynamic>> data) =>
       _writeFile('tob_acts.json', data, 'aggiornamento attività TOB');
+
+  List<Map<String, dynamic>> get seminars =>
+      List<Map<String, dynamic>>.from(_getData('seminars.json') as List? ?? []);
+
+  Future<void> saveSeminars(List<Map<String, dynamic>> data) =>
+      _writeFile('seminars.json', data, 'aggiornamento seminari NAM/MHF');
 
   List<Map<String, dynamic>> get criteria =>
       List<Map<String, dynamic>>.from(_getData('criteria.json') as List? ?? []);

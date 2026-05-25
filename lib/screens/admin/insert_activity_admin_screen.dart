@@ -18,7 +18,14 @@ class InsertActivityAdminScreen extends ConsumerStatefulWidget {
       _InsertActivityAdminScreenState();
 }
 
-enum _AdminInsertTabType { workOrder, maintenance, flight, tob, crewFlight }
+enum _AdminInsertTabType {
+  workOrder,
+  maintenance,
+  seminar,
+  flight,
+  tob,
+  crewFlight,
+}
 
 class _InsertActivityAdminScreenState
     extends ConsumerState<InsertActivityAdminScreen>
@@ -31,6 +38,7 @@ class _InsertActivityAdminScreenState
   final _maintenanceOrdLavCtrl = TextEditingController();
   final _flightDescCtrl = TextEditingController();
   final _tobDescCtrl = TextEditingController();
+  final _seminarDescCtrl = TextEditingController();
   final _flightHoursCtrl = TextEditingController();
   final _crewFlightHoursCtrl = TextEditingController();
   final _crewFlightDescCtrl = TextEditingController();
@@ -60,6 +68,7 @@ class _InsertActivityAdminScreenState
   int? _tobHelicopterId;
   int? _tobCapabilityId;
   DateTime _tobDate = DateTime.now();
+  DateTime _seminarDate = DateTime.now();
 
   int? _workOrderHelicopterId;
   DateTime _workOrderDate = DateTime.now();
@@ -78,6 +87,7 @@ class _InsertActivityAdminScreenState
       _tabs = const [
         _AdminInsertTabType.workOrder,
         _AdminInsertTabType.maintenance,
+        _AdminInsertTabType.seminar,
       ];
     } else if (auth.isAdminCrew) {
       _tabs = const [
@@ -88,6 +98,7 @@ class _InsertActivityAdminScreenState
     } else {
       _tabs = const [
         _AdminInsertTabType.maintenance,
+        _AdminInsertTabType.seminar,
         _AdminInsertTabType.flight,
         _AdminInsertTabType.tob,
       ];
@@ -105,6 +116,7 @@ class _InsertActivityAdminScreenState
     _maintenanceOrdLavCtrl.dispose();
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
+    _seminarDescCtrl.dispose();
     _flightHoursCtrl.dispose();
     _crewFlightHoursCtrl.dispose();
     _crewFlightDescCtrl.dispose();
@@ -263,6 +275,37 @@ class _InsertActivityAdminScreenState
           description: _tobDescCtrl.text.trim().isEmpty
               ? null
               : _tobDescCtrl.text.trim(),
+          submittedBy: adminId,
+        ),
+        adminId,
+      );
+      _finish();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Future<void> _submitSeminar() async {
+    final user = _selectedUser;
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (user == null || adminId == null) {
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _activityService.addSeminarActivityValidated(
+        SeminarActivity(
+          userId: user.id,
+          seminarType: 'NAM_MHF',
+          seminarDate: _seminarDate,
+          description: _seminarDescCtrl.text.trim().isEmpty
+              ? null
+              : _seminarDescCtrl.text.trim(),
           submittedBy: adminId,
         ),
         adminId,
@@ -720,6 +763,7 @@ class _InsertActivityAdminScreenState
                   text: switch (tab) {
                     _AdminInsertTabType.workOrder => 'Ordine di Lavoro',
                     _AdminInsertTabType.maintenance => 'Manutenzione',
+                    _AdminInsertTabType.seminar => 'Seminario',
                     _AdminInsertTabType.flight => 'Volo',
                     _AdminInsertTabType.tob => 'TOB',
                     _AdminInsertTabType.crewFlight => 'Volo Equipaggio',
@@ -740,6 +784,7 @@ class _InsertActivityAdminScreenState
                     final currentTab = _tabs[_tabController.index];
                     final needsUserSelector =
                         currentTab == _AdminInsertTabType.maintenance ||
+                        currentTab == _AdminInsertTabType.seminar ||
                         currentTab == _AdminInsertTabType.flight ||
                         currentTab == _AdminInsertTabType.tob;
                     if (!needsUserSelector) {
@@ -1185,6 +1230,47 @@ class _InsertActivityAdminScreenState
                                       ? null
                                       : _submitMaintenance,
                                   child: const Text('Inserisci come validata'),
+                                ),
+                              ],
+                            ),
+                          );
+                        case _AdminInsertTabType.seminar:
+                          return _AdminActivityTab(
+                            enabled: _selectedUser != null && _privileges.isNotEmpty,
+                            child: _AdminActivityCard(
+                              children: [
+                                Text(
+                                  'Seminario NAM e MHF',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Inserisci direttamente un seminario biennale NAM/MHF già validato per l\'utente selezionato.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 16),
+                                _AdminDateButton(
+                                  label: 'Data seminario',
+                                  date: _seminarDate,
+                                  onPressed: () => _pickDate(
+                                    (value) => _seminarDate = value,
+                                    _seminarDate,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _seminarDescCtrl,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Note (opzionale)',
+                                    hintText:
+                                        'es. Sede: CAAE Viterbo - Nr. ordine giornale ...',
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton(
+                                  onPressed: _saving ? null : _submitSeminar,
+                                  child: const Text('Inserisci come validato'),
                                 ),
                               ],
                             ),

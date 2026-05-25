@@ -9,6 +9,18 @@ class UserService {
 
   String _normalizeUsername(String value) => value.trim().toLowerCase();
 
+  String? _normalizeMamlNumber(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final trimmed = value.trim().toUpperCase();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'[A-Z]{2}\d{6}').firstMatch(trimmed);
+    return match?.group(0) ?? trimmed;
+  }
+
   String? _userUsername(Map<String, dynamic> user) {
     final username = user['username'] as String?;
     if (username != null && username.trim().isNotEmpty) {
@@ -84,18 +96,22 @@ class UserService {
   }) async {
     final users = _db.users;
     final resolvedUsername = (username ?? numeroLicenza ?? '').trim();
-    if (resolvedUsername.isNotEmpty) {
-      final normalizedUsername = _normalizeUsername(resolvedUsername);
+    final normalizedResolvedUsername = resolvedUsername.isEmpty
+        ? null
+        : _normalizeMamlNumber(resolvedUsername) ?? resolvedUsername;
+    if (normalizedResolvedUsername != null) {
+      final normalizedUsername = _normalizeUsername(normalizedResolvedUsername);
       if (users.any((item) => _userUsername(item) == normalizedUsername)) {
         throw Exception('Username già registrato');
       }
     }
 
-    final normalizedLicense = numeroLicenza?.trim().toUpperCase();
+    final normalizedLicense = _normalizeMamlNumber(numeroLicenza);
     final normalizedStoredUsername = resolvedUsername.isEmpty
         ? null
         : (role == 'user'
-              ? resolvedUsername.toUpperCase()
+              ? (_normalizeMamlNumber(resolvedUsername) ??
+                    resolvedUsername.toUpperCase())
               : resolvedUsername.trim());
 
     final now = DateTime.now().toIso8601String();
@@ -126,9 +142,19 @@ class UserService {
       throw Exception('Utente non trovato');
     }
 
+    final normalizedLicense = _normalizeMamlNumber(profile.numeroLicenza);
+    final normalizedUsername = profile.username == null
+        ? null
+        : (profile.role == 'user'
+              ? (_normalizeMamlNumber(profile.username) ??
+                    profile.username!.trim().toUpperCase())
+              : profile.username!.trim());
+
     users[index] = {
       ...users[index],
       ...profile.toJson(),
+      'username': normalizedUsername,
+      'numero_licenza': normalizedLicense,
       'updated_at': DateTime.now().toIso8601String(),
     };
     await _db.saveUsers(users);

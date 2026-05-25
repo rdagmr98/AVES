@@ -56,13 +56,13 @@ class CurrencyStatus {
   String get statusText {
     switch (status) {
       case CurrencyStatusEnum.valid:
-        return 'VALIDA';
+        return 'GO';
       case CurrencyStatusEnum.warning:
         return 'IN SCADENZA';
       case CurrencyStatusEnum.expired:
-        return 'SCADUTA';
+        return 'NO GO';
       case CurrencyStatusEnum.suspended:
-        return 'SOSPESA PTA';
+        return 'NO GO – PTA';
       case CurrencyStatusEnum.noData:
         return 'NESSUN DATO';
     }
@@ -378,6 +378,73 @@ class TobActivity {
     'helicopter_type_id': helicopterTypeId,
     'tob_capability_id': tobCapabilityId,
     'activity_date': activityDate.toIso8601String().split('T').first,
+    'description': description,
+    'submitted_by': submittedBy,
+  };
+
+  String get status => isValidated ? 'validated' : 'pending';
+}
+
+class SeminarActivity {
+  final int? id;
+  final String userId;
+  final String seminarType;
+  final DateTime seminarDate;
+  final String? description;
+  final bool isValidated;
+  final String? validatedBy;
+  final DateTime? validatedAt;
+  final String? submittedBy;
+  final DateTime? createdAt;
+
+  final String userFullName;
+  final String userLicenza;
+
+  const SeminarActivity({
+    this.id,
+    required this.userId,
+    required this.seminarType,
+    required this.seminarDate,
+    this.description,
+    this.isValidated = false,
+    this.validatedBy,
+    this.validatedAt,
+    this.submittedBy,
+    this.createdAt,
+    this.userFullName = '',
+    this.userLicenza = '',
+  });
+
+  factory SeminarActivity.fromJson(Map<String, dynamic> j) => SeminarActivity(
+    id: j['id'] as int?,
+    userId: j['user_id'] as String,
+    seminarType: j['seminar_type'] as String? ?? 'NAM_MHF',
+    seminarDate: DateTime.parse(j['seminar_date'] as String),
+    description: j['description'] as String?,
+    isValidated: j['is_validated'] as bool? ?? false,
+    validatedBy: j['validated_by'] as String?,
+    validatedAt: j['validated_at'] != null
+        ? DateTime.parse(j['validated_at'] as String)
+        : null,
+    submittedBy: j['submitted_by'] as String?,
+    createdAt: j['created_at'] != null
+        ? DateTime.parse(j['created_at'] as String)
+        : null,
+    userFullName: () {
+      final u = j['user_profiles'] as Map<String, dynamic>?;
+      if (u == null) return '';
+      return '${u['cognome'] ?? ''} ${u['nome'] ?? ''}'.trim();
+    }(),
+    userLicenza:
+        (j['user_profiles'] as Map<String, dynamic>?)?['numero_licenza']
+            as String? ??
+        '',
+  );
+
+  Map<String, dynamic> toInsertJson() => {
+    'user_id': userId,
+    'seminar_type': seminarType,
+    'seminar_date': seminarDate.toIso8601String().split('T').first,
     'description': description,
     'submitted_by': submittedBy,
   };

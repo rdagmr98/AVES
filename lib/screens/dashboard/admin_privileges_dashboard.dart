@@ -418,7 +418,7 @@ class _AdminPrivilegesDashboardState
                                         ),
                                         DropdownMenuItem(
                                           value: 'valid',
-                                          child: Text('Valida'),
+                                          child: Text('GO'),
                                         ),
                                         DropdownMenuItem(
                                           value: 'warning',
@@ -426,7 +426,7 @@ class _AdminPrivilegesDashboardState
                                         ),
                                         DropdownMenuItem(
                                           value: 'expired',
-                                          child: Text('Scaduta'),
+                                          child: Text('NO GO'),
                                         ),
                                       ],
                                       onChanged: (value) => setState(

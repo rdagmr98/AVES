@@ -636,10 +636,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Numero licenza',
                         ),
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? 'Campo obbligatorio'
-                            : null,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Campo obbligatorio';
+                          }
+                          final cleaned = value.trim().toUpperCase();
+                          if (!RegExp(r'^[A-Z]{2}\d{6}$').hasMatch(cleaned)) {
+                            return 'Formato MAML non valido. Esempio: EI123456 (2 lettere + 6 cifre)';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
                       TextFormField(

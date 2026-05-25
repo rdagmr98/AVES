@@ -69,6 +69,21 @@ class MyActivitiesScreen extends ConsumerWidget {
                     )
                     .toList(),
               ),
+              _ActivitySection(
+                title: 'Seminari NAM/MHF',
+                children: data.seminars
+                    .map(
+                      (item) => _ActivityListTile(
+                        title: 'Seminario NAM/MHF',
+                        subtitle:
+                            item.description ??
+                            'Aggiornamento biennale NAM e MHF',
+                        date: item.seminarDate,
+                        isValidated: item.isValidated,
+                      ),
+                    )
+                    .toList(),
+              ),
             ],
           );
         },
@@ -81,10 +96,12 @@ class MyActivitiesScreen extends ConsumerWidget {
     final maintenance = await service.getUserMaintenanceActivities(userId);
     final flight = await service.getUserFlightActivities(userId);
     final tob = await service.getUserTobActivities(userId);
+    final seminars = await service.getUserSeminarActivities(userId);
     return _MyActivitiesData(
       maintenance: maintenance,
       flight: flight,
       tob: tob,
+      seminars: seminars,
     );
   }
 }
@@ -94,11 +111,13 @@ class _MyActivitiesData {
     required this.maintenance,
     required this.flight,
     required this.tob,
+    required this.seminars,
   });
 
   final List<MaintenanceActivity> maintenance;
   final List<FlightActivity> flight;
   final List<TobActivity> tob;
+  final List<SeminarActivity> seminars;
 }
 
 class _ActivitySection extends StatelessWidget {

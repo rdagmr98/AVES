@@ -74,7 +74,12 @@ class AuthService {
     required String numeroLicenza,
   }) async {
     final users = _db.users;
-    final normalizedUsername = _normalizeUsername(numeroLicenza);
+    final licenseNumber = numeroLicenza.trim().toUpperCase();
+    final mamlMatch = RegExp(r'[A-Z]{2}\d{6}').firstMatch(licenseNumber);
+    final normalizedLicense = mamlMatch != null
+        ? mamlMatch.group(0)!
+        : licenseNumber;
+    final normalizedUsername = _normalizeUsername(normalizedLicense);
 
     if (users.any((user) => _userUsername(user) == normalizedUsername)) {
       throw Exception('Username già registrato');
@@ -82,14 +87,13 @@ class AuthService {
 
     final id = _generateId();
     final now = DateTime.now().toIso8601String();
-    final licenseNumber = numeroLicenza.trim().toUpperCase();
     final newUser = <String, dynamic>{
       'id': id,
-      'username': licenseNumber,
+      'username': normalizedLicense,
       'password_hash': GhDbService.hashPassword(password),
       'nome': nome,
       'cognome': cognome,
-      'numero_licenza': licenseNumber,
+      'numero_licenza': normalizedLicense,
       'org_unit_id': null,
       'role': 'user',
       'is_approved': false,
@@ -103,7 +107,7 @@ class AuthService {
     await _notificationService.notifyAllAdmins(
       type: 'PROFILE_PENDING',
       message:
-          'Nuovo profilo da approvare: $nome $cognome (${licenseNumber.toUpperCase()}).',
+          'Nuovo profilo da approvare: $nome $cognome (${normalizedLicense.toUpperCase()}).',
     );
     return UserProfile.fromJson({...newUser, 'org_units': null});
   }

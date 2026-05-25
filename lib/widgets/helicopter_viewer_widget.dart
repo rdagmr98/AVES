@@ -32,7 +32,7 @@ class _HelicopterViewerWidgetState extends State<HelicopterViewerWidget> {
   Widget build(BuildContext context) {
     final isHologram = _mode == HelicopterViewerMode.hologram;
     final modelSrc =
-        'assets/${isHologram ? widget.hologramModelAsset : widget.normalModelAsset}';
+        isHologram ? widget.hologramModelAsset : widget.normalModelAsset;
 
     return Card(
       child: Padding(

@@ -182,14 +182,54 @@ class CurrencyService {
       );
     }
 
+    const seminarPeriodDays = 730;
+    final lastSeminar = await _activityService.getLastValidatedSeminar(userId);
+    if (lastSeminar == null) {
+      return const CurrencyStatus(
+        status: CurrencyStatusEnum.expired,
+        label:
+            'Currency Manutentiva – NO GO (nessun seminario NAM/MHF registrato)',
+      );
+    }
+    final seminarExpiry = lastSeminar.seminarDate.add(
+      const Duration(days: seminarPeriodDays),
+    );
+    final seminarDaysLeft = seminarExpiry.difference(DateTime.now()).inDays;
+    if (seminarDaysLeft < 0) {
+      return CurrencyStatus(
+        status: CurrencyStatusEnum.expired,
+        label:
+            'Currency Manutentiva – NO GO (seminario NAM/MHF scaduto il ${seminarExpiry.day.toString().padLeft(2, '0')}/${seminarExpiry.month.toString().padLeft(2, '0')}/${seminarExpiry.year})',
+        lastActivityDate: lastSeminar.seminarDate,
+        expiryDate: seminarExpiry,
+        daysUntilExpiry: seminarDaysLeft.clamp(-9999, 9999),
+      );
+    }
+    if (seminarDaysLeft <= warningDays) {
+      // Seminar is about to expire — warn but still check task currency
+    }
+
     final criteria = await getMaintenanceCriteria();
     final periodDays = criteria?.periodDays ?? 180;
     final last = await _activityService.getLastValidatedMaintenance(userId);
-    return _computeStatus(
+    final taskStatus = _computeStatus(
       lastDate: last?.activityDate,
       periodDays: periodDays,
       label: 'Currency Manutentiva',
     );
+
+    if (seminarDaysLeft <= warningDays && taskStatus.isValid) {
+      return CurrencyStatus(
+        status: CurrencyStatusEnum.warning,
+        lastActivityDate: last?.activityDate,
+        expiryDate: taskStatus.expiryDate,
+        daysUntilExpiry: seminarDaysLeft,
+        label:
+            'Currency Manutentiva (seminario NAM/MHF in scadenza tra $seminarDaysLeft gg)',
+      );
+    }
+
+    return taskStatus;
   }
 
   Future<CurrencyStatus> getFlightCurrency(String userId) async {
@@ -409,7 +449,7 @@ class CurrencyService {
 
     final message = daysLeft != null
         ? '⚠️ $label in scadenza tra $daysLeft giorni!'
-        : '🔴 $label SCADUTA! Eseguire attività di mantenimento.';
+        : '🔴 $label – NO GO. Eseguire attività di mantenimento.';
 
     notifications.add({
       'id': _nextNotificationId(notifications),
