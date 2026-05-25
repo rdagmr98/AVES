@@ -6,15 +6,23 @@ class CurrencyStatus {
   final CurrencyStatusEnum status;
   final DateTime? lastActivityDate;
   final DateTime? expiryDate;
+  final DateTime? secondaryExpiryDate;
+  final String? secondaryExpiryLabel;
   final int? daysUntilExpiry;
   final String label;
+  final double? flightHours;
+  final double? minFlightHours;
 
   const CurrencyStatus({
     required this.status,
     this.lastActivityDate,
     this.expiryDate,
+    this.secondaryExpiryDate,
+    this.secondaryExpiryLabel,
     this.daysUntilExpiry,
     required this.label,
+    this.flightHours,
+    this.minFlightHours,
   });
 
   bool get isValid => status == CurrencyStatusEnum.valid;

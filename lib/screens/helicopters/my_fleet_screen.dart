@@ -145,7 +145,7 @@ class _FleetHelicopterCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Card(
-        clipBehavior: Clip.antiAlias,
+        clipBehavior: Clip.hardEdge,
         child: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -159,12 +159,24 @@ class _FleetHelicopterCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (catalog.imageAsset != null)
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.asset(catalog.imageAsset!, fit: BoxFit.cover),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      padding: const EdgeInsets.all(12),
+                      child: Image.asset(
+                        catalog.imageAsset!,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
                 ),
               Expanded(
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -191,9 +203,24 @@ class _FleetHelicopterCard extends StatelessWidget {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          Chip(label: Text('$licenseCount licenze')),
-                          Chip(label: Text('$privilegeCount privilegi')),
-                          Chip(label: Text('$crewCount ruoli equipaggio')),
+                          Chip(
+                            label: Text(
+                              '$licenseCount licenze',
+                              softWrap: true,
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              '$privilegeCount privilegi',
+                              softWrap: true,
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              '$crewCount ruoli equipaggio',
+                              softWrap: true,
+                            ),
+                          ),
                         ],
                       ),
                     ],

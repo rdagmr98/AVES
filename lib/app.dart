@@ -73,7 +73,8 @@ class _AvesAppState extends ConsumerState<AvesApp> {
       ),
       GoRoute(
         path: '/activities/my',
-        builder: (context, state) => const MyActivitiesScreen(),
+        builder: (context, state) =>
+            MyActivitiesScreen(initialType: state.uri.queryParameters['type']),
       ),
       GoRoute(
         path: '/admin/validate',

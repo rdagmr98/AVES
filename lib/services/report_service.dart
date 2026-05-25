@@ -29,11 +29,18 @@ class ReportService {
       }
 
       final status = await _currencyService.getMaintenanceCurrency(user.id);
-      final lastActivity = await _activityService.getLastValidatedMaintenance(user.id);
+      final lastActivity = await _activityService.getLastValidatedMaintenance(
+        user.id,
+      );
       final privilegesByHelicopter = <int, List<String>>{};
       for (final privilege in privileges) {
-        privilegesByHelicopter.putIfAbsent(privilege.helicopterTypeId, () => []);
-        privilegesByHelicopter[privilege.helicopterTypeId]!.add(privilege.privilegeName);
+        privilegesByHelicopter.putIfAbsent(
+          privilege.helicopterTypeId,
+          () => [],
+        );
+        privilegesByHelicopter[privilege.helicopterTypeId]!.add(
+          privilege.privilegeName,
+        );
       }
 
       final licenseHelicopters = <int>{};
@@ -46,7 +53,8 @@ class ReportService {
           user.orgUnitName,
           license.helicopterCode,
           license.licenseName,
-          (privilegesByHelicopter[license.helicopterTypeId] ?? const ['-']).join(', '),
+          (privilegesByHelicopter[license.helicopterTypeId] ?? const ['-'])
+              .join(', '),
           _formatDate(lastActivity?.activityDate),
           _formatDate(status.expiryDate),
           status.statusText,
@@ -57,7 +65,9 @@ class ReportService {
         if (licenseHelicopters.contains(entry.key)) {
           continue;
         }
-        final privilege = privileges.firstWhere((item) => item.helicopterTypeId == entry.key);
+        final privilege = privileges.firstWhere(
+          (item) => item.helicopterTypeId == entry.key,
+        );
         rows.add([
           user.cognome,
           user.nome,
@@ -88,7 +98,8 @@ class ReportService {
         'Stato',
       ],
       rows: rows,
-      fileName: 'report_manutenzione_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      fileName:
+          'report_manutenzione_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -101,8 +112,12 @@ class ReportService {
       if (assignments.isEmpty) {
         continue;
       }
-      final tobCapabilities = await _userService.getUserTobCapabilities(user.id);
-      final flightActivities = await _activityService.getUserFlightActivities(user.id);
+      final tobCapabilities = await _userService.getUserTobCapabilities(
+        user.id,
+      );
+      final flightActivities = await _activityService.getUserFlightActivities(
+        user.id,
+      );
       FlightActivity? lastFlight;
       for (final activity in flightActivities) {
         if (activity.isValidated) {
@@ -132,7 +147,9 @@ class ReportService {
         }
 
         final capsForHelicopter = tobCapabilities
-            .where((item) => item.helicopterTypeId == assignment.helicopterTypeId)
+            .where(
+              (item) => item.helicopterTypeId == assignment.helicopterTypeId,
+            )
             .toList();
 
         if (capsForHelicopter.isEmpty) {
@@ -154,13 +171,16 @@ class ReportService {
         for (final capability in capsForHelicopter) {
           final status = await _currencyService.getTobCapabilityCurrencyStatus(
             user.id,
+            capability.helicopterTypeId,
             capability.tobCapabilityId,
             capability.capabilityName,
           );
-          final lastActivity = await _activityService.getLastValidatedTobActivity(
-            user.id,
-            capability.tobCapabilityId,
-          );
+          final lastActivity = await _activityService
+              .getLastValidatedTobActivity(
+                user.id,
+                capability.tobCapabilityId,
+                helicopterTypeId: capability.helicopterTypeId,
+              );
           rows.add([
             user.cognome,
             user.nome,
@@ -192,7 +212,8 @@ class ReportService {
         'Stato',
       ],
       rows: rows,
-      fileName: 'report_volo_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      fileName:
+          'report_volo_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -218,12 +239,16 @@ class ReportService {
           pw.SizedBox(height: 16),
           pw.TableHelper.fromTextArray(
             headers: headers,
-            data: rows.isEmpty ? [List<String>.filled(headers.length, '-')] : rows,
+            data: rows.isEmpty
+                ? [List<String>.filled(headers.length, '-')]
+                : rows,
             headerStyle: pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.white,
             ),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            headerDecoration: const pw.BoxDecoration(
+              color: PdfColors.blueGrey800,
+            ),
             cellStyle: const pw.TextStyle(fontSize: 9),
             cellAlignment: pw.Alignment.centerLeft,
             cellPadding: const pw.EdgeInsets.all(6),

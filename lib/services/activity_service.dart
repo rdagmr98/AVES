@@ -63,10 +63,7 @@ class ActivityService {
   }
 
   int _nextId(Iterable<Map<String, dynamic>> existing) {
-    final ids = existing
-        .map((item) => item['id'])
-        .whereType<int>()
-        .toSet();
+    final ids = existing.map((item) => item['id']).whereType<int>().toSet();
     var candidate = DateTime.now().millisecondsSinceEpoch;
     while (ids.contains(candidate)) {
       candidate++;
@@ -88,14 +85,15 @@ class ActivityService {
         'user_profiles': _findUser(item['user_id'] as String),
       });
 
-  FlightActivity _toFlight(Map<String, dynamic> item) => FlightActivity.fromJson({
-    ...item,
-    'helicopter_types': _findReference(
-      'helicopterTypes',
-      item['helicopter_type_id'] as int?,
-    ),
-    'user_profiles': _findUser(item['user_id'] as String),
-  });
+  FlightActivity _toFlight(Map<String, dynamic> item) =>
+      FlightActivity.fromJson({
+        ...item,
+        'helicopter_types': _findReference(
+          'helicopterTypes',
+          item['helicopter_type_id'] as int?,
+        ),
+        'user_profiles': _findUser(item['user_id'] as String),
+      });
 
   TobActivity _toTob(Map<String, dynamic> item) => TobActivity.fromJson({
     ...item,
@@ -201,44 +199,51 @@ class ActivityService {
   Future<List<MaintenanceActivity>> getUserMaintenanceActivities(
     String userId,
   ) async {
-    final items = _db.maintenanceActs
-        .where((item) => item['user_id'] == userId)
-        .toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'activity_date').compareTo(
-          _parseDate(a, 'activity_date'),
-        ),
-      );
+    final items =
+        _db.maintenanceActs.where((item) => item['user_id'] == userId).toList()
+          ..sort(
+            (a, b) => _parseDate(
+              b,
+              'activity_date',
+            ).compareTo(_parseDate(a, 'activity_date')),
+          );
     return items.map(_toMaintenance).toList();
   }
 
   Future<List<MaintenanceActivity>> getPendingMaintenanceActivities() async {
-    final items = _db.maintenanceActs
-        .where((item) => item['is_validated'] != true)
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(
-          b['created_at'] as String? ?? b['activity_date'] as String,
-        ).compareTo(
-          DateTime.parse(
-            a['created_at'] as String? ?? a['activity_date'] as String,
-          ),
-        ),
-      );
+    final items =
+        _db.maintenanceActs
+            .where((item) => item['is_validated'] != true)
+            .toList()
+          ..sort(
+            (a, b) =>
+                DateTime.parse(
+                  b['created_at'] as String? ?? b['activity_date'] as String,
+                ).compareTo(
+                  DateTime.parse(
+                    a['created_at'] as String? ?? a['activity_date'] as String,
+                  ),
+                ),
+          );
     return items.map(_toMaintenance).toList();
   }
 
-  Future<MaintenanceActivity?> getLastValidatedMaintenance(String userId) async {
-    final items = _db.maintenanceActs
-        .where(
-          (item) => item['user_id'] == userId && item['is_validated'] == true,
-        )
-        .toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'activity_date').compareTo(
-          _parseDate(a, 'activity_date'),
-        ),
-      );
+  Future<MaintenanceActivity?> getLastValidatedMaintenance(
+    String userId,
+  ) async {
+    final items =
+        _db.maintenanceActs
+            .where(
+              (item) =>
+                  item['user_id'] == userId && item['is_validated'] == true,
+            )
+            .toList()
+          ..sort(
+            (a, b) => _parseDate(
+              b,
+              'activity_date',
+            ).compareTo(_parseDate(a, 'activity_date')),
+          );
     if (items.isEmpty) {
       return null;
     }
@@ -328,28 +333,30 @@ class ActivityService {
   }
 
   Future<List<FlightActivity>> getUserFlightActivities(String userId) async {
-    final items = _db.flightActs.where((item) => item['user_id'] == userId).toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'activity_date').compareTo(
-          _parseDate(a, 'activity_date'),
-        ),
-      );
+    final items =
+        _db.flightActs.where((item) => item['user_id'] == userId).toList()
+          ..sort(
+            (a, b) => _parseDate(
+              b,
+              'activity_date',
+            ).compareTo(_parseDate(a, 'activity_date')),
+          );
     return items.map(_toFlight).toList();
   }
 
   Future<List<FlightActivity>> getPendingFlightActivities() async {
-    final items = _db.flightActs
-        .where((item) => item['is_validated'] != true)
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(
-          b['created_at'] as String? ?? b['activity_date'] as String,
-        ).compareTo(
-          DateTime.parse(
-            a['created_at'] as String? ?? a['activity_date'] as String,
-          ),
-        ),
-      );
+    final items =
+        _db.flightActs.where((item) => item['is_validated'] != true).toList()
+          ..sort(
+            (a, b) =>
+                DateTime.parse(
+                  b['created_at'] as String? ?? b['activity_date'] as String,
+                ).compareTo(
+                  DateTime.parse(
+                    a['created_at'] as String? ?? a['activity_date'] as String,
+                  ),
+                ),
+          );
     return items.map(_toFlight).toList();
   }
 
@@ -448,48 +455,54 @@ class ActivityService {
   }
 
   Future<List<TobActivity>> getUserTobActivities(String userId) async {
-    final items = _db.tobActs.where((item) => item['user_id'] == userId).toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'activity_date').compareTo(
-          _parseDate(a, 'activity_date'),
-        ),
-      );
+    final items =
+        _db.tobActs.where((item) => item['user_id'] == userId).toList()..sort(
+          (a, b) => _parseDate(
+            b,
+            'activity_date',
+          ).compareTo(_parseDate(a, 'activity_date')),
+        );
     return items.map(_toTob).toList();
   }
 
   Future<List<TobActivity>> getPendingTobActivities() async {
-    final items = _db.tobActs
-        .where((item) => item['is_validated'] != true)
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(
-          b['created_at'] as String? ?? b['activity_date'] as String,
-        ).compareTo(
-          DateTime.parse(
-            a['created_at'] as String? ?? a['activity_date'] as String,
-          ),
-        ),
-      );
+    final items =
+        _db.tobActs.where((item) => item['is_validated'] != true).toList()
+          ..sort(
+            (a, b) =>
+                DateTime.parse(
+                  b['created_at'] as String? ?? b['activity_date'] as String,
+                ).compareTo(
+                  DateTime.parse(
+                    a['created_at'] as String? ?? a['activity_date'] as String,
+                  ),
+                ),
+          );
     return items.map(_toTob).toList();
   }
 
   Future<TobActivity?> getLastValidatedTobActivity(
     String userId,
-    int capabilityId,
-  ) async {
-    final items = _db.tobActs
-        .where(
-          (item) =>
-              item['user_id'] == userId &&
-              item['tob_capability_id'] == capabilityId &&
-              item['is_validated'] == true,
-        )
-        .toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'activity_date').compareTo(
-          _parseDate(a, 'activity_date'),
-        ),
-      );
+    int capabilityId, {
+    int? helicopterTypeId,
+  }) async {
+    final items =
+        _db.tobActs
+            .where(
+              (item) =>
+                  item['user_id'] == userId &&
+                  item['tob_capability_id'] == capabilityId &&
+                  item['is_validated'] == true &&
+                  (helicopterTypeId == null ||
+                      item['helicopter_type_id'] == helicopterTypeId),
+            )
+            .toList()
+          ..sort(
+            (a, b) => _parseDate(
+              b,
+              'activity_date',
+            ).compareTo(_parseDate(a, 'activity_date')),
+          );
     if (items.isEmpty) {
       return null;
     }
@@ -577,40 +590,46 @@ class ActivityService {
   }
 
   Future<List<SeminarActivity>> getUserSeminarActivities(String userId) async {
-    final items = _db.seminars.where((item) => item['user_id'] == userId).toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'seminar_date').compareTo(
-          _parseDate(a, 'seminar_date'),
-        ),
-      );
+    final items =
+        _db.seminars.where((item) => item['user_id'] == userId).toList()..sort(
+          (a, b) => _parseDate(
+            b,
+            'seminar_date',
+          ).compareTo(_parseDate(a, 'seminar_date')),
+        );
     return items.map(_toSeminar).toList();
   }
 
   Future<List<SeminarActivity>> getPendingSeminarActivities() async {
-    final items = _db.seminars
-        .where((item) => item['is_validated'] != true)
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(
-          b['created_at'] as String? ?? b['seminar_date'] as String,
-        ).compareTo(
-          DateTime.parse(
-            a['created_at'] as String? ?? a['seminar_date'] as String,
-          ),
-        ),
-      );
+    final items =
+        _db.seminars.where((item) => item['is_validated'] != true).toList()
+          ..sort(
+            (a, b) =>
+                DateTime.parse(
+                  b['created_at'] as String? ?? b['seminar_date'] as String,
+                ).compareTo(
+                  DateTime.parse(
+                    a['created_at'] as String? ?? a['seminar_date'] as String,
+                  ),
+                ),
+          );
     return items.map(_toSeminar).toList();
   }
 
   Future<SeminarActivity?> getLastValidatedSeminar(String userId) async {
-    final items = _db.seminars
-        .where((item) => item['user_id'] == userId && item['is_validated'] == true)
-        .toList()
-      ..sort(
-        (a, b) => _parseDate(b, 'seminar_date').compareTo(
-          _parseDate(a, 'seminar_date'),
-        ),
-      );
+    final items =
+        _db.seminars
+            .where(
+              (item) =>
+                  item['user_id'] == userId && item['is_validated'] == true,
+            )
+            .toList()
+          ..sort(
+            (a, b) => _parseDate(
+              b,
+              'seminar_date',
+            ).compareTo(_parseDate(a, 'seminar_date')),
+          );
     if (items.isEmpty) return null;
     return _toSeminar(items.first);
   }
@@ -618,13 +637,14 @@ class ActivityService {
   Future<List<SeminarActivity>> getAllSeminarActivities() async {
     final items = _db.seminars.toList()
       ..sort(
-        (a, b) => DateTime.parse(
-          b['created_at'] as String? ?? b['seminar_date'] as String,
-        ).compareTo(
-          DateTime.parse(
-            a['created_at'] as String? ?? a['seminar_date'] as String,
-          ),
-        ),
+        (a, b) =>
+            DateTime.parse(
+              b['created_at'] as String? ?? b['seminar_date'] as String,
+            ).compareTo(
+              DateTime.parse(
+                a['created_at'] as String? ?? a['seminar_date'] as String,
+              ),
+            ),
       );
     return items.map(_toSeminar).toList();
   }

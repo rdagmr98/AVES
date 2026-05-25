@@ -9,7 +9,6 @@ import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
 import '../../services/pta_service.dart';
 import '../../widgets/aves_logo_widget.dart';
-import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/privilege_grid_widget.dart';
 import '../../widgets/user_avatar.dart';
@@ -22,10 +21,11 @@ class UserDashboard extends ConsumerStatefulWidget {
 }
 
 class _UserDashboardState extends ConsumerState<UserDashboard> {
+  final _ptaService = PtaService();
   bool _emailDialogOpen = false;
 
   void _promptInstitutionalEmail(UserProfile user) {
-    if (_emailDialogOpen || user.hasInstitutionalEmail) {
+    if (_emailDialogOpen || user.isAdmin || user.hasInstitutionalEmail) {
       return;
     }
     _emailDialogOpen = true;
@@ -60,6 +60,78 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     });
   }
 
+  String _formatDate(DateTime? date) {
+    if (date == null) {
+      return '-';
+    }
+    return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  String _maintenanceDetail(CurrencyStatus? status) {
+    final currentStatus =
+        status ??
+        const CurrencyStatus(
+          status: CurrencyStatusEnum.noData,
+          label: 'Nessun dato',
+        );
+    if (!currentStatus.hasData) {
+      return currentStatus.label;
+    }
+
+    final expiries = <({DateTime date, String prefix})>[];
+    if (currentStatus.expiryDate != null) {
+      expiries.add((date: currentStatus.expiryDate!, prefix: 'Scad.'));
+    }
+    if (currentStatus.secondaryExpiryDate != null) {
+      expiries.add((
+        date: currentStatus.secondaryExpiryDate!,
+        prefix: currentStatus.secondaryExpiryLabel ?? 'Scad.',
+      ));
+    }
+    if (expiries.isEmpty) {
+      return currentStatus.label;
+    }
+
+    expiries.sort((a, b) => a.date.compareTo(b.date));
+    final nearest = expiries.first;
+    return '${nearest.prefix} ${_formatDate(nearest.date)}';
+  }
+
+  String _flightDetail(CurrencyStatus? status) {
+    final currentStatus =
+        status ??
+        const CurrencyStatus(
+          status: CurrencyStatusEnum.noData,
+          label: 'Nessun dato',
+        );
+    if (currentStatus.flightHours != null &&
+        currentStatus.minFlightHours != null) {
+      final summary =
+          '${currentStatus.flightHours!.toStringAsFixed(1)}h / ${currentStatus.minFlightHours!.toStringAsFixed(1)}h';
+      if (currentStatus.expiryDate != null) {
+        return '$summary — Scad. ${_formatDate(currentStatus.expiryDate)}';
+      }
+      return summary;
+    }
+    if (currentStatus.expiryDate != null) {
+      return 'Scad. ${_formatDate(currentStatus.expiryDate)}';
+    }
+    return currentStatus.label;
+  }
+
+  String _genericExpiryDetail(CurrencyStatus? status) {
+    final currentStatus =
+        status ??
+        const CurrencyStatus(
+          status: CurrencyStatusEnum.noData,
+          label: 'Nessun dato',
+        );
+    if (currentStatus.expiryDate != null) {
+      return 'Scad. ${_formatDate(currentStatus.expiryDate)}';
+    }
+    return currentStatus.label;
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -82,6 +154,8 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     final assignedHelicopters = auth.helicopterTypes
         .where((item) => helicopterIds.contains(item.id))
         .toList();
+    final blockingPtas = _ptaService.getBlockingPtaForUser(user.id);
+    final unreadPtas = _ptaService.getUserUnreadPtas(user.id);
 
     Future<void> openNotifications() async {
       await showModalBottomSheet<void>(
@@ -100,48 +174,34 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
         _CurrencyCard(
           title: 'Manutenzione',
           status: auth.currency['maintenance'],
+          detailText: _maintenanceDetail(auth.currency['maintenance']),
+          activityType: 'maintenance',
         ),
       if (auth.hasTCrew)
-        _CurrencyCard(title: 'Volo T', status: auth.currency['flight_t']),
+        _CurrencyCard(
+          title: 'Volo T',
+          status: auth.currency['flight_t'],
+          detailText: _flightDetail(auth.currency['flight_t']),
+          activityType: 'flight',
+        ),
       if (auth.hasTobCrew)
-        _CurrencyCard(title: 'Base TOB', status: auth.currency['tob_base']),
+        _CurrencyCard(
+          title: 'Base TOB',
+          status: auth.currency['tob_base'],
+          detailText: _genericExpiryDetail(auth.currency['tob_base']),
+          activityType: 'tob',
+        ),
       if (auth.hasTobCrew)
         ...auth.tobCapabilities.map(
           (cap) => _CurrencyCard(
-            title: 'TOB · ${cap.capabilityName}',
-            status: auth.currency['tob_${cap.tobCapabilityId}'],
+            title: 'TOB · ${cap.helicopterCode} · ${cap.capabilityName}',
+            status: auth
+                .currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}'],
+            detailText: _genericExpiryDetail(
+              auth.currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}'],
+            ),
+            activityType: 'tob',
           ),
-        ),
-    ];
-
-    final quickActions = <_DashboardActionButtonData>[
-      _DashboardActionButtonData(
-        label: 'Inserisci Attività',
-        icon: Icons.add_circle_outline,
-        onPressed: () => context.go('/activities/add'),
-        primary: true,
-      ),
-      _DashboardActionButtonData(
-        label: 'Le Mie Attività',
-        icon: Icons.history,
-        onPressed: () => context.go('/activities/my'),
-      ),
-      _DashboardActionButtonData(
-        label: 'Profilo',
-        icon: Icons.person_outline,
-        onPressed: () => context.go('/profile'),
-      ),
-      if (hasMaintenanceAccess)
-        _DashboardActionButtonData(
-          label: 'PTA',
-          icon: Icons.article_outlined,
-          onPressed: () => context.go('/pta'),
-        ),
-      if (assignedHelicopters.isNotEmpty)
-        _DashboardActionButtonData(
-          label: 'La Mia Flotta',
-          icon: Icons.flight,
-          onPressed: () => context.go('/helicopters/fleet'),
         ),
     ];
 
@@ -174,6 +234,12 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.go('/activities/add'),
+        tooltip: 'Inserisci Attività',
+        child: const Icon(Icons.add),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: RefreshIndicator(
         onRefresh: () => ref.read(authProvider).refreshUserData(),
         child: Center(
@@ -181,11 +247,20 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
             constraints: const BoxConstraints(maxWidth: 1100),
             child: ListView(
               shrinkWrap: false,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              padding: const EdgeInsets.only(
+                left: 16,
+                top: 16,
+                right: 16,
+                bottom: 96,
+              ),
               children: [
                 _UserHeaderCard(
                   user: user,
-                  unreadNotifications: auth.unreadNotifications,
+                  showFleetShortcut: assignedHelicopters.isNotEmpty,
+                  onProfileTap: () => context.go('/profile'),
+                  onFleetTap: assignedHelicopters.isNotEmpty
+                      ? () => context.go('/helicopters/fleet')
+                      : null,
                 ),
                 if (!user.isApproved) ...[
                   const SizedBox(height: 16),
@@ -207,76 +282,68 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                         Expanded(
                           child: Text(
                             'In attesa di approvazione. Alcune funzionalità saranno abilitate dopo la verifica del profilo.',
+                            softWrap: true,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ],
-                Builder(
-                  builder: (context) {
-                    final blockingPta = PtaService().getBlockingPtaForUser(
-                      user.id,
-                    );
-                    if (blockingPta.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    final ptaNumbers = blockingPta
-                        .map((p) => p.number)
-                        .join(', ');
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: InkWell(
-                        onTap: () => context.go('/pta'),
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFF8E44AD).withValues(alpha: 0.2),
-                                AppColors.surface,
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF8E44AD)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.block, color: Color(0xFF8E44AD)),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'CURRENCY SOSPESA — PTA attiva',
-                                      style: TextStyle(
-                                        color: Color(0xFFCE93D8),
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'PTA: $ptaNumbers — Tocca per prendere visione',
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: Color(0xFFCE93D8),
-                              ),
-                            ],
-                          ),
+                if (blockingPtas.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () => context.go('/pta'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF8E44AD).withValues(alpha: 0.2),
+                            AppColors.surface,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF8E44AD)),
                       ),
-                    );
-                  },
-                ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.block, color: Color(0xFFCE93D8)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'CURRENCY SOSPESA — PTA attiva',
+                                  style: TextStyle(
+                                    color: Color(0xFFCE93D8),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  softWrap: true,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  unreadPtas.isNotEmpty
+                                      ? 'PTA: ${unreadPtas.map((p) => p.number).join(', ')} — Tocca per prendere visione'
+                                      : 'PTA: ${blockingPtas.map((p) => p.number).join(', ')} — Presa visione registrata, in attesa di chiusura',
+                                  style: const TextStyle(fontSize: 13),
+                                  softWrap: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFFCE93D8),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'Stato Currency',
@@ -284,83 +351,46 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isMobile = constraints.maxWidth < 500;
-                    if (isMobile) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                if (currencyCards.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Nessuna currency operativa assegnata al tuo profilo.',
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                      ),
+                    ),
+                  )
+                else
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final cardWidth = constraints.maxWidth >= 960
+                          ? 320.0
+                          : constraints.maxWidth >= 640
+                          ? 300.0
+                          : constraints.maxWidth;
+                      return Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
                         children: [
-                          for (var i = 0; i < currencyCards.length; i++)
-                            Padding(
-                              padding: EdgeInsets.only(
-                                bottom: i == currencyCards.length - 1 ? 0 : 12,
-                              ),
-                              child: currencyCards[i],
-                            ),
+                          for (final card in currencyCards)
+                            SizedBox(width: cardWidth, child: card),
                         ],
                       );
-                    }
-                    return Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: [
-                        for (final card in currencyCards)
-                          SizedBox(width: 300, child: card),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Azioni rapide',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isMobile = constraints.maxWidth < 500;
-                    if (isMobile) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (var i = 0; i < quickActions.length; i++)
-                            Padding(
-                              padding: EdgeInsets.only(
-                                bottom: i == quickActions.length - 1 ? 0 : 8,
-                              ),
-                              child: _DashboardActionButton(
-                                data: quickActions[i],
-                              ),
-                            ),
-                        ],
-                      );
-                    }
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        for (final action in quickActions)
-                          SizedBox(
-                            width: 220,
-                            child: _DashboardActionButton(
-                              data: action,
-                              compact: true,
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Privilegi assegnati',
-                  style: Theme.of(context).textTheme.titleLarge,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                PrivilegeGridWidget(privileges: auth.privileges),
+                    },
+                  ),
+                if (auth.privileges.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Privilegi assegnati',
+                    style: Theme.of(context).textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  PrivilegeGridWidget(privileges: auth.privileges),
+                ],
               ],
             ),
           ),
@@ -373,189 +403,143 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
 class _UserHeaderCard extends StatelessWidget {
   const _UserHeaderCard({
     required this.user,
-    required this.unreadNotifications,
+    required this.showFleetShortcut,
+    required this.onProfileTap,
+    this.onFleetTap,
   });
 
   final UserProfile user;
-  final int unreadNotifications;
+  final bool showFleetShortcut;
+  final VoidCallback onProfileTap;
+  final VoidCallback? onFleetTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.surfaceVariant, AppColors.surface],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'Benvenuto ${user.nome}',
+          style: Theme.of(context).textTheme.headlineSmall,
+          textAlign: TextAlign.center,
+          softWrap: true,
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+        const SizedBox(height: 6),
+        Text(
+          user.orgUnitName,
+          style: Theme.of(context).textTheme.bodyMedium,
+          textAlign: TextAlign.center,
+          softWrap: true,
+        ),
+        if (!user.isAdmin &&
+            user.numeroLicenza != null &&
+            user.numeroLicenza!.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            user.numeroLicenza!,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'monospace',
+            ),
+            textAlign: TextAlign.center,
+            softWrap: true,
           ),
         ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isMobile = constraints.maxWidth < 420;
-            final avatar = UserAvatar(user: user, radius: 31);
+        const SizedBox(height: 8),
+        Text(
+          'Tocca per vedere il profilo',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          softWrap: true,
+        ),
+      ],
+    );
 
-            final info = Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  'Benvenuto ${user.nome}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  user.orgUnitName,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  user.numeroLicenza ?? 'Licenza non indicata',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                if (user.email != null && user.email!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    user.email!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ],
-            );
+    final fleetButton = showFleetShortcut
+        ? IconButton(
+            icon: const Icon(Icons.flight, size: 28),
+            tooltip: 'La Mia Flotta',
+            onPressed: onFleetTap,
+          )
+        : const SizedBox.shrink();
 
-            final notificationPill = Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
+    return Tooltip(
+      message: 'Tocca per vedere il profilo',
+      child: GestureDetector(
+        onTap: onProfileTap,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.surfaceVariant, AppColors.surface],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.mark_email_unread_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    unreadNotifications > 0
-                        ? '$unreadNotifications notifiche'
-                        : 'Nessuna notifica',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            );
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 520;
+                final avatar = GestureDetector(
+                  onTap: onProfileTap,
+                  child: UserAvatar(user: user, radius: 31),
+                );
 
-            if (isMobile) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Row(
+                if (isCompact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      avatar,
-                      const Spacer(),
-                      Badge.count(
-                        isLabelVisible: unreadNotifications > 0,
-                        count: unreadNotifications,
-                        child: notificationPill,
-                      ),
+                      Row(children: [avatar, const Spacer(), fleetButton]),
+                      const SizedBox(height: 16),
+                      info,
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  info,
-                ],
-              );
-            }
+                  );
+                }
 
-            return Row(
-              children: [
-                avatar,
-                const SizedBox(width: 16),
-                Expanded(child: info),
-                const SizedBox(width: 16),
-                Badge.count(
-                  isLabelVisible: unreadNotifications > 0,
-                  count: unreadNotifications,
-                  child: notificationPill,
-                ),
-              ],
-            );
-          },
+                return Row(
+                  children: [
+                    avatar,
+                    const SizedBox(width: 16),
+                    Expanded(child: info),
+                    if (showFleetShortcut) ...[
+                      const SizedBox(width: 16),
+                      fleetButton,
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _DashboardActionButtonData {
-  const _DashboardActionButtonData({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.primary = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool primary;
-}
-
-class _DashboardActionButton extends StatelessWidget {
-  const _DashboardActionButton({required this.data, this.compact = false});
-
-  final _DashboardActionButtonData data;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    if (data.primary) {
-      return ElevatedButton.icon(
-        style: compact
-            ? ElevatedButton.styleFrom(minimumSize: const Size(0, 52))
-            : null,
-        onPressed: data.onPressed,
-        icon: Icon(data.icon),
-        label: Text(data.label),
-      );
-    }
-
-    return OutlinedButton.icon(
-      style: compact
-          ? OutlinedButton.styleFrom(minimumSize: const Size(0, 52))
-          : null,
-      onPressed: data.onPressed,
-      icon: Icon(data.icon),
-      label: Text(data.label),
     );
   }
 }
 
 class _CurrencyCard extends StatelessWidget {
-  const _CurrencyCard({required this.title, required this.status});
+  const _CurrencyCard({
+    required this.title,
+    required this.status,
+    required this.detailText,
+    required this.activityType,
+  });
 
   final String title;
   final CurrencyStatus? status;
+  final String detailText;
+  final String activityType;
 
   @override
   Widget build(BuildContext context) {
@@ -565,37 +549,60 @@ class _CurrencyCard extends StatelessWidget {
           status: CurrencyStatusEnum.noData,
           label: 'Nessun dato',
         );
-    final highlight = Color.lerp(
-      AppColors.surfaceVariant,
-      currentStatus.color,
-      0.2,
-    )!;
+    final statusText = currentStatus.hasData
+        ? (currentStatus.isExpired || currentStatus.isSuspended
+              ? 'NO GO'
+              : 'GO')
+        : 'N/D';
 
     return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [highlight, AppColors.surface],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      clipBehavior: Clip.hardEdge,
+      child: InkWell(
+        onTap: () => context.go('/activities/my?type=$activityType'),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: currentStatus.color, width: 4),
+            ),
+            gradient: LinearGradient(
+              colors: [
+                currentStatus.color.withValues(alpha: 0.08),
+                AppColors.surface,
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: currentStatus.color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(16),
+              SizedBox(
+                width: 80,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      currentStatus.icon,
+                      size: 28,
+                      color: currentStatus.color,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      statusText,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: currentStatus.color,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                      softWrap: true,
+                    ),
+                  ],
                 ),
-                child: Icon(currentStatus.icon, color: currentStatus.color),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,33 +611,20 @@ class _CurrencyCard extends StatelessWidget {
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
+                      softWrap: true,
                     ),
-                    const SizedBox(height: 10),
-                    CurrencyBadgeWidget(status: currentStatus),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Text(
-                      currentStatus.label,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textPrimary,
+                      detailText,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
                       ),
+                      softWrap: true,
                     ),
-                    if (currentStatus.lastActivityDate != null) ...[
-                      const SizedBox(height: 10),
-                      _CurrencyMetaLine(
-                        icon: Icons.history_toggle_off,
-                        text:
-                            'Ultima attività: ${DateFormat('dd/MM/yyyy').format(currentStatus.lastActivityDate!)}',
-                      ),
-                    ],
-                    if (currentStatus.expiryDate != null) ...[
-                      const SizedBox(height: 6),
-                      _CurrencyMetaLine(
-                        icon: Icons.event_available,
-                        text:
-                            'Scadenza: ${DateFormat('dd/MM/yyyy').format(currentStatus.expiryDate!)}',
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -638,31 +632,6 @@ class _CurrencyCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _CurrencyMetaLine extends StatelessWidget {
-  const _CurrencyMetaLine({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 15, color: AppColors.textSecondary),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-          ),
-        ),
-      ],
     );
   }
 }

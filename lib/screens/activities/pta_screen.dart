@@ -18,6 +18,7 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
   final _ptaService = PtaService();
 
   bool _loading = true;
+  List<PtaRecord> _unread = [];
   // PTAs affecting this user that still require action
   List<PtaRecord> _blocking = [];
   // All PTAs relevant to the user's helicopters (for info)
@@ -34,16 +35,14 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
     if (user == null) return;
     setState(() => _loading = true);
 
+    _unread = _ptaService.getUserUnreadPtas(user.id);
     _blocking = _ptaService.getBlockingPtaForUser(user.id);
 
     // All PTAs where user is blocking or has already acknowledged
-    _allUserPta = _ptaService
-        .getAllPta()
-        .where((pta) {
-          return _blocking.any((b) => b.id == pta.id) ||
-              _ptaService.hasAck(user.id, pta.id!);
-        })
-        .toList();
+    _allUserPta = _ptaService.getAllPta().where((pta) {
+      return _blocking.any((b) => b.id == pta.id) ||
+          _ptaService.hasAck(user.id, pta.id!);
+    }).toList();
 
     if (mounted) setState(() => _loading = false);
   }
@@ -110,9 +109,9 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
       await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     }
   }
@@ -127,24 +126,21 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
       appBar: AppBar(
         title: const Text('PTA Manutenzione'),
         actions: [
-          IconButton(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : !hasMaintenanceAccess
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'Nessun privilegio manutentivo assegnato. Le PTA si applicano solo alla currency manutentiva.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Nessun privilegio manutentivo assegnato. Le PTA si applicano solo alla currency manutentiva.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
           : RefreshIndicator(
               onRefresh: _loadData,
               child: _allUserPta.isEmpty && _blocking.isEmpty
@@ -152,7 +148,11 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.check_circle, color: AppColors.currencyValid, size: 64),
+                          Icon(
+                            Icons.check_circle,
+                            color: AppColors.currencyValid,
+                            size: 64,
+                          ),
                           SizedBox(height: 16),
                           Text('Nessuna PTA attiva per i tuoi elicotteri'),
                         ],
@@ -161,26 +161,26 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        if (_blocking.isNotEmpty) ...[
+                        if (_unread.isNotEmpty) ...[
                           _SectionHeader(
-                            label: 'Da prendere visione (${_blocking.length})',
+                            label: 'Da prendere visione (${_unread.length})',
                             color: AppColors.currencyExpired,
                             icon: Icons.block,
                           ),
                           const SizedBox(height: 8),
-                          ..._blocking.map((pta) => _PtaCard(
-                                pta: pta,
-                                hasPendingAck: _ptaService.hasAck(
-                                  ref.read(authProvider).userProfile!.id,
-                                  pta.id!,
-                                ),
-                                isValidated: false,
-                                onAcknowledge: () => _acknowledge(pta),
-                              )),
+                          ..._unread.map(
+                            (pta) => _PtaCard(
+                              pta: pta,
+                              hasPendingAck: false,
+                              isValidated: false,
+                              onAcknowledge: () => _acknowledge(pta),
+                            ),
+                          ),
                           const SizedBox(height: 24),
                         ],
-                        if (_allUserPta
-                            .any((p) => !_blocking.contains(p))) ...[
+                        if (_allUserPta.any(
+                          (p) => !_unread.any((u) => u.id == p.id),
+                        )) ...[
                           const _SectionHeader(
                             label: 'Già preso visione',
                             color: AppColors.currencyValid,
@@ -188,11 +188,14 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
                           ),
                           const SizedBox(height: 8),
                           ..._allUserPta
-                              .where((p) => !_blocking.any((b) => b.id == p.id))
+                              .where((p) => !_unread.any((u) => u.id == p.id))
                               .map(
                                 (pta) => _PtaCard(
                                   pta: pta,
-                                  hasPendingAck: true,
+                                  hasPendingAck: _ptaService.hasAck(
+                                    ref.read(authProvider).userProfile!.id,
+                                    pta.id!,
+                                  ),
                                   isValidated: _ptaService.hasValidatedAck(
                                     ref.read(authProvider).userProfile!.id,
                                     pta.id!,
@@ -270,8 +273,8 @@ class _PtaCard extends StatelessWidget {
                   backgroundColor: needsAction
                       ? AppColors.currencyExpired
                       : waitingValidation
-                          ? AppColors.currencyWarning
-                          : AppColors.currencyValid,
+                      ? AppColors.currencyWarning
+                      : AppColors.currencyValid,
                   radius: 20,
                   child: Text(
                     pta.helicopterCode.length > 3
@@ -330,7 +333,11 @@ class _PtaCard extends StatelessWidget {
               const SizedBox(height: 12),
               const Row(
                 children: [
-                  Icon(Icons.hourglass_top, size: 16, color: AppColors.currencyWarning),
+                  Icon(
+                    Icons.hourglass_top,
+                    size: 16,
+                    color: AppColors.currencyWarning,
+                  ),
                   SizedBox(width: 6),
                   Text(
                     'In attesa di validazione admin',

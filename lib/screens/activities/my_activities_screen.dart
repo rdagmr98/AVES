@@ -6,27 +6,85 @@ import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
 
-class MyActivitiesScreen extends ConsumerWidget {
-  const MyActivitiesScreen({super.key});
+class MyActivitiesScreen extends ConsumerStatefulWidget {
+  const MyActivitiesScreen({super.key, this.initialType});
+
+  final String? initialType;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyActivitiesScreen> createState() => _MyActivitiesScreenState();
+}
+
+class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  late Future<_MyActivitiesData> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = ref.read(authProvider).userProfile;
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: _initialTabIndex(widget.initialType),
+    );
+    _future = user == null
+        ? Future.value(const _MyActivitiesData.empty())
+        : _load(user.id);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  int _initialTabIndex(String? type) {
+    switch (type) {
+      case 'flight':
+        return 1;
+      case 'tob':
+        return 2;
+      case 'seminar':
+        return 3;
+      case 'maintenance':
+      default:
+        return 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(authProvider).userProfile;
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final isCompactTabs = MediaQuery.of(context).size.width < 520;
     return Scaffold(
-      appBar: AppBar(title: const Text('Le Mie Attività')),
+      appBar: AppBar(
+        title: const Text('Le Mie Attività'),
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: isCompactTabs,
+          tabs: const [
+            Tab(text: 'Manutenzione'),
+            Tab(text: 'Volo'),
+            Tab(text: 'TOB'),
+            Tab(text: 'Seminari'),
+          ],
+        ),
+      ),
       body: FutureBuilder<_MyActivitiesData>(
-        future: _load(user.id),
+        future: _future,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           final data = snapshot.data!;
-          return ListView(
-            padding: const EdgeInsets.all(24),
+          return TabBarView(
+            controller: _tabController,
             children: [
               _ActivitySection(
                 title: 'Manutenzione',
@@ -114,6 +172,12 @@ class _MyActivitiesData {
     required this.seminars,
   });
 
+  const _MyActivitiesData.empty()
+    : maintenance = const [],
+      flight = const [],
+      tob = const [],
+      seminars = const [];
+
   final List<MaintenanceActivity> maintenance;
   final List<FlightActivity> flight;
   final List<TobActivity> tob;
@@ -128,24 +192,26 @@ class _ActivitySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              if (children.isEmpty)
-                const Text('Nessuna attività registrata.')
-              else
-                ...children,
-            ],
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 12),
+                if (children.isEmpty)
+                  const Text('Nessuna attività registrata.')
+                else
+                  ...children,
+              ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -167,9 +233,14 @@ class _ActivityListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: Text(title),
-      subtitle: Text('$subtitle\n${DateFormat('dd/MM/yyyy').format(date)}'),
-      trailing: Chip(label: Text(isValidated ? 'Validata' : 'In attesa')),
+      title: Text(title, softWrap: true),
+      subtitle: Text(
+        '$subtitle\n${DateFormat('dd/MM/yyyy').format(date)}',
+        softWrap: true,
+      ),
+      trailing: Chip(
+        label: Text(isValidated ? 'Validata' : 'In attesa', softWrap: true),
+      ),
     );
   }
 }

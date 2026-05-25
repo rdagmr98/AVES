@@ -37,15 +37,18 @@ class CurrencyService {
   }
 
   Future<List<CurrencyCriteria>> getAllCriteria() async {
-    final items = _db.criteria.map((item) {
-      final capability = _findCapability(item['tob_capability_id'] as int?);
-      return CurrencyCriteria.fromJson({...item, 'tob_capabilities': capability});
-    }).toList()
-      ..sort(
-        (a, b) => ('${a.criteriaType}|${a.id ?? 0}').compareTo(
-          '${b.criteriaType}|${b.id ?? 0}',
-        ),
-      );
+    final items =
+        _db.criteria.map((item) {
+          final capability = _findCapability(item['tob_capability_id'] as int?);
+          return CurrencyCriteria.fromJson({
+            ...item,
+            'tob_capabilities': capability,
+          });
+        }).toList()..sort(
+          (a, b) => ('${a.criteriaType}|${a.id ?? 0}').compareTo(
+            '${b.criteriaType}|${b.id ?? 0}',
+          ),
+        );
     return items;
   }
 
@@ -61,14 +64,17 @@ class CurrencyService {
 
   Future<CurrencyCriteria?> getFlightTCriteria() async {
     for (final item in _db.criteria) {
-      if (item['criteria_type'] == 'FLIGHT_T' && item['tob_capability_id'] == null) {
+      if (item['criteria_type'] == 'FLIGHT_T' &&
+          item['tob_capability_id'] == null) {
         return CurrencyCriteria.fromJson(item);
       }
     }
     return null;
   }
 
-  Future<CurrencyCriteria?> getTobCapabilityCriteria(int tobCapabilityId) async {
+  Future<CurrencyCriteria?> getTobCapabilityCriteria(
+    int tobCapabilityId,
+  ) async {
     for (final item in _db.criteria) {
       if (item['criteria_type'] == 'TOB_CAPABILITY' &&
           item['tob_capability_id'] == tobCapabilityId) {
@@ -223,13 +229,23 @@ class CurrencyService {
         status: CurrencyStatusEnum.warning,
         lastActivityDate: last?.activityDate,
         expiryDate: taskStatus.expiryDate,
+        secondaryExpiryDate: seminarExpiry,
+        secondaryExpiryLabel: 'Sem. scad.',
         daysUntilExpiry: seminarDaysLeft,
         label:
             'Currency Manutentiva (seminario NAM/MHF in scadenza tra $seminarDaysLeft gg)',
       );
     }
 
-    return taskStatus;
+    return CurrencyStatus(
+      status: taskStatus.status,
+      lastActivityDate: taskStatus.lastActivityDate,
+      expiryDate: taskStatus.expiryDate,
+      secondaryExpiryDate: seminarExpiry,
+      secondaryExpiryLabel: 'Sem. scad.',
+      daysUntilExpiry: taskStatus.daysUntilExpiry,
+      label: taskStatus.label,
+    );
   }
 
   Future<CurrencyStatus> getFlightCurrency(String userId) async {
@@ -237,17 +253,22 @@ class CurrencyService {
     final periodDays = criteria?.periodDays ?? 180;
     final minHours = criteria?.minHours ?? 3.0;
 
-    final hours = await _activityService.getFlightHoursInPeriod(userId, periodDays);
-    final validatedFlightActs = _db.flightActs
-        .where(
-          (item) => item['user_id'] == userId && item['is_validated'] == true,
-        )
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(b['activity_date'] as String).compareTo(
-          DateTime.parse(a['activity_date'] as String),
-        ),
-      );
+    final hours = await _activityService.getFlightHoursInPeriod(
+      userId,
+      periodDays,
+    );
+    final validatedFlightActs =
+        _db.flightActs
+            .where(
+              (item) =>
+                  item['user_id'] == userId && item['is_validated'] == true,
+            )
+            .toList()
+          ..sort(
+            (a, b) => DateTime.parse(
+              b['activity_date'] as String,
+            ).compareTo(DateTime.parse(a['activity_date'] as String)),
+          );
     final lastDate = validatedFlightActs.isEmpty
         ? null
         : DateTime.parse(validatedFlightActs.first['activity_date'] as String);
@@ -255,20 +276,36 @@ class CurrencyService {
     final label =
         'Currency Volo (${hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)';
 
+    final expiryDate = lastDate?.add(Duration(days: periodDays));
+    final daysLeft = expiryDate?.difference(DateTime.now()).inDays;
+
     if (hours < minHours) {
       return CurrencyStatus(
         status: lastDate == null
             ? CurrencyStatusEnum.expired
             : CurrencyStatusEnum.warning,
         lastActivityDate: lastDate,
+        expiryDate: expiryDate,
+        daysUntilExpiry: daysLeft?.clamp(-9999, 9999),
         label: label,
+        flightHours: hours,
+        minFlightHours: minHours,
       );
     }
 
-    return _computeStatus(
+    final status = _computeStatus(
       lastDate: lastDate,
       periodDays: periodDays,
       label: label,
+    );
+    return CurrencyStatus(
+      status: status.status,
+      lastActivityDate: status.lastActivityDate,
+      expiryDate: status.expiryDate,
+      daysUntilExpiry: status.daysUntilExpiry,
+      label: status.label,
+      flightHours: hours,
+      minFlightHours: minHours,
     );
   }
 
@@ -281,22 +318,27 @@ class CurrencyService {
     return null;
   }
 
-  Future<CurrencyStatus> getTobBaseCurrency(String userId, String? fascia) async {
+  Future<CurrencyStatus> getTobBaseCurrency(
+    String userId,
+    String? fascia,
+  ) async {
     final criteria = await getTobBaseCriteria();
-    final periodDays = criteria?.periodForFascia(fascia) ??
-        (fascia == 'A' ? 90 : 120);
+    final periodDays =
+        criteria?.periodForFascia(fascia) ?? (fascia == 'A' ? 90 : 120);
 
     // TOB base uses any validated flight activity
-    final validatedFlights = _db.flightActs
-        .where(
-          (item) => item['user_id'] == userId && item['is_validated'] == true,
-        )
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(b['activity_date'] as String).compareTo(
-          DateTime.parse(a['activity_date'] as String),
-        ),
-      );
+    final validatedFlights =
+        _db.flightActs
+            .where(
+              (item) =>
+                  item['user_id'] == userId && item['is_validated'] == true,
+            )
+            .toList()
+          ..sort(
+            (a, b) => DateTime.parse(
+              b['activity_date'] as String,
+            ).compareTo(DateTime.parse(a['activity_date'] as String)),
+          );
     final lastDate = validatedFlights.isEmpty
         ? null
         : DateTime.parse(validatedFlights.first['activity_date'] as String);
@@ -310,6 +352,7 @@ class CurrencyService {
 
   Future<CurrencyStatus> getTobCapabilityCurrencyStatus(
     String userId,
+    int helicopterTypeId,
     int capabilityId,
     String capabilityName, {
     String? fascia,
@@ -329,6 +372,7 @@ class CurrencyService {
     final last = await _activityService.getLastValidatedTobActivity(
       userId,
       capabilityId,
+      helicopterTypeId: helicopterTypeId,
     );
 
     return _computeStatus(
@@ -370,9 +414,10 @@ class CurrencyService {
 
       // TOB capability-specific currencies
       for (final cap in tobCaps) {
-        result['tob_${cap.tobCapabilityId}'] =
+        result['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}'] =
             await getTobCapabilityCurrencyStatus(
               userId,
+              cap.helicopterTypeId,
               cap.tobCapabilityId,
               cap.capabilityName,
               fascia: fascia,
@@ -437,24 +482,25 @@ class CurrencyService {
     int? daysLeft,
   }) async {
     final notifications = _db.notifications;
+    final message = daysLeft != null
+        ? '⚠️ $label in scadenza tra $daysLeft giorni!'
+        : '🔴 $label – NO GO. Eseguire attività di mantenimento.';
     final exists = notifications.any(
       (item) =>
           item['user_id'] == userId &&
           item['type'] == type &&
-          item['is_read'] == false,
+          item['is_read'] == false &&
+          ((item['label'] as String?) == label || item['message'] == message),
     );
     if (exists) {
       return null;
     }
 
-    final message = daysLeft != null
-        ? '⚠️ $label in scadenza tra $daysLeft giorni!'
-        : '🔴 $label – NO GO. Eseguire attività di mantenimento.';
-
     notifications.add({
       'id': _nextNotificationId(notifications),
       'user_id': userId,
       'type': type,
+      'label': label,
       'message': message,
       'is_read': false,
       'created_at': DateTime.now().toIso8601String(),

@@ -87,6 +87,9 @@ class PtaService {
     final idx = list.indexWhere((e) => e['id'] == ptaId);
     if (idx == -1) return;
     final record = PtaRecord.fromJson(list[idx]);
+    if (record.isClosed) {
+      return;
+    }
     list[idx] = {...list[idx], 'is_closed': true};
     await _db.savePta(list);
     await _notifications.createNotifications(
@@ -98,6 +101,7 @@ class PtaService {
               'PTA ${record.number} su ${record.helicopterCode} chiusa. La sospensione manutentiva non è più attiva.',
         ),
       ),
+      dedupeUnread: true,
     );
   }
 
@@ -126,8 +130,15 @@ class PtaService {
   }
 
   List<PtaAcknowledgment> getPendingAcknowledgments() {
+    final activePtaIds = getActivePta()
+        .map((item) => item.id)
+        .whereType<int>()
+        .toSet();
     return _db.ptaAcknowledgments
-        .where((e) => e['is_validated'] != true)
+        .where(
+          (e) =>
+              e['is_validated'] != true && activePtaIds.contains(e['pta_id']),
+        )
         .map((e) => PtaAcknowledgment.fromJson(e))
         .toList();
   }
@@ -185,14 +196,13 @@ class PtaService {
       type: 'PTA_ACK_PENDING',
       message:
           'Presa visione PTA da validare: $userFullName (${userLicenza.isNotEmpty ? userLicenza : userId}) · ${pta.number} · ${pta.helicopterCode}.',
+      dedupeUnread: true,
     );
+    await _autoCloseIfAllAcknowledged(ptaId);
   }
 
   /// Admin validates a user's acknowledgment.
-  Future<void> validateAcknowledgment(
-    int ackId,
-    String validatedBy,
-  ) async {
+  Future<void> validateAcknowledgment(int ackId, String validatedBy) async {
     final list = _db.ptaAcknowledgments;
     final idx = list.indexWhere((e) => e['id'] == ackId);
     if (idx == -1) throw Exception('Presa visione non trovata');
@@ -222,7 +232,18 @@ class PtaService {
       type: 'PTA_ACK_VALIDATED',
       message:
           'Presa visione PTA validata: ${pta.number} · ${pta.helicopterCode}. I privilegi manutentivi tornano utilizzabili.',
+      dedupeUnread: true,
     );
+    await _autoCloseIfAllAcknowledged(acknowledgment.ptaId);
+  }
+
+  List<PtaRecord> getUserUnreadPtas(String userId) {
+    return getActivePta().where((pta) {
+      if (!_affectedMaintenanceUserIds(pta).contains(userId)) {
+        return false;
+      }
+      return !hasAck(userId, pta.id!);
+    }).toList();
   }
 
   /// Returns active PTAs for which the user has license/privilege but no
@@ -231,15 +252,14 @@ class PtaService {
     final activePtas = getActivePta();
     if (activePtas.isEmpty) return [];
 
-    // Collect helicopter IDs the user is authorized on
     final userHeli = <int>{};
     for (final lic in _db.licenses) {
-      if (lic['user_id'] == userId) {
+      if (lic['user_id'] == userId && lic['active'] != false) {
         userHeli.add(lic['helicopter_type_id'] as int);
       }
     }
     for (final priv in _db.privileges) {
-      if (priv['user_id'] == userId) {
+      if (priv['user_id'] == userId && priv['active'] != false) {
         userHeli.add(priv['helicopter_type_id'] as int);
       }
     }
@@ -253,6 +273,44 @@ class PtaService {
 
   // ── Notifications ─────────────────────────────────────────────────────────
 
+  Future<void> autoCloseCompletedPtas() async {
+    for (final pta in getActivePta()) {
+      await _autoCloseIfAllAcknowledged(pta.id!);
+    }
+  }
+
+  Future<void> _autoCloseIfAllAcknowledged(int ptaId) async {
+    final pta = getAllPta().firstWhere(
+      (item) => item.id == ptaId,
+      orElse: () => PtaRecord(
+        id: ptaId,
+        helicopterTypeId: 0,
+        helicopterCode: '?',
+        number: 'PTA',
+        title: '',
+        issueDate: DateTime.now(),
+        createdBy: '',
+        createdAt: DateTime.now(),
+        isClosed: true,
+      ),
+    );
+    if (pta.id == null || pta.isClosed) {
+      return;
+    }
+    final affectedUserIds = _affectedMaintenanceUserIds(pta);
+    if (affectedUserIds.isEmpty) {
+      await closePta(ptaId);
+      return;
+    }
+    final acknowledgedUserIds = _db.ptaAcknowledgments
+        .where((item) => item['pta_id'] == ptaId)
+        .map((item) => item['user_id'] as String)
+        .toSet();
+    if (affectedUserIds.difference(acknowledgedUserIds).isEmpty) {
+      await closePta(ptaId);
+    }
+  }
+
   Future<void> _notifyAffectedUsers(PtaRecord pta) async {
     final affectedUserIds = _affectedMaintenanceUserIds(pta);
     if (affectedUserIds.isEmpty) return;
@@ -265,18 +323,21 @@ class PtaService {
               'Nuova PTA ${pta.number} su ${pta.helicopterCode}: "${pta.title}". Currency manutentiva sospesa fino a presa visione validata.',
         ),
       ),
+      dedupeUnread: true,
     );
   }
 
   Set<String> _affectedMaintenanceUserIds(PtaRecord pta) {
     final affectedUserIds = <String>{};
     for (final lic in _db.licenses) {
-      if (lic['helicopter_type_id'] == pta.helicopterTypeId) {
+      if (lic['helicopter_type_id'] == pta.helicopterTypeId &&
+          lic['active'] != false) {
         affectedUserIds.add(lic['user_id'] as String);
       }
     }
     for (final priv in _db.privileges) {
-      if (priv['helicopter_type_id'] == pta.helicopterTypeId) {
+      if (priv['helicopter_type_id'] == pta.helicopterTypeId &&
+          priv['active'] != false) {
         affectedUserIds.add(priv['user_id'] as String);
       }
     }

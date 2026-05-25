@@ -44,6 +44,9 @@ class _AdminPrivilegesDashboardState
   int? _orgUnitId;
   int? _licenseTypeId;
   String _statusFilter = 'all';
+  final List<int> _helicopterTypeIds = [];
+  final List<int> _privilegeTypeIds = [];
+  bool _andMode = false;
   bool _gridView = true;
 
   @override
@@ -56,6 +59,16 @@ class _AdminPrivilegesDashboardState
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _toggleFilterId(List<int> values, int id) {
+    setState(() {
+      if (values.contains(id)) {
+        values.remove(id);
+      } else {
+        values.add(id);
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -115,7 +128,36 @@ class _AdminPrivilegesDashboardState
         'expired' => row.status.isExpired,
         _ => true,
       };
-      return matchesSearch && matchesOrg && matchesLicenseType && matchesStatus;
+
+      final privilegeHelicopters = row.privileges
+          .map((item) => item.helicopterTypeId)
+          .toSet();
+      final privilegeTypes = row.privileges
+          .map((item) => item.privilegeTypeId)
+          .toSet();
+      final hasHelicopterFilter = _helicopterTypeIds.isNotEmpty;
+      final hasPrivilegeFilter = _privilegeTypeIds.isNotEmpty;
+      final matchesHelicopters = !hasHelicopterFilter
+          ? true
+          : _andMode
+          ? _helicopterTypeIds.every(privilegeHelicopters.contains)
+          : _helicopterTypeIds.any(privilegeHelicopters.contains);
+      final matchesPrivileges = !hasPrivilegeFilter
+          ? true
+          : _andMode
+          ? _privilegeTypeIds.every(privilegeTypes.contains)
+          : _privilegeTypeIds.any(privilegeTypes.contains);
+      final matchesSelection = !(hasHelicopterFilter || hasPrivilegeFilter)
+          ? true
+          : _andMode
+          ? matchesHelicopters && matchesPrivileges
+          : matchesHelicopters || matchesPrivileges;
+
+      return matchesSearch &&
+          matchesOrg &&
+          matchesLicenseType &&
+          matchesStatus &&
+          matchesSelection;
     }).toList();
   }
 
@@ -215,63 +257,72 @@ class _AdminPrivilegesDashboardState
   Widget _buildUserGrid(List<_MaintenanceUserRow> filteredRows) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 980
+        final columns = constraints.maxWidth >= 1200
+            ? 6
+            : constraints.maxWidth >= 900
+            ? 5
+            : constraints.maxWidth >= 600
+            ? 4
+            : constraints.maxWidth >= 400
             ? 3
-            : constraints.maxWidth >= 640
-            ? 2
-            : 1;
+            : 2;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: filteredRows.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            mainAxisExtent: 168,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
+            mainAxisExtent: 88,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
           ),
           itemBuilder: (context, index) {
             final row = filteredRows[index];
-            final statusColor = row.status.isExpired
+            final backgroundColor = row.status.isExpired
+                ? const Color(0xFF3A0A0A)
+                : row.status.isWarning
+                ? const Color(0xFF3A2A0A)
+                : row.status.isValid
+                ? const Color(0xFF1A3A1A)
+                : AppColors.surface;
+            final borderColor = row.status.isExpired
                 ? const Color(0xFFC0392B)
                 : row.status.isWarning
                 ? const Color(0xFFE67E22)
-                : const Color(0xFF27AE60);
+                : row.status.isValid
+                ? const Color(0xFF27AE60)
+                : AppColors.border;
             return InkWell(
               onTap: () => _showUserDetail(row),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
               child: Card(
+                color: backgroundColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: borderColor),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(6),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      UserAvatar(user: row.user, radius: 24),
-                      const SizedBox(height: 10),
+                      UserAvatar(user: row.user, radius: 16),
+                      const SizedBox(height: 6),
                       Text(
-                        '${row.user.nome} ${row.user.cognome}',
+                        row.user.nome,
                         textAlign: TextAlign.center,
                         softWrap: true,
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(fontSize: 11),
                       ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: statusColor),
-                        ),
-                        child: Text(
-                          row.status.statusText,
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.w800,
-                          ),
+                      Text(
+                        row.user.cognome,
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ],
@@ -376,31 +427,65 @@ class _AdminPrivilegesDashboardState
       'Tutte',
       ...auth.licenseTypes.map((item) => item.name),
     ];
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       appBar: AppBar(
         leading: const AdminAppBarLeading(),
+        titleSpacing: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            AvesLogoWidget(size: 32),
-            SizedBox(width: 8),
-            Text('Manutenzione'),
+          children: [
+            const AvesLogoWidget(size: 32),
+            const SizedBox(width: 8),
+            Text(isMobile ? 'CSL' : 'Manutenzione Currency'),
           ],
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            onPressed: _emailExpiringUsers,
-            icon: const Icon(Icons.email_outlined),
-            tooltip: '📧 Invia Avvisi Scadenza',
-          ),
-          IconButton(
-            onPressed: () => setState(() => _gridView = !_gridView),
-            icon: Icon(_gridView ? Icons.view_list : Icons.grid_view),
-            tooltip: _gridView ? 'Vista estesa' : 'Vista compatta',
-          ),
-          IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
+          if (isMobile)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'email':
+                    _emailExpiringUsers();
+                    break;
+                  case 'view':
+                    setState(() => _gridView = !_gridView);
+                    break;
+                  case 'refresh':
+                    _loadData();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'email',
+                  child: Text('Invia avvisi scadenza'),
+                ),
+                PopupMenuItem(
+                  value: 'view',
+                  child: Text(_gridView ? 'Vista estesa' : 'Vista compatta'),
+                ),
+                const PopupMenuItem(
+                  value: 'refresh',
+                  child: Text('Aggiorna dashboard'),
+                ),
+              ],
+            )
+          else ...[
+            IconButton(
+              onPressed: _emailExpiringUsers,
+              icon: const Icon(Icons.email_outlined),
+              tooltip: '📧 Invia Avvisi Scadenza',
+            ),
+            IconButton(
+              onPressed: () => setState(() => _gridView = !_gridView),
+              icon: Icon(_gridView ? Icons.view_list : Icons.grid_view),
+              tooltip: _gridView ? 'Vista estesa' : 'Vista compatta',
+            ),
+            IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
+          ],
           IconButton(
             onPressed: () async {
               await ref.read(authProvider).signOut();
@@ -527,102 +612,204 @@ class _AdminPrivilegesDashboardState
                               const SizedBox(height: 16),
                               LayoutBuilder(
                                 builder: (context, constraints) {
-                                  final isMobile = constraints.maxWidth < 600;
-                                  return Wrap(
-                                    spacing: 12,
-                                    runSpacing: 12,
+                                  final useFullWidth =
+                                      constraints.maxWidth < 600;
+                                  return Column(
                                     children: [
-                                      SizedBox(
-                                        width: isMobile ? double.infinity : 260,
-                                        child: TextField(
-                                          controller: _searchCtrl,
-                                          decoration: const InputDecoration(
-                                            labelText:
-                                                'Cerca per nome o licenza',
-                                            prefixIcon: Icon(Icons.search),
+                                      Wrap(
+                                        alignment: WrapAlignment.center,
+                                        spacing: 12,
+                                        runSpacing: 12,
+                                        children: [
+                                          SizedBox(
+                                            width: useFullWidth
+                                                ? constraints.maxWidth
+                                                : 260,
+                                            child: TextField(
+                                              controller: _searchCtrl,
+                                              decoration: const InputDecoration(
+                                                labelText:
+                                                    'Cerca per nome o licenza',
+                                                prefixIcon: Icon(Icons.search),
+                                              ),
+                                              onChanged: (value) => setState(
+                                                () => _search = value,
+                                              ),
+                                            ),
                                           ),
-                                          onChanged: (value) =>
-                                              setState(() => _search = value),
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        width: isMobile ? double.infinity : 220,
-                                        child: DropdownButtonFormField<int?>(
-                                          isExpanded: true,
-                                          initialValue: _orgUnitId,
-                                          menuMaxHeight: 300,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Unità organizzativa',
+                                          SizedBox(
+                                            width: useFullWidth
+                                                ? constraints.maxWidth
+                                                : 220,
+                                            child: DropdownButtonFormField<int?>(
+                                              isExpanded: true,
+                                              initialValue: _orgUnitId,
+                                              menuMaxHeight: 300,
+                                              decoration: const InputDecoration(
+                                                labelText:
+                                                    'Unità organizzativa',
+                                              ),
+                                              items: orgUnitItems,
+                                              onChanged: (value) => setState(
+                                                () => _orgUnitId = value,
+                                              ),
+                                            ),
                                           ),
-                                          items: orgUnitItems,
-                                          onChanged: (value) => setState(
-                                            () => _orgUnitId = value,
+                                          SizedBox(
+                                            width: useFullWidth
+                                                ? constraints.maxWidth
+                                                : 220,
+                                            child: DropdownButtonFormField<int?>(
+                                              isExpanded: true,
+                                              initialValue: _licenseTypeId,
+                                              menuMaxHeight: 300,
+                                              selectedItemBuilder: (context) =>
+                                                  licenseTypeLabels
+                                                      .map(
+                                                        (label) => Align(
+                                                          alignment: Alignment
+                                                              .centerLeft,
+                                                          child: Text(
+                                                            label,
+                                                            softWrap: true,
+                                                          ),
+                                                        ),
+                                                      )
+                                                      .toList(),
+                                              decoration: const InputDecoration(
+                                                labelText: 'Tipo licenza',
+                                              ),
+                                              items: licenseTypeItems,
+                                              onChanged: (value) => setState(
+                                                () => _licenseTypeId = value,
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        width: isMobile ? double.infinity : 220,
-                                        child: DropdownButtonFormField<int?>(
-                                          isExpanded: true,
-                                          initialValue: _licenseTypeId,
-                                          menuMaxHeight: 300,
-                                          selectedItemBuilder: (context) =>
-                                              licenseTypeLabels
-                                                  .map(
-                                                    (label) => Align(
-                                                      alignment:
-                                                          Alignment.centerLeft,
+                                          SizedBox(
+                                            width: useFullWidth
+                                                ? constraints.maxWidth
+                                                : 220,
+                                            child:
+                                                DropdownButtonFormField<String>(
+                                                  isExpanded: true,
+                                                  initialValue: _statusFilter,
+                                                  menuMaxHeight: 300,
+                                                  decoration:
+                                                      const InputDecoration(
+                                                        labelText:
+                                                            'Stato currency',
+                                                      ),
+                                                  items: const [
+                                                    DropdownMenuItem(
+                                                      value: 'all',
+                                                      child: Text('Tutte'),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: 'valid',
+                                                      child: Text('GO'),
+                                                    ),
+                                                    DropdownMenuItem(
+                                                      value: 'warning',
                                                       child: Text(
-                                                        label,
-                                                        maxLines: 3,
-                                                        overflow: TextOverflow
-                                                            .visible,
-                                                        softWrap: true,
+                                                        'In Scadenza',
                                                       ),
                                                     ),
-                                                  )
-                                                  .toList(),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Tipo licenza',
+                                                    DropdownMenuItem(
+                                                      value: 'expired',
+                                                      child: Text('NO GO'),
+                                                    ),
+                                                  ],
+                                                  onChanged: (value) =>
+                                                      setState(
+                                                        () => _statusFilter =
+                                                            value ?? 'all',
+                                                      ),
+                                                ),
                                           ),
-                                          items: licenseTypeItems,
-                                          onChanged: (value) => setState(
-                                            () => _licenseTypeId = value,
-                                          ),
-                                        ),
+                                        ],
                                       ),
-                                      SizedBox(
-                                        width: isMobile ? double.infinity : 220,
-                                        child: DropdownButtonFormField<String>(
-                                          isExpanded: true,
-                                          initialValue: _statusFilter,
-                                          menuMaxHeight: 300,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Stato currency',
+                                      const SizedBox(height: 16),
+                                      Wrap(
+                                        alignment: WrapAlignment.center,
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          ChoiceChip(
+                                            label: const Text('OR'),
+                                            selected: !_andMode,
+                                            onSelected: (_) => setState(
+                                              () => _andMode = false,
+                                            ),
                                           ),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'all',
-                                              child: Text('Tutte'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'valid',
-                                              child: Text('GO'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'warning',
-                                              child: Text('In Scadenza'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'expired',
-                                              child: Text('NO GO'),
-                                            ),
-                                          ],
-                                          onChanged: (value) => setState(
-                                            () =>
-                                                _statusFilter = value ?? 'all',
+                                          ChoiceChip(
+                                            label: const Text('AND'),
+                                            selected: _andMode,
+                                            onSelected: (_) =>
+                                                setState(() => _andMode = true),
                                           ),
-                                        ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Elicotteri',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        alignment: WrapAlignment.center,
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          for (final helicopter
+                                              in auth.helicopterTypes)
+                                            FilterChip(
+                                              label: Text(
+                                                helicopter.code,
+                                                softWrap: true,
+                                              ),
+                                              selected: _helicopterTypeIds
+                                                  .contains(helicopter.id),
+                                              onSelected: (_) =>
+                                                  _toggleFilterId(
+                                                    _helicopterTypeIds,
+                                                    helicopter.id,
+                                                  ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Privilegi',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        alignment: WrapAlignment.center,
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          for (final privilege
+                                              in auth.privilegeTypes)
+                                            FilterChip(
+                                              label: Text(
+                                                privilege.name,
+                                                softWrap: true,
+                                              ),
+                                              selected: _privilegeTypeIds
+                                                  .contains(privilege.id),
+                                              onSelected: (_) =>
+                                                  _toggleFilterId(
+                                                    _privilegeTypeIds,
+                                                    privilege.id,
+                                                  ),
+                                            ),
+                                        ],
                                       ),
                                     ],
                                   );

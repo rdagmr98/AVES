@@ -40,6 +40,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
+    await _ptaService.autoCloseCompletedPtas();
     _allPta = _ptaService.getAllPta();
     _pendingAcks = _ptaService.getPendingAcknowledgments();
     if (mounted) setState(() => _loading = false);

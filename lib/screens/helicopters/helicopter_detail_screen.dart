@@ -146,7 +146,7 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: Clip.hardEdge,
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -156,7 +156,7 @@ class _HeroCard extends StatelessWidget {
           ),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (imageAsset != null)
               AspectRatio(
@@ -176,6 +176,7 @@ class _HeroCard extends StatelessWidget {
                     helicopter.name,
                     style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
+                    softWrap: true,
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -184,9 +185,14 @@ class _HeroCard extends StatelessWidget {
                       context,
                     ).textTheme.titleMedium?.copyWith(color: accent),
                     textAlign: TextAlign.center,
+                    softWrap: true,
                   ),
                   const SizedBox(height: 10),
-                  Text(description, textAlign: TextAlign.center),
+                  Text(
+                    description,
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                  ),
                 ],
               ),
             ),
@@ -206,6 +212,7 @@ class _SpecsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      clipBehavior: Clip.hardEdge,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -286,6 +293,7 @@ class _AssignmentCard extends StatelessWidget {
         .where((group) => group.values.isNotEmpty)
         .toList();
     return Card(
+      clipBehavior: Clip.hardEdge,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
