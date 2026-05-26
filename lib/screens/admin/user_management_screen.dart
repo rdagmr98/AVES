@@ -116,6 +116,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   }
 
   List<UserProfile> _filteredUsers() {
+    final auth = ref.read(authProvider);
     return _users.where((user) {
       final search = _search.trim().toLowerCase();
       final matchesSearch =
@@ -125,11 +126,121 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       final matchesOrg = _orgUnitId == null || user.orgUnitId == _orgUnitId;
       final matchesApproval = switch (_approvalFilter) {
         'approved' => user.isApproved,
+        'pending_maint' => auth.isAdminPriv && !user.isApprovedMaint,
+        'pending_crew' => auth.isAdminCrew && !user.isApprovedCrew,
         'pending' => !user.isApproved,
         _ => true,
       };
       return matchesSearch && matchesOrg && matchesApproval;
     }).toList();
+  }
+
+  Future<void> _bulkApproveMaint() async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+
+    final pendingUsers = _filteredUsers()
+        .where((u) => !u.isApprovedMaint)
+        .toList();
+
+    if (pendingUsers.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Approva manutenzione'),
+        content: Text(
+          'Approvare ${pendingUsers.length} utenti per la manutenzione?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Approva'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    try {
+      await _service.bulkApproveMaint(
+        pendingUsers.map((u) => u.id).toList(),
+        adminId,
+      );
+      await _loadUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${pendingUsers.length} utenti approvati per manutenzione.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _bulkApproveCrew() async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+
+    final pendingUsers = _filteredUsers()
+        .where((u) => !u.isApprovedCrew)
+        .toList();
+
+    if (pendingUsers.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Approva equipaggio'),
+        content: Text(
+          'Approvare ${pendingUsers.length} utenti per l\'equipaggio?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Approva'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    try {
+      await _service.bulkApproveCrew(
+        pendingUsers.map((u) => u.id).toList(),
+        adminId,
+      );
+      await _loadUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${pendingUsers.length} utenti approvati per equipaggio.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   /// Navigate to detail: push page on mobile, select in side-panel on desktop.
@@ -232,25 +343,86 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                     labelText: 'Stato',
                                     isDense: true,
                                   ),
-                                  items: const [
-                                    DropdownMenuItem(
+                                  items: [
+                                    const DropdownMenuItem(
                                       value: 'all',
                                       child: Text('Tutti'),
                                     ),
-                                    DropdownMenuItem(
+                                    const DropdownMenuItem(
                                       value: 'approved',
                                       child: Text('Approvati'),
                                     ),
-                                    DropdownMenuItem(
+                                    const DropdownMenuItem(
                                       value: 'pending',
                                       child: Text('In attesa'),
                                     ),
+                                    if (auth.isAdminPriv || !auth.isAdminCrew)
+                                      const DropdownMenuItem(
+                                        value: 'pending_maint',
+                                        child: Text('In attesa - Manutenzione'),
+                                      ),
+                                    if (auth.isAdminCrew || !auth.isAdminPriv)
+                                      const DropdownMenuItem(
+                                        value: 'pending_crew',
+                                        child: Text('In attesa - Equipaggio'),
+                                      ),
                                   ],
                                   onChanged: (v) => setState(
                                     () => _approvalFilter = v ?? 'all',
                                   ),
                                 ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              if (auth.isAdminPriv || !auth.isAdminCrew) ...[
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed:
+                                        filteredUsers.any(
+                                          (u) => !u.isApprovedMaint,
+                                        )
+                                        ? _bulkApproveMaint
+                                        : null,
+                                    icon: const Icon(
+                                      Icons.engineering_outlined,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Approva Manutenzione'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              if (auth.isAdminCrew || !auth.isAdminPriv)
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed:
+                                        filteredUsers.any(
+                                          (u) => !u.isApprovedCrew,
+                                        )
+                                        ? _bulkApproveCrew
+                                        : null,
+                                    icon: const Icon(
+                                      Icons.flight_outlined,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Approva Equipaggio'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ],
@@ -277,6 +449,10 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                 users: filteredUsers,
                                 selected: _selectedUser,
                                 onSelected: (u) => _openUserDetail(context, u),
+                                isMaintenanceContext:
+                                    auth.isAdminPriv || !auth.isAdminCrew,
+                                isCrewContext:
+                                    auth.isAdminCrew || !auth.isAdminPriv,
                               ),
                             ),
                             const VerticalDivider(width: 1),
@@ -308,6 +484,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                           users: filteredUsers,
                           selected: null,
                           onSelected: (u) => _openUserDetail(context, u),
+                          isMaintenanceContext:
+                              auth.isAdminPriv || !auth.isAdminCrew,
+                          isCrewContext: auth.isAdminCrew || !auth.isAdminPriv,
                         ),
                 ),
               ],
@@ -321,11 +500,15 @@ class _UserList extends StatelessWidget {
     required this.users,
     required this.selected,
     required this.onSelected,
+    required this.isMaintenanceContext,
+    required this.isCrewContext,
   });
 
   final List<UserProfile> users;
   final UserProfile? selected;
   final ValueChanged<UserProfile> onSelected;
+  final bool isMaintenanceContext;
+  final bool isCrewContext;
 
   @override
   Widget build(BuildContext context) {
@@ -339,10 +522,15 @@ class _UserList extends StatelessWidget {
       itemBuilder: (context, index) {
         final user = users[index];
         final isSelected = selected?.id == user.id;
+        final isPending = isMaintenanceContext
+            ? !user.isApprovedMaint
+            : isCrewContext
+            ? !user.isApprovedCrew
+            : !user.isApproved;
         return Card(
           color: isSelected
               ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.18)
-              : !user.isApproved
+              : isPending
               ? Theme.of(
                   context,
                 ).colorScheme.errorContainer.withValues(alpha: 0.25)
@@ -357,9 +545,9 @@ class _UserList extends StatelessWidget {
                   UserAvatar(
                     user: user,
                     radius: 22,
-                    backgroundColor: user.isApproved
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.amber.shade700,
+                    backgroundColor: isPending
+                        ? Colors.amber.shade700
+                        : Theme.of(context).colorScheme.primary,
                     textStyle: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -403,15 +591,15 @@ class _UserList extends StatelessWidget {
                   ),
                   // Status badge
                   const SizedBox(width: 8),
-                  user.isApproved
+                  isPending
                       ? const Icon(
-                          Icons.verified_rounded,
-                          color: Colors.green,
+                          Icons.pending_rounded,
+                          color: Colors.amber,
                           size: 22,
                         )
                       : const Icon(
-                          Icons.pending_rounded,
-                          color: Colors.amber,
+                          Icons.verified_rounded,
+                          color: Colors.green,
                           size: 22,
                         ),
                   const SizedBox(width: 4),
@@ -647,8 +835,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
 
   void _toggle(Set<String> set, String k) =>
       set.contains(k) ? set.remove(k) : set.add(k);
-  void _toggleI(Set<int> set, int k) =>
-      set.contains(k) ? set.remove(k) : set.add(k);
 
   Set<int> _selectedPrivilegeIdsFor(int helicopterTypeId) {
     return _privilegeKeys
@@ -683,17 +869,77 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     });
   }
 
-  Future<void> _approve() async {
+  Future<void> _selectTCrewHelicopters() async {
+    final selected = await showDialog<Set<int>>(
+      context: context,
+      builder: (ctx) => _HelicopterMultiSelectDialog(
+        title: 'Seleziona elicotteri Equipaggio T',
+        helicopters: widget.helicopterTypes,
+        initialSelection: _tCrewHelicopters,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _tCrewHelicopters = selected;
+      });
+    }
+  }
+
+  Future<void> _selectTobCrewHelicopters() async {
+    final selected = await showDialog<Set<int>>(
+      context: context,
+      builder: (ctx) => _HelicopterMultiSelectDialog(
+        title: 'Seleziona elicotteri Equipaggio TOB',
+        helicopters: widget.helicopterTypes,
+        initialSelection: _tobCrewHelicopters,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _tobCrewHelicopters = selected;
+        _tobGrades.removeWhere((key, _) => !selected.contains(key));
+        _tobCapabilityKeys.removeWhere((key) {
+          final helicopterId = int.tryParse(key.split(':').first);
+          return helicopterId == null || !selected.contains(helicopterId);
+        });
+        for (final id in selected) {
+          _tobGrades.putIfAbsent(id, () => 'A');
+        }
+      });
+    }
+  }
+
+  Future<void> _approveMaint() async {
     final adminId = ref.read(authProvider).userProfile?.id;
     if (adminId == null) return;
     try {
-      await widget.service.approveUser(_user.id, adminId);
+      await widget.service.approveMaint(_user.id, adminId);
       if (!mounted) return;
-      final updated = _user.copyWith(isApproved: true);
+      final updated = _user.copyWith(isApprovedMaint: true, isApproved: true);
       setState(() => _user = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utente approvato per manutenzione.')),
+      );
+      widget.onSaved?.call();
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Utente approvato.')));
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _approveCrew() async {
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+    try {
+      await widget.service.approveCrew(_user.id, adminId);
+      if (!mounted) return;
+      final updated = _user.copyWith(isApprovedCrew: true, isApproved: true);
+      setState(() => _user = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utente approvato per equipaggio.')),
+      );
       widget.onSaved?.call();
     } catch (e) {
       if (!mounted) return;
@@ -824,7 +1070,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 // ── Pending approval banner ───────────────────────────────
-                if (!_user.isApproved)
+                if ((widget.showMaintenanceSections &&
+                        !_user.isApprovedMaint) ||
+                    (widget.showCrewSections && !_user.isApprovedCrew))
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 16),
@@ -860,16 +1108,48 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _approve,
-                            icon: const Icon(Icons.verified_user_outlined),
-                            label: const Text('APPROVA PROFILO'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
-                            ),
-                          ),
+                        Builder(
+                          builder: (ctx) {
+                            final showMaint =
+                                widget.showMaintenanceSections &&
+                                !_user.isApprovedMaint;
+                            final showCrew =
+                                widget.showCrewSections &&
+                                !_user.isApprovedCrew;
+
+                            return Column(
+                              children: [
+                                if (showMaint)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton.icon(
+                                      onPressed: _approveMaint,
+                                      icon: const Icon(
+                                        Icons.engineering_outlined,
+                                      ),
+                                      label: const Text('APPROVA MANUTENZIONE'),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                if (showMaint && showCrew)
+                                  const SizedBox(height: 8),
+                                if (showCrew)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton.icon(
+                                      onPressed: _approveCrew,
+                                      icon: const Icon(Icons.flight_outlined),
+                                      label: const Text('APPROVA EQUIPAGGIO'),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.blue.shade700,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -1078,103 +1358,306 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                 // ── Crew sections ─────────────────────────────────────────
                 if (widget.showCrewSections) ...[
                   const SizedBox(height: 16),
-                  _Section(
-                    title: 'Equipaggi di volo',
-                    children: widget.helicopterTypes.map((h) {
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                h.name,
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              CheckboxListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                title: const Text('Equipaggio T'),
-                                value: _tCrewHelicopters.contains(h.id),
-                                onChanged: (_) => setState(
-                                  () => _toggleI(_tCrewHelicopters, h.id),
-                                ),
-                              ),
-                              CheckboxListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                title: const Text('Equipaggio TOB'),
-                                value: _tobCrewHelicopters.contains(h.id),
-                                onChanged: (_) => setState(() {
-                                  _toggleI(_tobCrewHelicopters, h.id);
-                                  _tobGrades.putIfAbsent(h.id, () => 'A');
-                                }),
-                              ),
-                              if (_tobCrewHelicopters.contains(h.id))
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: DropdownButtonFormField<String>(
-                                    key: ValueKey(
-                                      '${h.id}_${_tobGrades[h.id]}',
-                                    ),
-                                    initialValue: _tobGrades[h.id] ?? 'A',
-                                    isExpanded: true,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Fascia TOB',
-                                      isDense: true,
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'A',
-                                        child: Text('A'),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Equipaggi di volo',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Equipaggio T',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleSmall,
+                                        ),
                                       ),
-                                      DropdownMenuItem(
-                                        value: 'B',
-                                        child: Text('B'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'C',
-                                        child: Text('C'),
-                                      ),
+                                      if (_tCrewHelicopters.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${_tCrewHelicopters.length}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimaryContainer,
+                                            ),
+                                          ),
+                                        ),
                                     ],
-                                    onChanged: (v) => setState(
-                                      () => _tobGrades[h.id] = v ?? 'A',
-                                    ),
                                   ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  _Section(
-                    title: 'Capacità TOB',
-                    children: widget.helicopterTypes
-                        .map(
-                          (h) => _ChipGroup(
-                            title: h.name,
-                            chips: widget.tobCapabilities
-                                .map(
-                                  (c) => FilterChip(
-                                    selected: _tobCapabilityKeys.contains(
-                                      '${h.id}:${c.id}',
-                                    ),
-                                    label: Text(c.name),
-                                    onSelected: (_) => setState(
-                                      () => _toggle(
-                                        _tobCapabilityKeys,
-                                        '${h.id}:${c.id}',
+                                  const SizedBox(height: 8),
+                                  if (_tCrewHelicopters.isNotEmpty)
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: widget.helicopterTypes
+                                          .where(
+                                            (h) => _tCrewHelicopters.contains(
+                                              h.id,
+                                            ),
+                                          )
+                                          .map(
+                                            (h) => Chip(
+                                              label: Text(h.name),
+                                              onDeleted: () => setState(
+                                                () => _tCrewHelicopters.remove(
+                                                  h.id,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    )
+                                  else
+                                    const Text(
+                                      'Nessun elicottero selezionato',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
                                       ),
                                     ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: _selectTCrewHelicopters,
+                                    icon: const Icon(Icons.flight, size: 16),
+                                    label: const Text('Scegli elicotteri'),
                                   ),
-                                )
-                                .toList(),
+                                ],
+                              ),
+                            ),
                           ),
-                        )
-                        .toList(),
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Equipaggio TOB',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleSmall,
+                                        ),
+                                      ),
+                                      if (_tobCrewHelicopters.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${_tobCrewHelicopters.length}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimaryContainer,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (_tobCrewHelicopters.isNotEmpty)
+                                    ...widget.helicopterTypes
+                                        .where(
+                                          (h) => _tobCrewHelicopters.contains(
+                                            h.id,
+                                          ),
+                                        )
+                                        .map(
+                                          (h) => Card(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(8),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          h.name,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.close,
+                                                          size: 18,
+                                                        ),
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                        constraints:
+                                                            const BoxConstraints(),
+                                                        onPressed: () => setState(
+                                                          () {
+                                                            _tobCrewHelicopters
+                                                                .remove(h.id);
+                                                            _tobGrades.remove(
+                                                              h.id,
+                                                            );
+                                                            _tobCapabilityKeys
+                                                                .removeWhere(
+                                                                  (
+                                                                    k,
+                                                                  ) => k.startsWith(
+                                                                    '${h.id}:',
+                                                                  ),
+                                                                );
+                                                          },
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  DropdownButtonFormField<
+                                                    String
+                                                  >(
+                                                    key: ValueKey(
+                                                      '${h.id}_${_tobGrades[h.id]}',
+                                                    ),
+                                                    initialValue:
+                                                        _tobGrades[h.id] ?? 'A',
+                                                    isExpanded: true,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                          labelText:
+                                                              'Fascia TOB',
+                                                          isDense: true,
+                                                        ),
+                                                    items: const [
+                                                      DropdownMenuItem(
+                                                        value: 'A',
+                                                        child: Text('A'),
+                                                      ),
+                                                      DropdownMenuItem(
+                                                        value: 'B',
+                                                        child: Text('B'),
+                                                      ),
+                                                      DropdownMenuItem(
+                                                        value: 'C',
+                                                        child: Text('C'),
+                                                      ),
+                                                    ],
+                                                    onChanged: (v) => setState(
+                                                      () => _tobGrades[h.id] =
+                                                          v ?? 'A',
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  const Text(
+                                                    'Capacità TOB:',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 6,
+                                                    children: widget
+                                                        .tobCapabilities
+                                                        .map(
+                                                          (c) => FilterChip(
+                                                            selected:
+                                                                _tobCapabilityKeys
+                                                                    .contains(
+                                                                      '${h.id}:${c.id}',
+                                                                    ),
+                                                            label: Text(c.name),
+                                                            onSelected: (_) => setState(
+                                                              () => _toggle(
+                                                                _tobCapabilityKeys,
+                                                                '${h.id}:${c.id}',
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        )
+                                                        .toList(),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                  else
+                                    const Text(
+                                      'Nessun elicottero selezionato',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: _selectTobCrewHelicopters,
+                                    icon: const Icon(Icons.flight, size: 16),
+                                    label: const Text('Scegli elicotteri'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -1231,28 +1714,68 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _ChipGroup extends StatelessWidget {
-  const _ChipGroup({required this.title, required this.chips});
+class _HelicopterMultiSelectDialog extends StatefulWidget {
+  const _HelicopterMultiSelectDialog({
+    required this.title,
+    required this.helicopters,
+    required this.initialSelection,
+  });
+
   final String title;
-  final List<Widget> chips;
+  final List<HelicopterType> helicopters;
+  final Set<int> initialSelection;
+
+  @override
+  State<_HelicopterMultiSelectDialog> createState() =>
+      _HelicopterMultiSelectDialogState();
+}
+
+class _HelicopterMultiSelectDialogState
+    extends State<_HelicopterMultiSelectDialog> {
+  late Set<int> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<int>.from(widget.initialSelection);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 6, children: chips),
-        ],
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView(
+          shrinkWrap: true,
+          children: widget.helicopters.map((h) {
+            final isSelected = _selected.contains(h.id);
+            return CheckboxListTile(
+              value: isSelected,
+              title: Text(h.name),
+              onChanged: (val) {
+                setState(() {
+                  if (val == true) {
+                    _selected.add(h.id);
+                  } else {
+                    _selected.remove(h.id);
+                  }
+                });
+              },
+            );
+          }).toList(),
+        ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_selected),
+          child: const Text('Conferma'),
+        ),
+      ],
     );
   }
 }

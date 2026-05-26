@@ -10,18 +10,20 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/activity_models.dart';
 import 'activity_service.dart';
 import 'currency_service.dart';
+import 'p66_service.dart';
 import 'user_service.dart';
 
 class ReportService {
   final _activityService = ActivityService();
   final _currencyService = CurrencyService();
+  final _p66Service = P66Service();
   final _userService = UserService();
 
   Future<void> downloadMaintenanceReport() async {
     final users = await _userService.getAllUsers();
     final rows = <List<String>>[];
 
-    for (final user in users.where((item) => item.isApproved)) {
+    for (final user in users.where((item) => item.isApprovedMaint)) {
       final licenses = await _userService.getUserLicenses(user.id);
       final privileges = await _userService.getUserPrivileges(user.id);
       if (licenses.isEmpty && privileges.isEmpty) {
@@ -55,7 +57,7 @@ class ReportService {
           license.licenseName,
           (privilegesByHelicopter[license.helicopterTypeId] ?? const ['-'])
               .join(', '),
-          _formatDate(lastActivity?.activityDate),
+          _formatDate(lastActivity?.effectiveDate),
           _formatDate(status.expiryDate),
           status.statusText,
         ]);
@@ -76,7 +78,7 @@ class ReportService {
           privilege.helicopterCode,
           '-',
           entry.value.join(', '),
-          _formatDate(lastActivity?.activityDate),
+          _formatDate(lastActivity?.effectiveDate),
           _formatDate(status.expiryDate),
           status.statusText,
         ]);
@@ -107,7 +109,7 @@ class ReportService {
     final users = await _userService.getAllUsers();
     final rows = <List<String>>[];
 
-    for (final user in users.where((item) => item.isApproved)) {
+    for (final user in users.where((item) => item.isApprovedCrew)) {
       final assignments = await _userService.getUserCrewAssignments(user.id);
       if (assignments.isEmpty) {
         continue;
@@ -215,6 +217,201 @@ class ReportService {
       fileName:
           'report_volo_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
+  }
+
+  Future<void> downloadP66Report() async {
+    final rows = await _p66Service.getAllP66Data();
+    await _downloadPdf(
+      title: 'Report P-66 AVES',
+      headers: const [
+        'Cognome',
+        'Nome',
+        'Tipo Licenza',
+        'N. Licenza',
+        'Mesi Attività 24m',
+        'Stato P-66',
+        'Mesi coperti',
+      ],
+      rows: rows
+          .map(
+            (row) => [
+              row.user.cognome,
+              row.user.nome,
+              row.licenseTypes,
+              row.licenseNumber,
+              '${row.monthCount}',
+              row.statusText,
+              row.coveredMonths.join(', '),
+            ],
+          )
+          .toList(growable: false),
+      fileName:
+          'report_p66_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+    );
+  }
+
+  Future<void> downloadPrivilegeMatrix({
+    int? orgUnitId,
+    int? helicopterTypeId,
+    int? licenseTypeId,
+  }) async {
+    final users = await _userService.getAllUsers();
+    final privilegeTypes = [
+      'DLV',
+      'CRA',
+      'CDT',
+      'CRF',
+      'CRD',
+      'MLN',
+      'MTM',
+      'MDN',
+      'IDR',
+      'STR',
+      'EEA',
+      'ISP',
+    ];
+    final matrixRows = <List<String>>[];
+    final detailRows = <List<String>>[];
+
+    for (final user in users.where((item) => item.isApprovedMaint)) {
+      if (orgUnitId != null && user.orgUnitId != orgUnitId) {
+        continue;
+      }
+
+      final licenses = await _userService.getUserLicenses(user.id);
+      if (licenses.isEmpty) {
+        continue;
+      }
+      if (licenseTypeId != null &&
+          !licenses.any((l) => l.licenseTypeId == licenseTypeId)) {
+        continue;
+      }
+
+      final privileges = await _userService.getUserPrivileges(user.id);
+      if (helicopterTypeId != null &&
+          !privileges.any((p) => p.helicopterTypeId == helicopterTypeId)) {
+        continue;
+      }
+
+      final licenseStr = licenses
+          .where(
+            (l) => licenseTypeId == null || l.licenseTypeId == licenseTypeId,
+          )
+          .map((l) => l.licenseName)
+          .join(', ');
+      final numeroLicenza = user.numeroLicenza ?? '-';
+
+      final privilegesForRow = privileges
+          .where(
+            (p) =>
+                helicopterTypeId == null ||
+                p.helicopterTypeId == helicopterTypeId,
+          )
+          .toList();
+      final privilegeSet = privilegesForRow
+          .map((p) => p.privilegeName.toUpperCase())
+          .toSet();
+
+      final matrixRow = [
+        user.fullName,
+        licenseStr.isEmpty ? '-' : licenseStr,
+        numeroLicenza,
+        ...privilegeTypes.map((type) => privilegeSet.contains(type) ? '■' : ''),
+      ];
+      matrixRows.add(matrixRow);
+
+      final detailPrivileges = privilegesForRow.isEmpty
+          ? '-'
+          : privilegesForRow
+                .map((p) => '${p.helicopterCode} ${p.privilegeName}')
+                .join(', ');
+      detailRows.add([
+        user.fullName,
+        licenseStr.isEmpty ? '-' : licenseStr,
+        numeroLicenza,
+        user.orgUnitName,
+        detailPrivileges,
+      ]);
+    }
+
+    final pdf = pw.Document();
+    final generatedAt = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+    final filterInfo = [
+      if (orgUnitId != null) 'U.O. filtrato',
+      if (helicopterTypeId != null) 'Elicottero filtrato',
+      if (licenseTypeId != null) 'Tipo licenza filtrato',
+    ].join(', ');
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        build: (context) => [
+          pw.Text(
+            'Matrice Privilegi CSL',
+            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Text('Generato il $generatedAt'),
+          if (filterInfo.isNotEmpty) pw.Text('Filtri: $filterInfo'),
+          pw.SizedBox(height: 16),
+          pw.TableHelper.fromTextArray(
+            headers: ['Nome', 'Tipo Licenza', 'N° Licenza', ...privilegeTypes],
+            data: matrixRows.isEmpty
+                ? [List<String>.filled(3 + privilegeTypes.length, '-')]
+                : matrixRows,
+            headerStyle: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white,
+            ),
+            headerDecoration: const pw.BoxDecoration(
+              color: PdfColors.blueGrey800,
+            ),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            cellAlignment: pw.Alignment.center,
+            cellPadding: const pw.EdgeInsets.all(4),
+          ),
+          pw.SizedBox(height: 24),
+          pw.Text(
+            'Dettaglio Privilegi',
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 8),
+          pw.TableHelper.fromTextArray(
+            headers: [
+              'Nome',
+              'Tipo Licenza',
+              'N° Licenza',
+              'U.O.',
+              'Privilegi',
+            ],
+            data: detailRows.isEmpty
+                ? [List<String>.filled(5, '-')]
+                : detailRows,
+            headerStyle: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white,
+            ),
+            headerDecoration: const pw.BoxDecoration(
+              color: PdfColors.blueGrey800,
+            ),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellPadding: const pw.EdgeInsets.all(6),
+          ),
+        ],
+      ),
+    );
+
+    final Uint8List bytes = await pdf.save();
+    final blob = html.Blob([bytes], 'application/pdf');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.AnchorElement(href: url)
+      ..setAttribute(
+        'download',
+        'matrice_privilegi_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      )
+      ..click();
+    html.Url.revokeObjectUrl(url);
   }
 
   Future<void> _downloadPdf({

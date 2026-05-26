@@ -10,6 +10,8 @@ class UserProfile {
   final String orgUnitName;
   final String role;
   final bool isApproved;
+  final bool isApprovedMaint;
+  final bool isApprovedCrew;
   final bool isActive;
   final String? note;
   final DateTime createdAt;
@@ -27,6 +29,8 @@ class UserProfile {
     this.orgUnitName = '',
     required this.role,
     this.isApproved = false,
+    this.isApprovedMaint = false,
+    this.isApprovedCrew = false,
     this.isActive = true,
     this.note,
     required this.createdAt,
@@ -44,28 +48,37 @@ class UserProfile {
   bool get isAdmin => isAdminPriv || isAdminCrew;
   bool get isUser => role == 'user';
 
-  factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
-    id: j['id'] as String,
-    nome: j['nome'] as String? ?? '',
-    cognome: j['cognome'] as String? ?? '',
-    username: j['username'] as String?,
-    numeroLicenza: j['numero_licenza'] as String?,
-    email: j['email'] as String?,
-    profilePhotoBase64: j['profile_photo_base64'] as String?,
-    orgUnitId: j['org_unit_id'] as int?,
-    orgUnitName:
-        (j['org_units'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-    role: j['role'] as String? ?? 'user',
-    isApproved: j['is_approved'] as bool? ?? false,
-    isActive: j['is_active'] as bool? ?? true,
-    note: j['note'] as String?,
-    createdAt: DateTime.parse(
-      j['created_at'] as String? ?? DateTime.now().toIso8601String(),
-    ),
-    updatedAt: DateTime.parse(
-      j['updated_at'] as String? ?? DateTime.now().toIso8601String(),
-    ),
-  );
+  factory UserProfile.fromJson(Map<String, dynamic> j) {
+    final legacyApproved = j['is_approved'] as bool? ?? false;
+    final isApprovedMaint = j['is_approved_maint'] as bool? ?? legacyApproved;
+    final isApprovedCrew = j['is_approved_crew'] as bool? ?? false;
+    final isApproved = legacyApproved || isApprovedMaint || isApprovedCrew;
+
+    return UserProfile(
+      id: j['id'] as String,
+      nome: j['nome'] as String? ?? '',
+      cognome: j['cognome'] as String? ?? '',
+      username: j['username'] as String?,
+      numeroLicenza: j['numero_licenza'] as String?,
+      email: j['email'] as String?,
+      profilePhotoBase64: j['profile_photo_base64'] as String?,
+      orgUnitId: j['org_unit_id'] as int?,
+      orgUnitName:
+          (j['org_units'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+      role: j['role'] as String? ?? 'user',
+      isApproved: isApproved,
+      isApprovedMaint: isApprovedMaint,
+      isApprovedCrew: isApprovedCrew,
+      isActive: j['is_active'] as bool? ?? true,
+      note: j['note'] as String?,
+      createdAt: DateTime.parse(
+        j['created_at'] as String? ?? DateTime.now().toIso8601String(),
+      ),
+      updatedAt: DateTime.parse(
+        j['updated_at'] as String? ?? DateTime.now().toIso8601String(),
+      ),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'nome': nome,
@@ -76,7 +89,9 @@ class UserProfile {
     'profile_photo_base64': profilePhotoBase64,
     'org_unit_id': orgUnitId,
     'role': role,
-    'is_approved': isApproved,
+    'is_approved': isApprovedMaint || isApprovedCrew,
+    'is_approved_maint': isApprovedMaint,
+    'is_approved_crew': isApprovedCrew,
     'is_active': isActive,
     'note': note,
   };
@@ -92,6 +107,8 @@ class UserProfile {
     String? orgUnitName,
     String? role,
     bool? isApproved,
+    bool? isApprovedMaint,
+    bool? isApprovedCrew,
     bool? isActive,
     String? note,
   }) => UserProfile(
@@ -106,6 +123,8 @@ class UserProfile {
     orgUnitName: orgUnitName ?? this.orgUnitName,
     role: role ?? this.role,
     isApproved: isApproved ?? this.isApproved,
+    isApprovedMaint: isApprovedMaint ?? this.isApprovedMaint,
+    isApprovedCrew: isApprovedCrew ?? this.isApprovedCrew,
     isActive: isActive ?? this.isActive,
     note: note ?? this.note,
     createdAt: createdAt,

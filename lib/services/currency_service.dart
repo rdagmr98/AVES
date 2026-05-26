@@ -309,7 +309,7 @@ class CurrencyService {
     final periodDays = criteria?.periodDays ?? 180;
     final last = await _activityService.getLastValidatedMaintenance(userId);
     final fallbackStatus = _computeStatus(
-      lastDate: last?.activityDate,
+      lastDate: last?.effectiveDate,
       periodDays: periodDays,
       label: 'Currency Manutentiva',
     );
@@ -397,15 +397,21 @@ class CurrencyService {
                         a['privilege_type_id'] == null),
               )
               .toList()
-            ..sort(
-              (a, b) => DateTime.parse(
-                b['activity_date'] as String,
-              ).compareTo(DateTime.parse(a['activity_date'] as String)),
-            );
+            ..sort((a, b) {
+              final aEffective = a['date_to'] != null
+                  ? DateTime.parse(a['date_to'] as String)
+                  : DateTime.parse(a['activity_date'] as String);
+              final bEffective = b['date_to'] != null
+                  ? DateTime.parse(b['date_to'] as String)
+                  : DateTime.parse(b['activity_date'] as String);
+              return bEffective.compareTo(aEffective);
+            });
 
       final lastDate = acts.isEmpty
           ? null
-          : DateTime.parse(acts.first['activity_date'] as String);
+          : (acts.first['date_to'] != null
+                ? DateTime.parse(acts.first['date_to'] as String)
+                : DateTime.parse(acts.first['activity_date'] as String));
 
       result.add(
         PrivilegeCurrencyStatus(

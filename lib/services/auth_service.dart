@@ -102,6 +102,8 @@ class AuthService {
       'org_unit_id': null,
       'role': 'user',
       'is_approved': false,
+      'is_approved_maint': false,
+      'is_approved_crew': false,
       'is_active': true,
       'note': null,
       'created_at': now,

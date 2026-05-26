@@ -10,6 +10,7 @@ import 'screens/activities/add_activity_screen.dart';
 import 'screens/activities/my_activities_screen.dart';
 import 'screens/activities/pta_screen.dart';
 import 'screens/admin/currency_settings_screen.dart';
+import 'screens/admin/group_seminar_screen.dart';
 import 'screens/admin/insert_activity_admin_screen.dart';
 import 'screens/admin/pta_management_screen.dart';
 import 'screens/admin/user_management_screen.dart';
@@ -17,6 +18,7 @@ import 'screens/admin/validate_activities_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/dashboard/admin_crew_dashboard.dart';
+import 'screens/dashboard/admin_p66_dashboard.dart';
 import 'screens/dashboard/admin_privileges_dashboard.dart';
 import 'screens/dashboard/user_dashboard.dart';
 import 'screens/helicopters/helicopter_detail_screen.dart';
@@ -60,6 +62,10 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         builder: (context, state) => const AdminPrivilegesDashboard(),
       ),
       GoRoute(
+        path: '/admin/p66',
+        builder: (context, state) => const AdminP66Dashboard(),
+      ),
+      GoRoute(
         path: '/admin/crew',
         builder: (context, state) => const AdminCrewDashboard(),
       ),
@@ -96,6 +102,10 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         path: '/admin/pta',
         builder: (context, state) => const PtaManagementScreen(),
       ),
+      GoRoute(
+        path: '/admin/seminars/add',
+        builder: (context, state) => const GroupSeminarScreen(),
+      ),
       GoRoute(path: '/pta', builder: (context, state) => const PtaScreen()),
       GoRoute(
         path: '/helicopters/fleet',
@@ -112,6 +122,12 @@ class _AvesAppState extends ConsumerState<AvesApp> {
       final auth = ref.read(authProvider);
       final location = state.matchedLocation;
       const publicRoutes = {'/', '/login', '/register'};
+      const adminPrivRoutes = {
+        '/admin/priv',
+        '/admin/pta',
+        '/admin/p66',
+        '/admin/seminars/add',
+      };
       const adminRoutes = {
         '/admin/priv',
         '/admin/crew',
@@ -120,6 +136,8 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         '/admin/settings',
         '/admin/insert',
         '/admin/pta',
+        '/admin/p66',
+        '/admin/seminars/add',
       };
 
       String defaultHome() {
@@ -153,8 +171,7 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         return defaultHome();
       }
 
-      if ((location == '/admin/priv' || location == '/admin/pta') &&
-          !auth.isAdminPriv) {
+      if (adminPrivRoutes.contains(location) && !auth.isAdminPriv) {
         return defaultHome();
       }
 

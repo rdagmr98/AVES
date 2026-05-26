@@ -238,12 +238,15 @@ class ActivityService {
                   item['user_id'] == userId && item['is_validated'] == true,
             )
             .toList()
-          ..sort(
-            (a, b) => _parseDate(
-              b,
-              'activity_date',
-            ).compareTo(_parseDate(a, 'activity_date')),
-          );
+          ..sort((a, b) {
+            final aEffective = a['date_to'] != null
+                ? DateTime.parse(a['date_to'] as String)
+                : _parseDate(a, 'activity_date');
+            final bEffective = b['date_to'] != null
+                ? DateTime.parse(b['date_to'] as String)
+                : _parseDate(b, 'activity_date');
+            return bEffective.compareTo(aEffective);
+          });
     if (items.isEmpty) {
       return null;
     }

@@ -73,6 +73,8 @@ class _InsertActivityAdminScreenState
 
   int? _workOrderHelicopterId;
   DateTime _workOrderDate = DateTime.now();
+  DateTime? _workOrderDateFrom;
+  DateTime? _workOrderDateTo;
   String? _workOrderActivityType;
   final List<_TechEntry> _techEntries = [];
 
@@ -130,11 +132,20 @@ class _InsertActivityAdminScreenState
 
   Future<void> _loadUsers() async {
     final users = await _userService.getAllUsers();
+    final auth = ref.read(authProvider);
     if (!mounted) {
       return;
     }
     setState(() {
-      _users = users.where((item) => item.isApproved).toList();
+      _users = users.where((item) {
+        if (auth.isAdminPriv) {
+          return item.isApprovedMaint;
+        }
+        if (auth.isAdminCrew) {
+          return item.isApprovedCrew;
+        }
+        return item.isApproved;
+      }).toList();
       _loading = false;
     });
   }
@@ -586,6 +597,14 @@ class _InsertActivityAdminScreenState
       );
       return;
     }
+    if (_workOrderDateFrom != null &&
+        _workOrderDateTo != null &&
+        _workOrderDateTo!.isBefore(_workOrderDateFrom!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data Al deve essere >= Data Dal.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final desc = _workOrderDescCtrl.text.trim().isEmpty
@@ -600,13 +619,16 @@ class _InsertActivityAdminScreenState
       final ordLav = _workOrderOrdLavCtrl.text.trim().isEmpty
           ? null
           : _workOrderOrdLavCtrl.text.trim();
+      final effectiveDate = _workOrderDateTo ?? _workOrderDate;
       for (final entry in _techEntries) {
         await _activityService.addMaintenanceActivityValidated(
           MaintenanceActivity(
             userId: entry.user.id,
             helicopterTypeId: helicopterId,
             privilegeTypeId: entry.privilegeTypeId,
-            activityDate: _workOrderDate,
+            activityDate: effectiveDate,
+            dateFrom: _workOrderDateFrom,
+            dateTo: _workOrderDateTo,
             description: desc,
             submittedBy: adminId,
             activityType: _workOrderActivityType,
@@ -628,6 +650,8 @@ class _InsertActivityAdminScreenState
           _workOrderDescCtrl.clear();
           _workOrderActivityType = null;
           _workOrderDate = DateTime.now();
+          _workOrderDateFrom = null;
+          _workOrderDateTo = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -867,6 +891,69 @@ class _InsertActivityAdminScreenState
                                     _workOrderDate,
                                   ),
                                 ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _AdminDateButton(
+                                        label: 'Dal (opzionale)',
+                                        date: _workOrderDateFrom,
+                                        onPressed: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate:
+                                                _workOrderDateFrom ??
+                                                DateTime.now(),
+                                            firstDate: DateTime(2020),
+                                            lastDate: DateTime.now(),
+                                          );
+                                          if (picked != null && mounted) {
+                                            setState(
+                                              () => _workOrderDateFrom = picked,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _AdminDateButton(
+                                        label: 'Al (opzionale)',
+                                        date: _workOrderDateTo,
+                                        onPressed: () async {
+                                          final picked = await showDatePicker(
+                                            context: context,
+                                            initialDate:
+                                                _workOrderDateTo ??
+                                                DateTime.now(),
+                                            firstDate: DateTime(2020),
+                                            lastDate: DateTime.now(),
+                                          );
+                                          if (picked != null && mounted) {
+                                            setState(
+                                              () => _workOrderDateTo = picked,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_workOrderDateFrom != null &&
+                                    _workOrderDateTo != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      'Giorni: ${_workOrderDateTo!.difference(_workOrderDateFrom!).inDays + 1}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<String>(
                                   initialValue: _workOrderActivityType,
@@ -1540,12 +1627,12 @@ class _AdminActivityCard extends StatelessWidget {
 class _AdminDateButton extends StatelessWidget {
   const _AdminDateButton({
     required this.label,
-    required this.date,
+    this.date,
     required this.onPressed,
   });
 
   final String label;
-  final DateTime date;
+  final DateTime? date;
   final VoidCallback onPressed;
 
   @override
@@ -1553,7 +1640,11 @@ class _AdminDateButton extends StatelessWidget {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: const Icon(Icons.calendar_today_outlined),
-      label: Text('$label: ${DateFormat('dd/MM/yyyy').format(date)}'),
+      label: Text(
+        date != null
+            ? '$label: ${DateFormat('dd/MM/yyyy').format(date!)}'
+            : label,
+      ),
     );
   }
 }

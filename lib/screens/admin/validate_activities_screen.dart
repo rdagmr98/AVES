@@ -103,6 +103,52 @@ class _ValidateActivitiesScreenState
     }
   }
 
+  Future<void> _bulkValidateMaintenance() async {
+    if (_maintenance.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Valida tutte le manutenzioni'),
+        content: Text(
+          'Validare ${_maintenance.length} attività di manutenzione in attesa?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Valida tutte'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+
+    final count = _maintenance.length;
+    try {
+      for (final item in _maintenance) {
+        await _service.validateMaintenanceActivity(item.id!, adminId);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$count attività di manutenzione validate.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _validateSeminar(int id) async {
     final adminId = ref.read(authProvider).userProfile?.id;
     if (adminId == null) {
@@ -115,6 +161,50 @@ class _ValidateActivitiesScreenState
       if (!mounted) {
         return;
       }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _bulkValidateSeminars() async {
+    if (_seminars.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Valida tutti i seminari'),
+        content: Text('Validare ${_seminars.length} seminari in attesa?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Valida tutti'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+
+    final count = _seminars.length;
+    try {
+      for (final item in _seminars) {
+        await _service.validateSeminarActivity(item.id!, adminId);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$count seminari validati.')));
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -139,6 +229,50 @@ class _ValidateActivitiesScreenState
     }
   }
 
+  Future<void> _bulkValidateFlight() async {
+    if (_flight.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Valida tutte le attività di volo'),
+        content: Text('Validare ${_flight.length} attività di volo in attesa?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Valida tutte'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+
+    final count = _flight.length;
+    try {
+      for (final item in _flight) {
+        await _service.validateFlightActivity(item.id!, adminId);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$count attività di volo validate.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _validateTob(int id) async {
     final adminId = ref.read(authProvider).userProfile?.id;
     if (adminId == null) {
@@ -151,6 +285,50 @@ class _ValidateActivitiesScreenState
       if (!mounted) {
         return;
       }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _bulkValidateTob() async {
+    if (_tob.isEmpty) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Valida tutte le attività TOB'),
+        content: Text('Validare ${_tob.length} attività TOB in attesa?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Valida tutte'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final adminId = ref.read(authProvider).userProfile?.id;
+    if (adminId == null) return;
+
+    final count = _tob.length;
+    try {
+      for (final item in _tob) {
+        await _service.validateTobActivity(item.id!, adminId);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$count attività TOB validate.')));
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -207,6 +385,7 @@ class _ValidateActivitiesScreenState
             await _service.rejectMaintenanceActivity(item.id!);
             await _load();
           },
+          onBulkValidate: _bulkValidateMaintenance,
         );
       case _ValidationTabType.seminar:
         return _ValidationList<SeminarActivity>(
@@ -220,6 +399,7 @@ class _ValidateActivitiesScreenState
             await _service.rejectSeminarActivity(item.id!);
             await _load();
           },
+          onBulkValidate: _bulkValidateSeminars,
         );
       case _ValidationTabType.flight:
         return _ValidationList<FlightActivity>(
@@ -234,6 +414,7 @@ class _ValidateActivitiesScreenState
             await _service.rejectFlightActivity(item.id!);
             await _load();
           },
+          onBulkValidate: _bulkValidateFlight,
         );
       case _ValidationTabType.tob:
         return _ValidationList<TobActivity>(
@@ -248,6 +429,7 @@ class _ValidateActivitiesScreenState
             await _service.rejectTobActivity(item.id!);
             await _load();
           },
+          onBulkValidate: _bulkValidateTob,
         );
     }
   }
@@ -261,6 +443,7 @@ class _ValidationList<T> extends StatelessWidget {
     required this.dateBuilder,
     required this.onValidate,
     required this.onReject,
+    required this.onBulkValidate,
   });
 
   final List<T> items;
@@ -269,73 +452,94 @@ class _ValidationList<T> extends StatelessWidget {
   final DateTime Function(T item) dateBuilder;
   final Future<void> Function(T item) onValidate;
   final Future<void> Function(T item) onReject;
+  final VoidCallback onBulkValidate;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return const Center(child: Text('Nessuna attività in attesa.'));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titleBuilder(item),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(subtitleBuilder(item)),
-                const SizedBox(height: 8),
-                Text(
-                  'Data: ${DateFormat('dd/MM/yyyy').format(dateBuilder(item))}',
-                ),
-                const SizedBox(height: 12),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isStacked = constraints.maxWidth < 300;
-                    final validateButton = ElevatedButton(
-                      onPressed: () => onValidate(item),
-                      child: const Text('Valida'),
-                    );
-                    final rejectButton = OutlinedButton(
-                      onPressed: () => onReject(item),
-                      child: const Text('Rifiuta'),
-                    );
-
-                    if (isStacked) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          validateButton,
-                          const SizedBox(height: 8),
-                          rejectButton,
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Flexible(child: validateButton),
-                        const SizedBox(width: 12),
-                        Flexible(child: rejectButton),
-                      ],
-                    );
-                  },
-                ),
-              ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onBulkValidate,
+              icon: const Icon(Icons.done_all),
+              label: Text('Valida tutte (${items.length})'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+              ),
             ),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        titleBuilder(item),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(subtitleBuilder(item)),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Data: ${DateFormat('dd/MM/yyyy').format(dateBuilder(item))}',
+                      ),
+                      const SizedBox(height: 12),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isStacked = constraints.maxWidth < 300;
+                          final validateButton = ElevatedButton(
+                            onPressed: () => onValidate(item),
+                            child: const Text('Valida'),
+                          );
+                          final rejectButton = OutlinedButton(
+                            onPressed: () => onReject(item),
+                            child: const Text('Rifiuta'),
+                          );
+
+                          if (isStacked) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                validateButton,
+                                const SizedBox(height: 8),
+                                rejectButton,
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Flexible(child: validateButton),
+                              const SizedBox(width: 12),
+                              Flexible(child: rejectButton),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

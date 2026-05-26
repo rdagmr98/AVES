@@ -53,6 +53,7 @@ class _AdminPrivilegesDashboardState
   bool _andMode = false;
   bool _gridView = true;
   bool _useDropdownFilters = true;
+  String _sortMode = 'status';
 
   @override
   void initState() {
@@ -103,7 +104,7 @@ class _AdminPrivilegesDashboardState
         .getPendingMaintenanceActivities();
     final rows = <_MaintenanceUserRow>[];
 
-    for (final user in users.where((item) => item.isApproved)) {
+    for (final user in users.where((item) => item.isApprovedMaint)) {
       final licenses = await _userService.getUserLicenses(user.id);
       final privileges = await _userService.getUserPrivileges(user.id);
       if (licenses.isEmpty && privileges.isEmpty) {
@@ -114,7 +115,6 @@ class _AdminPrivilegesDashboardState
         user.id,
       );
 
-      // Fetch per-privilege currency
       final perPrivilegeCurrency = await _currencyService
           .getPerPrivilegeCurrency(user.id);
 
@@ -124,7 +124,7 @@ class _AdminPrivilegesDashboardState
           licenses: licenses,
           privileges: privileges,
           status: status,
-          lastActivityDate: lastActivity?.activityDate,
+          lastActivityDate: lastActivity?.effectiveDate,
           perPrivilegeCurrency: perPrivilegeCurrency,
         ),
       );
@@ -140,6 +140,42 @@ class _AdminPrivilegesDashboardState
       _rows = rows;
       _loading = false;
     });
+  }
+
+  List<_MaintenanceUserRow> _sortedRows(List<_MaintenanceUserRow> rows) {
+    final sorted = List<_MaintenanceUserRow>.from(rows);
+    switch (_sortMode) {
+      case 'alphabetical':
+        sorted.sort((a, b) => a.user.fullName.compareTo(b.user.fullName));
+        break;
+      case 'lastModified':
+        sorted.sort((a, b) => (b.user.updatedAt).compareTo(a.user.updatedAt));
+        break;
+      case 'lastActivity':
+        sorted.sort((a, b) {
+          final aDate = a.lastActivityDate ?? DateTime(1970);
+          final bDate = b.lastActivityDate ?? DateTime(1970);
+          return bDate.compareTo(aDate);
+        });
+        break;
+      case 'status':
+      default:
+        sorted.sort((a, b) {
+          final aScore = a.status.isExpired
+              ? 0
+              : a.status.isWarning
+              ? 1
+              : 2;
+          final bScore = b.status.isExpired
+              ? 0
+              : b.status.isWarning
+              ? 1
+              : 2;
+          return aScore.compareTo(bScore);
+        });
+        break;
+    }
+    return sorted;
   }
 
   List<_MaintenanceUserRow> _filteredRows() {
@@ -423,82 +459,70 @@ class _AdminPrivilegesDashboardState
   }
 
   Widget _buildUserGrid(List<_MaintenanceUserRow> filteredRows) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1200
-            ? 6
-            : constraints.maxWidth >= 900
-            ? 5
-            : constraints.maxWidth >= 600
-            ? 4
-            : constraints.maxWidth >= 400
-            ? 3
-            : 2;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: filteredRows.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            childAspectRatio: 1.0,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemBuilder: (context, index) {
-            final row = filteredRows[index];
-            final backgroundColor = row.status.isExpired
-                ? const Color(0xFF3A0A0A)
-                : row.status.isWarning
-                ? const Color(0xFF3A2A0A)
-                : row.status.isValid
-                ? const Color(0xFF1A3A1A)
-                : AppColors.surface;
-            final borderColor = row.status.isExpired
-                ? const Color(0xFFC0392B)
-                : row.status.isWarning
-                ? const Color(0xFFE67E22)
-                : row.status.isValid
-                ? const Color(0xFF27AE60)
-                : AppColors.border;
-            return InkWell(
-              onTap: () => _showUserDetail(row),
-              borderRadius: BorderRadius.circular(16),
-              child: Card(
-                color: backgroundColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: borderColor),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      UserAvatar(user: row.user, radius: 16),
-                      const SizedBox(height: 6),
-                      Text(
-                        row.user.nome,
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(fontSize: 11),
-                      ),
-                      Text(
-                        row.user.cognome,
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filteredRows.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 110,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemBuilder: (context, index) {
+        final row = filteredRows[index];
+        final backgroundColor = row.status.isExpired
+            ? const Color(0xFF3A0A0A)
+            : row.status.isWarning
+            ? const Color(0xFF3A2A0A)
+            : row.status.isValid
+            ? const Color(0xFF1A3A1A)
+            : AppColors.surface;
+        final borderColor = row.status.isExpired
+            ? const Color(0xFFC0392B)
+            : row.status.isWarning
+            ? const Color(0xFFE67E22)
+            : row.status.isValid
+            ? const Color(0xFF27AE60)
+            : AppColors.border;
+        return InkWell(
+          onTap: () => _showUserDetail(row),
+          borderRadius: BorderRadius.circular(12),
+          child: Card(
+            color: backgroundColor,
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: borderColor, width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  UserAvatar(user: row.user, radius: 14),
+                  const SizedBox(height: 4),
+                  Text(
+                    row.user.nome,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9),
                   ),
-                ),
+                  Text(
+                    row.user.cognome,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -507,7 +531,7 @@ class _AdminPrivilegesDashboardState
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final filteredRows = _filteredRows();
+    final filteredRows = _sortedRows(_filteredRows());
     final approvedUsersCount = _rows.length;
     final expiredCount = _rows.where((row) => row.status.isExpired).length;
 
@@ -516,22 +540,32 @@ class _AdminPrivilegesDashboardState
         title: 'Attività manutentive in attesa',
         value: '$_pendingActivities',
         icon: Icons.pending_actions,
+        onTap: () => context.go('/admin/validate'),
       ),
       _StatCardData(
         title: 'Utenti manutenzione approvati',
         value: '$approvedUsersCount',
         icon: Icons.groups,
+        onTap: () => context.go('/admin/users'),
       ),
       _StatCardData(
         title: 'Currency scadute',
         value: '$expiredCount',
         icon: Icons.warning_amber_rounded,
+        onTap: () {
+          setState(() {
+            _statusFilter = 'expired';
+            _statusChipFilters.clear();
+            _statusChipFilters.add('expired');
+          });
+        },
       ),
       _StatCardData(
         title: 'PTA attive',
         value: '$_activePtaCount',
         icon: Icons.block,
         color: _activePtaCount > 0 ? const Color(0xFF8E44AD) : null,
+        onTap: () => context.go('/admin/pta'),
       ),
       if (_pendingAcksCount > 0)
         _StatCardData(
@@ -540,41 +574,6 @@ class _AdminPrivilegesDashboardState
           icon: Icons.pending_actions,
           color: AppColors.currencyWarning,
         ),
-    ];
-
-    final quickActions = <_DashboardActionConfig>[
-      _DashboardActionConfig(
-        label: 'Inserisci Ord. Lavoro',
-        icon: Icons.add_task_outlined,
-        onTap: () => context.go('/admin/insert'),
-        highlighted: true,
-      ),
-      _DashboardActionConfig(
-        label: 'Valida Attività',
-        icon: Icons.verified_outlined,
-        onTap: () => context.go('/admin/validate'),
-        highlighted: false,
-      ),
-      _DashboardActionConfig(
-        label: 'Gestione Utenti',
-        icon: Icons.manage_accounts_outlined,
-        onTap: () => context.go('/admin/users'),
-      ),
-      _DashboardActionConfig(
-        label: 'Gestione PTA',
-        icon: Icons.block_outlined,
-        onTap: () => context.go('/admin/pta'),
-      ),
-      _DashboardActionConfig(
-        label: 'Impostazioni Currency',
-        icon: Icons.settings_outlined,
-        onTap: () => context.go('/admin/settings'),
-      ),
-      _DashboardActionConfig(
-        label: 'Scarica Report PDF',
-        icon: Icons.picture_as_pdf_outlined,
-        onTap: _reportService.downloadMaintenanceReport,
-      ),
     ];
 
     final isMobile = MediaQuery.of(context).size.width < 600;
@@ -593,6 +592,66 @@ class _AdminPrivilegesDashboardState
         ),
         centerTitle: true,
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort),
+            onSelected: (value) {
+              setState(() => _sortMode = value);
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'status',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'status')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Stato'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'alphabetical',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'alphabetical')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Alfabetico'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'lastModified',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'lastModified')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Ultima modifica'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'lastActivity',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'lastActivity')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Ultima attività'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           if (isMobile)
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -654,11 +713,9 @@ class _AdminPrivilegesDashboardState
                 final isDesktop = constraints.maxWidth >= 1200;
 
                 if (isDesktop) {
-                  // Desktop layout: sidebar + content
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Left sidebar (300px fixed)
                       SizedBox(
                         width: 300,
                         child: ListView(
@@ -670,14 +727,12 @@ class _AdminPrivilegesDashboardState
                           ],
                         ),
                       ),
-                      // Right content (expanded)
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: _loadData,
                           child: ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
-                              // Stat cards - equal width with Row + Expanded
                               Row(
                                 children: [
                                   for (
@@ -691,74 +746,13 @@ class _AdminPrivilegesDashboardState
                                         value: statCardData[i].value,
                                         icon: statCardData[i].icon,
                                         color: statCardData[i].color,
+                                        onTap: statCardData[i].onTap,
                                       ),
                                     ),
                                     if (i < statCardData.length - 1)
                                       const SizedBox(width: 16),
                                   ],
                                 ],
-                              ),
-                              const SizedBox(height: 24),
-                              // Action buttons - evenly sized with Row + Expanded
-                              Card(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      for (
-                                        int i = 0;
-                                        i < quickActions.length;
-                                        i++
-                                      ) ...[
-                                        Expanded(
-                                          child: quickActions[i].highlighted
-                                              ? ElevatedButton.icon(
-                                                  style:
-                                                      ElevatedButton.styleFrom(
-                                                        minimumSize: const Size(
-                                                          0,
-                                                          52,
-                                                        ),
-                                                      ),
-                                                  onPressed:
-                                                      quickActions[i].onTap,
-                                                  icon: Icon(
-                                                    quickActions[i].icon,
-                                                    size: 20,
-                                                  ),
-                                                  label: Text(
-                                                    quickActions[i].label,
-                                                    softWrap: true,
-                                                    textAlign: TextAlign.center,
-                                                  ),
-                                                )
-                                              : OutlinedButton.icon(
-                                                  style:
-                                                      OutlinedButton.styleFrom(
-                                                        minimumSize: const Size(
-                                                          0,
-                                                          52,
-                                                        ),
-                                                      ),
-                                                  onPressed:
-                                                      quickActions[i].onTap,
-                                                  icon: Icon(
-                                                    quickActions[i].icon,
-                                                    size: 20,
-                                                  ),
-                                                  label: Text(
-                                                    quickActions[i].label,
-                                                    softWrap: true,
-                                                    textAlign: TextAlign.center,
-                                                  ),
-                                                ),
-                                        ),
-                                        if (i < quickActions.length - 1)
-                                          const SizedBox(width: 12),
-                                      ],
-                                    ],
-                                  ),
-                                ),
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -790,13 +784,11 @@ class _AdminPrivilegesDashboardState
                     ],
                   );
                 } else {
-                  // Mobile/Tablet layout: single column with scrolling
                   return RefreshIndicator(
                     onRefresh: _loadData,
                     child: ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        // Stat cards
                         LayoutBuilder(
                           builder: (context, constraints) {
                             final isMobile = constraints.maxWidth < 600;
@@ -812,6 +804,7 @@ class _AdminPrivilegesDashboardState
                                         icon: data.icon,
                                         color: data.color,
                                         compact: true,
+                                        onTap: data.onTap,
                                       ),
                                     ),
                                 ],
@@ -830,72 +823,12 @@ class _AdminPrivilegesDashboardState
                                       value: data.value,
                                       icon: data.icon,
                                       color: data.color,
+                                      onTap: data.onTap,
                                     ),
                                   ),
                               ],
                             );
                           },
-                        ),
-                        const SizedBox(height: 24),
-                        // Action buttons - centered with Wrap
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final isMobile = constraints.maxWidth < 600;
-                                if (isMobile) {
-                                  return GridView.count(
-                                    crossAxisCount: 2,
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    crossAxisSpacing: 12,
-                                    mainAxisSpacing: 12,
-                                    childAspectRatio: 1.15,
-                                    children: [
-                                      for (final action in quickActions)
-                                        _QuickActionTile(config: action),
-                                    ],
-                                  );
-                                }
-                                return Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 12,
-                                  children: [
-                                    for (final action in quickActions)
-                                      SizedBox(
-                                        width: 240,
-                                        child: action.highlighted
-                                            ? ElevatedButton.icon(
-                                                style: ElevatedButton.styleFrom(
-                                                  minimumSize: const Size(
-                                                    0,
-                                                    52,
-                                                  ),
-                                                ),
-                                                onPressed: action.onTap,
-                                                icon: Icon(action.icon),
-                                                label: Text(
-                                                  action.label,
-                                                  softWrap: true,
-                                                ),
-                                              )
-                                            : OutlinedButton.icon(
-                                                onPressed: action.onTap,
-                                                icon: Icon(action.icon),
-                                                label: Text(
-                                                  action.label,
-                                                  softWrap: true,
-                                                ),
-                                              ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
                         ),
                         const SizedBox(height: 16),
                         _buildFiltersCard(auth),
@@ -1398,6 +1331,18 @@ class _AdminPrivilegesDashboardState
             ),
             const SizedBox(height: 8),
             _NavButton(
+              label: 'Inserisci Seminario',
+              icon: Icons.school_outlined,
+              onTap: () => context.go('/admin/seminars/add'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Sezione P-66',
+              icon: Icons.article_outlined,
+              onTap: () => context.go('/admin/p66'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
               label: 'Impostazioni Currency',
               icon: Icons.settings_outlined,
               onTap: () => context.go('/admin/settings'),
@@ -1407,6 +1352,24 @@ class _AdminPrivilegesDashboardState
               label: 'Report PDF',
               icon: Icons.picture_as_pdf_outlined,
               onTap: _reportService.downloadMaintenanceReport,
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Matrice Privilegi',
+              icon: Icons.grid_on_outlined,
+              onTap: () => _reportService.downloadPrivilegeMatrix(
+                orgUnitId:
+                    _orgUnitId ??
+                    (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
+                helicopterTypeId: _helicopterTypeIds.isNotEmpty
+                    ? _helicopterTypeIds.first
+                    : null,
+                licenseTypeId:
+                    _licenseTypeId ??
+                    (_licenseTypeChipIds.isNotEmpty
+                        ? _licenseTypeChipIds.first
+                        : null),
+              ),
             ),
           ],
         ),
@@ -1439,12 +1402,14 @@ class _StatCardData {
     required this.value,
     required this.icon,
     this.color,
+    this.onTap,
   });
 
   final String title;
   final String value;
   final IconData icon;
   final Color? color;
+  final VoidCallback? onTap;
 }
 
 class _StatCard extends StatelessWidget {
@@ -1454,6 +1419,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     this.color,
     this.compact = false,
+    this.onTap,
   });
 
   final String title;
@@ -1461,12 +1427,13 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color? color;
   final bool compact;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final accent = color ?? AppColors.secondary;
     if (compact) {
-      return Card(
+      final card = Card(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -1502,9 +1469,16 @@ class _StatCard extends StatelessWidget {
           ),
         ),
       );
+      return onTap != null
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: card,
+            )
+          : card;
     }
 
-    return Card(
+    final card = Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1536,67 +1510,13 @@ class _StatCard extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _DashboardActionConfig {
-  const _DashboardActionConfig({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.highlighted = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool highlighted;
-}
-
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({required this.config});
-
-  final _DashboardActionConfig config;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = config.highlighted ? AppColors.accent : AppColors.secondary;
-
-    return InkWell(
-      onTap: config.onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        decoration: BoxDecoration(
-          color: AppColors.surfaceVariant.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(config.icon, color: accent),
-              ),
-              const Spacer(),
-              Text(
-                config.label,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: AppColors.textPrimary),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return onTap != null
+        ? InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: card,
+          )
+        : card;
   }
 }
 

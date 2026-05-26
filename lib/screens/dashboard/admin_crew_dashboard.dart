@@ -45,6 +45,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   bool _andMode = false;
   bool _gridView = true;
   bool _filterModeDropdown = true;
+  String _sortMode = 'status';
 
   @override
   void initState() {
@@ -118,7 +119,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     final pendingTob = await _activityService.getPendingTobActivities();
     final rows = <_CrewUserRow>[];
 
-    for (final user in users.where((item) => item.isApproved)) {
+    for (final user in users.where((item) => item.isApprovedCrew)) {
       final assignments = await _userService.getUserCrewAssignments(user.id);
       if (assignments.isEmpty) {
         continue;
@@ -173,6 +174,50 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       _rows = rows;
       _loading = false;
     });
+  }
+
+  List<_CrewUserRow> _sortedRows(List<_CrewUserRow> rows) {
+    final sorted = List<_CrewUserRow>.from(rows);
+    switch (_sortMode) {
+      case 'alphabetical':
+        sorted.sort((a, b) => a.user.fullName.compareTo(b.user.fullName));
+        break;
+      case 'lastModified':
+        sorted.sort((a, b) => (b.user.updatedAt).compareTo(a.user.updatedAt));
+        break;
+      case 'lastActivity':
+        sorted.sort((a, b) {
+          final aDate = a.lastActivityDate ?? DateTime(1970);
+          final bDate = b.lastActivityDate ?? DateTime(1970);
+          return bDate.compareTo(aDate);
+        });
+        break;
+      case 'status':
+      default:
+        sorted.sort((a, b) {
+          final aStatuses = a.relevantStatuses(
+            _statusCrewFilter,
+            _tobCapabilityId,
+          );
+          final bStatuses = b.relevantStatuses(
+            _statusCrewFilter,
+            _tobCapabilityId,
+          );
+          final aScore = aStatuses.any((s) => s.isExpired)
+              ? 0
+              : aStatuses.any((s) => s.isWarning)
+              ? 1
+              : 2;
+          final bScore = bStatuses.any((s) => s.isExpired)
+              ? 0
+              : bStatuses.any((s) => s.isWarning)
+              ? 1
+              : 2;
+          return aScore.compareTo(bScore);
+        });
+        break;
+    }
+    return sorted;
   }
 
   List<_CrewUserRow> _filteredRows() {
@@ -380,88 +425,76 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   }
 
   Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1200
-            ? 6
-            : constraints.maxWidth >= 900
-            ? 5
-            : constraints.maxWidth >= 600
-            ? 4
-            : constraints.maxWidth >= 400
-            ? 3
-            : 2;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: filteredRows.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            childAspectRatio: 1.0,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemBuilder: (context, index) {
-            final row = filteredRows[index];
-            final statuses = row.relevantStatuses(
-              _statusCrewFilter,
-              _tobCapabilityId,
-            );
-            final hasExpired = statuses.any((item) => item.isExpired);
-            final hasWarning = statuses.any((item) => item.isWarning);
-            final backgroundColor = hasExpired
-                ? const Color(0xFF3A0A0A)
-                : hasWarning
-                ? const Color(0xFF3A2A0A)
-                : statuses.isNotEmpty
-                ? const Color(0xFF1A3A1A)
-                : AppColors.surface;
-            final borderColor = hasExpired
-                ? const Color(0xFFC0392B)
-                : hasWarning
-                ? const Color(0xFFE67E22)
-                : statuses.isNotEmpty
-                ? const Color(0xFF27AE60)
-                : AppColors.border;
-            return InkWell(
-              onTap: () => _showUserDetail(row),
-              borderRadius: BorderRadius.circular(16),
-              child: Card(
-                color: backgroundColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: borderColor),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      UserAvatar(user: row.user, radius: 16),
-                      const SizedBox(height: 6),
-                      Text(
-                        row.user.nome,
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(fontSize: 11),
-                      ),
-                      Text(
-                        row.user.cognome,
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filteredRows.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 110,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemBuilder: (context, index) {
+        final row = filteredRows[index];
+        final statuses = row.relevantStatuses(
+          _statusCrewFilter,
+          _tobCapabilityId,
+        );
+        final hasExpired = statuses.any((item) => item.isExpired);
+        final hasWarning = statuses.any((item) => item.isWarning);
+        final backgroundColor = hasExpired
+            ? const Color(0xFF3A0A0A)
+            : hasWarning
+            ? const Color(0xFF3A2A0A)
+            : statuses.isNotEmpty
+            ? const Color(0xFF1A3A1A)
+            : AppColors.surface;
+        final borderColor = hasExpired
+            ? const Color(0xFFC0392B)
+            : hasWarning
+            ? const Color(0xFFE67E22)
+            : statuses.isNotEmpty
+            ? const Color(0xFF27AE60)
+            : AppColors.border;
+        return InkWell(
+          onTap: () => _showUserDetail(row),
+          borderRadius: BorderRadius.circular(12),
+          child: Card(
+            color: backgroundColor,
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: borderColor, width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  UserAvatar(user: row.user, radius: 14),
+                  const SizedBox(height: 4),
+                  Text(
+                    row.user.nome,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9),
                   ),
-                ),
+                  Text(
+                    row.user.cognome,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
@@ -797,16 +830,27 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         title: 'Attività volo/TOB in attesa',
         value: '$_pendingActivities',
         icon: Icons.pending_actions,
+        onTap: () => context.go('/admin/validate'),
       ),
       _CrewStatCardData(
         title: 'Equipaggi T',
         value: '$tCrewCount',
         icon: Icons.flight,
+        onTap: () => setState(
+          () => _crewTypeIds
+            ..clear()
+            ..add('T'),
+        ),
       ),
       _CrewStatCardData(
         title: 'Equipaggi TOB',
         value: '$tobCrewCount',
         icon: Icons.precision_manufacturing_outlined,
+        onTap: () => setState(
+          () => _crewTypeIds
+            ..clear()
+            ..add('TOB'),
+        ),
       ),
     ];
 
@@ -821,6 +865,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   title: data.title,
                   value: data.value,
                   icon: data.icon,
+                  onTap: data.onTap,
                 ),
               ),
             ),
@@ -842,6 +887,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                     value: data.value,
                     icon: data.icon,
                     compact: true,
+                    onTap: data.onTap,
                   ),
                 ),
             ],
@@ -858,136 +904,12 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   title: data.title,
                   value: data.value,
                   icon: data.icon,
+                  onTap: data.onTap,
                 ),
               ),
           ],
         );
       },
-    );
-  }
-
-  Widget _buildActionButtons(bool isDesktop) {
-    final quickActions = <_CrewActionConfig>[
-      _CrewActionConfig(
-        label: 'Inserisci Volo',
-        icon: Icons.add_circle_outline,
-        onTap: () => context.go('/admin/insert'),
-        highlighted: true,
-      ),
-      _CrewActionConfig(
-        label: 'Valida Attività Volo',
-        icon: Icons.verified_outlined,
-        onTap: () => context.go('/admin/validate'),
-        highlighted: false,
-      ),
-      _CrewActionConfig(
-        label: 'Gestione Equipaggi',
-        icon: Icons.manage_accounts_outlined,
-        onTap: () => context.go('/admin/users'),
-      ),
-      _CrewActionConfig(
-        label: 'Impostazioni Currency TOB',
-        icon: Icons.tune_outlined,
-        onTap: () => context.go('/admin/settings'),
-      ),
-      _CrewActionConfig(
-        label: 'Scarica Report Volo PDF',
-        icon: Icons.picture_as_pdf_outlined,
-        onTap: _reportService.downloadCrewReport,
-      ),
-    ];
-
-    if (isDesktop) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              for (final action in quickActions)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: action.highlighted
-                        ? ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                            ),
-                            onPressed: action.onTap,
-                            icon: Icon(action.icon),
-                            label: Text(
-                              action.label,
-                              softWrap: true,
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                            ),
-                            onPressed: action.onTap,
-                            icon: Icon(action.icon),
-                            label: Text(
-                              action.label,
-                              softWrap: true,
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isMobile = constraints.maxWidth < 600;
-            if (isMobile) {
-              return GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.15,
-                children: [
-                  for (final action in quickActions)
-                    _CrewQuickActionTile(config: action),
-                ],
-              );
-            }
-            return Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final action in quickActions)
-                  SizedBox(
-                    width: 240,
-                    child: action.highlighted
-                        ? ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                            ),
-                            onPressed: action.onTap,
-                            icon: Icon(action.icon),
-                            label: Text(action.label, softWrap: true),
-                          )
-                        : OutlinedButton.icon(
-                            onPressed: action.onTap,
-                            icon: Icon(action.icon),
-                            label: Text(action.label, softWrap: true),
-                          ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -1100,7 +1022,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredRows = _filteredRows();
+    final filteredRows = _sortedRows(_filteredRows());
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
@@ -1117,6 +1039,66 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         ),
         centerTitle: true,
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort),
+            onSelected: (value) {
+              setState(() => _sortMode = value);
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'status',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'status')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Stato'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'alphabetical',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'alphabetical')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Alfabetico'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'lastModified',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'lastModified')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Ultima modifica'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'lastActivity',
+                child: Row(
+                  children: [
+                    if (_sortMode == 'lastActivity')
+                      const Icon(Icons.check, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    const Text('Ultima attività'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           if (isMobile)
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -1199,8 +1181,6 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                             padding: const EdgeInsets.all(16),
                             children: [
                               _buildStatCards(filteredRows, isDesktop),
-                              const SizedBox(height: 24),
-                              _buildActionButtons(isDesktop),
                               const SizedBox(height: 16),
                               Text(
                                 'Utenti equipaggi/volo',
@@ -1220,8 +1200,6 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       _buildStatCards(filteredRows, isDesktop),
-                      const SizedBox(height: 24),
-                      _buildActionButtons(isDesktop),
                       const SizedBox(height: 16),
                       _buildFiltersSection(),
                       const SizedBox(height: 16),
@@ -1260,6 +1238,17 @@ class _CrewUserRow {
 
   bool get hasTCrew => assignments.any((item) => item.crewType == 'T');
   bool get hasTobCrew => assignments.any((item) => item.crewType == 'TOB');
+  DateTime? get lastActivityDate {
+    final dates = relevantStatuses('all', null)
+        .map((status) => status.lastActivityDate)
+        .whereType<DateTime>()
+        .toList(growable: false);
+    if (dates.isEmpty) {
+      return null;
+    }
+    dates.sort();
+    return dates.last;
+  }
 
   List<CurrencyStatus> relevantStatuses(
     String crewTypeFilter,
@@ -1295,11 +1284,13 @@ class _CrewStatCardData {
     required this.title,
     required this.value,
     required this.icon,
+    this.onTap,
   });
 
   final String title;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
 }
 
 class _CrewStatCard extends StatelessWidget {
@@ -1308,139 +1299,82 @@ class _CrewStatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     this.compact = false,
+    this.onTap,
   });
 
   final String title;
   final String value;
   final IconData icon;
   final bool compact;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (compact) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.secondary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
+    final content = compact
+        ? Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: AppColors.secondary, size: 22),
                 ),
-                child: Icon(icon, color: AppColors.secondary, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    softWrap: true,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  value,
                   style: Theme.of(
                     context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: AppColors.secondary),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
                   softWrap: true,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+                const SizedBox(height: 8),
+                Text(value, style: Theme.of(context).textTheme.headlineSmall),
+              ],
+            ),
+          );
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: AppColors.secondary),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium,
-              softWrap: true,
-            ),
-            const SizedBox(height: 8),
-            Text(value, style: Theme.of(context).textTheme.headlineSmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CrewActionConfig {
-  const _CrewActionConfig({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.highlighted = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool highlighted;
-}
-
-class _CrewQuickActionTile extends StatelessWidget {
-  const _CrewQuickActionTile({required this.config});
-
-  final _CrewActionConfig config;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = config.highlighted ? AppColors.accent : AppColors.secondary;
-
-    return InkWell(
-      onTap: config.onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        decoration: BoxDecoration(
-          color: AppColors.surfaceVariant.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(config.icon, color: accent),
-              ),
-              const Spacer(),
-              Text(
-                config.label,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: AppColors.textPrimary),
-              ),
-            ],
-          ),
-        ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: content,
       ),
     );
   }

@@ -125,7 +125,9 @@ class UserService {
       'profile_photo_base64': profilePhotoBase64,
       'org_unit_id': null,
       'role': role,
-      'is_approved': role != 'user',
+      'is_approved': false,
+      'is_approved_maint': false,
+      'is_approved_crew': false,
       'is_active': true,
       'note': null,
       'created_at': now,
@@ -171,6 +173,8 @@ class UserService {
     users[index] = {
       ...users[index],
       'is_approved': true,
+      'is_approved_maint': true,
+      'is_approved_crew': true,
       'updated_at': DateTime.now().toIso8601String(),
       'approved_by': adminId,
     };
@@ -181,6 +185,84 @@ class UserService {
       message:
           'Il tuo profilo è stato approvato. Puoi ora accedere a tutte le funzionalità.',
     );
+  }
+
+  Future<void> approveMaint(String userId, String adminId) async {
+    final users = _db.users;
+    final index = users.indexWhere((item) => item['id'] == userId);
+    if (index == -1) {
+      throw Exception('Utente non trovato');
+    }
+
+    final isApprovedCrew = users[index]['is_approved_crew'] as bool? ?? false;
+    users[index] = {
+      ...users[index],
+      'is_approved_maint': true,
+      'is_approved': true,
+      'updated_at': DateTime.now().toIso8601String(),
+      'approved_by': adminId,
+      'approved_maint_by': adminId,
+    };
+    await _db.saveUsers(users);
+
+    if (!isApprovedCrew) {
+      await _notificationService.createNotification(
+        userId: userId,
+        type: 'PROFILE_APPROVED',
+        message: 'Il tuo profilo è stato approvato per la manutenzione.',
+      );
+    } else {
+      await _notificationService.createNotification(
+        userId: userId,
+        type: 'PROFILE_APPROVED',
+        message: 'Il tuo profilo è stato completamente approvato.',
+      );
+    }
+  }
+
+  Future<void> approveCrew(String userId, String adminId) async {
+    final users = _db.users;
+    final index = users.indexWhere((item) => item['id'] == userId);
+    if (index == -1) {
+      throw Exception('Utente non trovato');
+    }
+
+    final isApprovedMaint = users[index]['is_approved_maint'] as bool? ?? false;
+    users[index] = {
+      ...users[index],
+      'is_approved_crew': true,
+      'is_approved': true,
+      'updated_at': DateTime.now().toIso8601String(),
+      'approved_by': adminId,
+      'approved_crew_by': adminId,
+    };
+    await _db.saveUsers(users);
+
+    if (!isApprovedMaint) {
+      await _notificationService.createNotification(
+        userId: userId,
+        type: 'PROFILE_APPROVED',
+        message: 'Il tuo profilo è stato approvato per l\'equipaggio.',
+      );
+    } else {
+      await _notificationService.createNotification(
+        userId: userId,
+        type: 'PROFILE_APPROVED',
+        message: 'Il tuo profilo è stato completamente approvato.',
+      );
+    }
+  }
+
+  Future<void> bulkApproveMaint(List<String> userIds, String adminId) async {
+    for (final userId in userIds) {
+      await approveMaint(userId, adminId);
+    }
+  }
+
+  Future<void> bulkApproveCrew(List<String> userIds, String adminId) async {
+    for (final userId in userIds) {
+      await approveCrew(userId, adminId);
+    }
   }
 
   Future<List<AccountDeletionRequest>> getDeletionRequests({

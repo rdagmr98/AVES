@@ -158,6 +158,8 @@ class MaintenanceActivity {
   final int helicopterTypeId;
   final int? privilegeTypeId;
   final DateTime activityDate;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
   final String? description;
   final String? activityType;
   final String? matricolaMilitare;
@@ -181,6 +183,8 @@ class MaintenanceActivity {
     required this.helicopterTypeId,
     required this.privilegeTypeId,
     required this.activityDate,
+    this.dateFrom,
+    this.dateTo,
     this.description,
     this.activityType,
     this.matricolaMilitare,
@@ -205,6 +209,12 @@ class MaintenanceActivity {
     helicopterTypeId: j['helicopter_type_id'] as int,
     privilegeTypeId: j['privilege_type_id'] as int?,
     activityDate: DateTime.parse(j['activity_date'] as String),
+    dateFrom: j['date_from'] != null
+        ? DateTime.parse(j['date_from'] as String)
+        : null,
+    dateTo: j['date_to'] != null
+        ? DateTime.parse(j['date_to'] as String)
+        : null,
     description: j['description'] as String?,
     activityType: j['activity_type'] as String?,
     matricolaMilitare: j['matricola_militare'] as String?,
@@ -241,6 +251,9 @@ class MaintenanceActivity {
     'helicopter_type_id': helicopterTypeId,
     if (privilegeTypeId != null) 'privilege_type_id': privilegeTypeId,
     'activity_date': activityDate.toIso8601String().split('T').first,
+    if (dateFrom != null)
+      'date_from': dateFrom!.toIso8601String().split('T').first,
+    if (dateTo != null) 'date_to': dateTo!.toIso8601String().split('T').first,
     'description': description,
     if (activityType != null) 'activity_type': activityType,
     if (matricolaMilitare != null) 'matricola_militare': matricolaMilitare,
@@ -248,6 +261,15 @@ class MaintenanceActivity {
     if (ordineLavoro != null) 'ordine_lavoro': ordineLavoro,
     'submitted_by': submittedBy,
   };
+
+  DateTime get effectiveDate => dateTo ?? activityDate;
+
+  int get daysWorked {
+    if (dateFrom != null && dateTo != null) {
+      return dateTo!.difference(dateFrom!).inDays + 1;
+    }
+    return 1;
+  }
 
   String get status => isValidated ? 'validated' : 'pending';
 }
