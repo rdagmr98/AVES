@@ -129,6 +129,8 @@ class UserService {
       'is_approved_maint': false,
       'is_approved_crew': false,
       'is_active': true,
+      'is_ti': false,
+      'is_etp': false,
       'note': null,
       'created_at': now,
       'updated_at': now,

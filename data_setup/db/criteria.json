@@ -1,11 +1,114 @@
 [
-  {"id": 1, "criteria_type": "MAINTENANCE", "tob_capability_id": null, "period_days": 180, "period_days_a": null, "period_days_bc": null, "min_hours": null, "description": "Un task manutentivo ogni 6 mesi"},
-  {"id": 2, "criteria_type": "FLIGHT_T", "tob_capability_id": null, "period_days": 180, "period_days_a": null, "period_days_bc": null, "min_hours": 3.0, "description": "3 ore di volo ogni 6 mesi"},
-  {"id": 9, "criteria_type": "TOB_BASE", "tob_capability_id": null, "period_days": 90, "period_days_a": 90, "period_days_bc": 120, "min_hours": null, "description": "Attività di base TOB — qualsiasi volo come membro equipaggio (diurno o notturno)"},
-  {"id": 3, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 1, "period_days": 365, "period_days_a": 365, "period_days_bc": null, "min_hours": null, "description": "Benna (B) — capacità aggiuntiva CBV, solo fascia A"},
-  {"id": 4, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 2, "period_days": 90, "period_days_a": 90, "period_days_bc": 180, "min_hours": null, "description": "Gancio baricentrico (G) — fascia A: 90gg, fascia B/C: 180gg"},
-  {"id": 5, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 3, "period_days": 365, "period_days_a": 365, "period_days_bc": null, "min_hours": null, "description": "NVG/Visione notturna (V) — capacità aggiuntiva CBV, solo fascia A"},
-  {"id": 6, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 4, "period_days": 90, "period_days_a": 90, "period_days_bc": 180, "min_hours": null, "description": "Verricello (G-tipo) — fascia A: 90gg, fascia B/C: 180gg"},
-  {"id": 7, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 5, "period_days": 365, "period_days_a": 365, "period_days_bc": null, "min_hours": null, "description": "Barella — capacità aggiuntiva CBV, solo fascia A"},
-  {"id": 8, "criteria_type": "TOB_CAPABILITY", "tob_capability_id": 6, "period_days": 365, "period_days_a": 365, "period_days_bc": null, "min_hours": null, "description": "Sling load/Carichi al gancio (C) — capacità aggiuntiva CBV, solo fascia A"}
+  {
+    "id": 1,
+    "criteria_type": "MAINTENANCE",
+    "tob_capability_id": null,
+    "period_days": 180,
+    "period_days_a": null,
+    "period_days_bc": null,
+    "min_hours": null,
+    "description": "Un task manutentivo ogni 6 mesi"
+  },
+  {
+    "id": 2,
+    "criteria_type": "FLIGHT_T",
+    "tob_capability_id": null,
+    "period_days": 180,
+    "period_days_a": null,
+    "period_days_bc": null,
+    "min_hours": 3.0,
+    "description": "3 ore di volo ogni 6 mesi"
+  },
+  {
+    "id": 9,
+    "criteria_type": "TOB_BASE",
+    "tob_capability_id": null,
+    "period_days": 90,
+    "period_days_a": 90,
+    "period_days_bc": 120,
+    "min_hours": null,
+    "description": "Attività di base TOB — qualsiasi volo come membro equipaggio (diurno o notturno)"
+  },
+  {
+    "id": 3,
+    "criteria_type": "TOB_CAPABILITY",
+    "tob_capability_id": 1,
+    "period_days": 365,
+    "period_days_a": 365,
+    "period_days_bc": null,
+    "min_hours": null,
+    "description": "Benna (B) — capacità aggiuntiva CBV, solo fascia A"
+  },
+  {
+    "id": 4,
+    "criteria_type": "TOB_CAPABILITY",
+    "tob_capability_id": 2,
+    "period_days": 90,
+    "period_days_a": 90,
+    "period_days_bc": 180,
+    "min_hours": null,
+    "description": "Gancio baricentrico (G) — fascia A: 90gg, fascia B/C: 180gg"
+  },
+  {
+    "id": 5,
+    "criteria_type": "TOB_CAPABILITY",
+    "tob_capability_id": 3,
+    "period_days": 365,
+    "period_days_a": 365,
+    "period_days_bc": null,
+    "min_hours": null,
+    "description": "NVG/Visione notturna (V) — capacità aggiuntiva CBV, solo fascia A"
+  },
+  {
+    "id": 6,
+    "criteria_type": "TOB_CAPABILITY",
+    "tob_capability_id": 4,
+    "period_days": 90,
+    "period_days_a": 90,
+    "period_days_bc": 180,
+    "min_hours": null,
+    "description": "Verricello (G-tipo) — fascia A: 90gg, fascia B/C: 180gg"
+  },
+  {
+    "id": 7,
+    "criteria_type": "TOB_CAPABILITY",
+    "tob_capability_id": 5,
+    "period_days": 365,
+    "period_days_a": 365,
+    "period_days_bc": null,
+    "min_hours": null,
+    "description": "Barella — capacità aggiuntiva CBV, solo fascia A"
+  },
+  {
+    "id": 8,
+    "criteria_type": "TOB_CAPABILITY",
+    "tob_capability_id": 6,
+    "period_days": 365,
+    "period_days_a": 365,
+    "period_days_bc": null,
+    "min_hours": null,
+    "description": "Sling load/Carichi al gancio (C) — capacità aggiuntiva CBV, solo fascia A"
+  },
+  {
+    "id": 10,
+    "criteria_type": "MDB_FLIGHT",
+    "tob_capability_id": null,
+    "period_days": 180,
+    "period_days_a": null,
+    "period_days_bc": null,
+    "min_hours": 3.0,
+    "min_count": null,
+    "description": "3 ore di volo MDB ogni 6 mesi"
+  },
+  {
+    "id": 11,
+    "criteria_type": "MDB_POLIGONO",
+    "tob_capability_id": null,
+    "period_days": 365,
+    "period_days_a": null,
+    "period_days_bc": null,
+    "min_hours": null,
+    "min_count": 1,
+    "description": "1 attività a fuoco (poligono) MDB ogni 12 mesi"
+  }
 ]

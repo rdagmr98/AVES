@@ -103,6 +103,7 @@ class CurrencyCriteria {
   final int?
   periodDaysBC; // period for fascia B/C (null = not applicable for B/C)
   final double? minHours;
+  final int? minCount;
   final String? description;
   final String? tobCapabilityName;
 
@@ -114,6 +115,7 @@ class CurrencyCriteria {
     this.periodDaysA,
     this.periodDaysBC,
     this.minHours,
+    this.minCount,
     this.description,
     this.tobCapabilityName,
   });
@@ -126,6 +128,7 @@ class CurrencyCriteria {
     periodDaysA: j['period_days_a'] as int?,
     periodDaysBC: j['period_days_bc'] as int?,
     minHours: (j['min_hours'] as num?)?.toDouble(),
+    minCount: j['min_count'] as int?,
     description: j['description'] as String?,
     tobCapabilityName:
         (j['tob_capabilities'] as Map<String, dynamic>?)?['name'] as String?,
@@ -281,6 +284,7 @@ class FlightActivity {
   final DateTime activityDate;
   final double flightHours;
   final String? description;
+  final bool isPoligono;
   final bool isValidated;
   final String? validatedBy;
   final DateTime? validatedAt;
@@ -298,6 +302,7 @@ class FlightActivity {
     required this.activityDate,
     required this.flightHours,
     this.description,
+    this.isPoligono = false,
     this.isValidated = false,
     this.validatedBy,
     this.validatedAt,
@@ -315,6 +320,7 @@ class FlightActivity {
     activityDate: DateTime.parse(j['activity_date'] as String),
     flightHours: (j['flight_hours'] as num).toDouble(),
     description: j['description'] as String?,
+    isPoligono: j['is_poligono'] as bool? ?? false,
     isValidated: j['is_validated'] as bool? ?? false,
     validatedBy: j['validated_by'] as String?,
     validatedAt: j['validated_at'] != null
@@ -344,6 +350,7 @@ class FlightActivity {
     'activity_date': activityDate.toIso8601String().split('T').first,
     'flight_hours': flightHours,
     'description': description,
+    'is_poligono': isPoligono,
     'submitted_by': submittedBy,
   };
 

@@ -19,6 +19,8 @@ import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/user_avatar.dart';
 
+enum _MaintenanceSortMode { status, alphabetical, lastModified, lastActivity }
+
 class AdminPrivilegesDashboard extends ConsumerStatefulWidget {
   const AdminPrivilegesDashboard({super.key});
 
@@ -53,7 +55,9 @@ class _AdminPrivilegesDashboardState
   bool _andMode = false;
   bool _gridView = true;
   bool _useDropdownFilters = true;
-  String _sortMode = 'status';
+  bool _onlyTi = false;
+  bool _onlyEtp = false;
+  _MaintenanceSortMode _sortMode = _MaintenanceSortMode.status;
 
   @override
   void initState() {
@@ -145,37 +149,46 @@ class _AdminPrivilegesDashboardState
   List<_MaintenanceUserRow> _sortedRows(List<_MaintenanceUserRow> rows) {
     final sorted = List<_MaintenanceUserRow>.from(rows);
     switch (_sortMode) {
-      case 'alphabetical':
+      case _MaintenanceSortMode.status:
+        sorted.sort((a, b) {
+          final priority = _statusPriority(
+            a.status.status,
+          ).compareTo(_statusPriority(b.status.status));
+          if (priority != 0) {
+            return priority;
+          }
+          return a.user.fullName.compareTo(b.user.fullName);
+        });
+        break;
+      case _MaintenanceSortMode.alphabetical:
         sorted.sort((a, b) => a.user.fullName.compareTo(b.user.fullName));
         break;
-      case 'lastModified':
+      case _MaintenanceSortMode.lastModified:
         sorted.sort((a, b) => (b.user.updatedAt).compareTo(a.user.updatedAt));
         break;
-      case 'lastActivity':
+      case _MaintenanceSortMode.lastActivity:
         sorted.sort((a, b) {
           final aDate = a.lastActivityDate ?? DateTime(1970);
           final bDate = b.lastActivityDate ?? DateTime(1970);
           return bDate.compareTo(aDate);
         });
         break;
-      case 'status':
-      default:
-        sorted.sort((a, b) {
-          final aScore = a.status.isExpired
-              ? 0
-              : a.status.isWarning
-              ? 1
-              : 2;
-          final bScore = b.status.isExpired
-              ? 0
-              : b.status.isWarning
-              ? 1
-              : 2;
-          return aScore.compareTo(bScore);
-        });
-        break;
     }
     return sorted;
+  }
+
+  int _statusPriority(CurrencyStatusEnum? status) {
+    if (status == CurrencyStatusEnum.expired ||
+        status == CurrencyStatusEnum.suspended) {
+      return 0;
+    }
+    if (status == CurrencyStatusEnum.warning) {
+      return 1;
+    }
+    if (status == CurrencyStatusEnum.noData) {
+      return 2;
+    }
+    return 3;
   }
 
   List<_MaintenanceUserRow> _filteredRows() {
@@ -261,7 +274,10 @@ class _AdminPrivilegesDashboardState
           ? activeMatches.every((match) => match)
           : activeMatches.any((match) => match);
 
-      return matchesSearch && matchesFilters;
+      final matchesQualifications =
+          (!_onlyTi || row.user.isTi) && (!_onlyEtp || row.user.isEtp);
+
+      return matchesSearch && matchesFilters && matchesQualifications;
     }).toList();
   }
 
@@ -528,12 +544,146 @@ class _AdminPrivilegesDashboardState
     );
   }
 
+  Widget _buildNavigationDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              'Navigazione',
+              style: Theme.of(context).textTheme.titleLarge,
+              softWrap: true,
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('Gestione Utenti'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/users');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.verified_outlined),
+              title: const Text('Valida Attività'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/validate');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block_outlined),
+              title: const Text('Gestione PTA'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/pta');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_task_outlined),
+              title: const Text('Inserisci Attività'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/insert');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Impostazioni Currency'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('Report PDF'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _reportService.downloadMaintenanceReport();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_on_outlined),
+              title: const Text('Matrice Privilegi'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _reportService.downloadPrivilegeMatrix(
+                  orgUnitId:
+                      _orgUnitId ??
+                      (_orgUnitChipIds.isNotEmpty
+                          ? _orgUnitChipIds.first
+                          : null),
+                  helicopterTypeId: _helicopterTypeIds.isNotEmpty
+                      ? _helicopterTypeIds.first
+                      : null,
+                  licenseTypeId:
+                      _licenseTypeId ??
+                      (_licenseTypeChipIds.isNotEmpty
+                          ? _licenseTypeChipIds.first
+                          : null),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.article_outlined),
+              title: const Text('Sezione P-66'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/p66');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.school_outlined),
+              title: const Text('Inserisci Seminario'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/seminars/add');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCardsSection(
+    List<_StatCardData> statCardData,
+    bool isMobileLayout,
+  ) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: statCardData.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isMobileLayout ? 2 : 4,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: isMobileLayout ? 1.1 : 1.5,
+      ),
+      itemBuilder: (context, index) {
+        final data = statCardData[index];
+        return _StatCard(
+          title: data.title,
+          value: data.value,
+          icon: data.icon,
+          color: data.color,
+          onTap: data.onTap,
+          compact: isMobileLayout,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final filteredRows = _sortedRows(_filteredRows());
     final approvedUsersCount = _rows.length;
     final expiredCount = _rows.where((row) => row.status.isExpired).length;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobileLayout = screenWidth < 650;
 
     final statCardData = <_StatCardData>[
       _StatCardData(
@@ -552,13 +702,7 @@ class _AdminPrivilegesDashboardState
         title: 'Currency scadute',
         value: '$expiredCount',
         icon: Icons.warning_amber_rounded,
-        onTap: () {
-          setState(() {
-            _statusFilter = 'expired';
-            _statusChipFilters.clear();
-            _statusChipFilters.add('expired');
-          });
-        },
+        onTap: () => setState(() => _sortMode = _MaintenanceSortMode.status),
       ),
       _StatCardData(
         title: 'PTA attive',
@@ -576,83 +720,78 @@ class _AdminPrivilegesDashboardState
         ),
     ];
 
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final content = [
+      _buildStatCardsSection(statCardData, isMobileLayout),
+      const SizedBox(height: 16),
+      Text(
+        'Utenti con currency manutentiva',
+        style: Theme.of(context).textTheme.titleLarge,
+        textAlign: TextAlign.center,
+        softWrap: true,
+      ),
+      const SizedBox(height: 12),
+      if (filteredRows.isEmpty)
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Nessun utente corrisponde ai filtri selezionati.',
+              textAlign: TextAlign.center,
+              softWrap: true,
+            ),
+          ),
+        )
+      else if (_gridView)
+        _buildUserGrid(filteredRows)
+      else
+        ..._buildListView(filteredRows),
+    ];
 
     return Scaffold(
+      drawer: isMobileLayout ? _buildNavigationDrawer() : null,
       appBar: AppBar(
-        leading: const AdminAppBarLeading(fallbackRoute: '/admin/priv'),
+        leading: isMobileLayout
+            ? Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                ),
+              )
+            : const AdminAppBarLeading(fallbackRoute: '/admin/priv'),
         titleSpacing: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const AvesLogoWidget(size: 32),
             const SizedBox(width: 8),
-            Text(isMobile ? 'CSL' : 'Manutenzione Currency'),
+            Text(isMobileLayout ? 'CSL' : 'Manutenzione Currency'),
           ],
         ),
         centerTitle: true,
         actions: [
-          PopupMenuButton<String>(
+          PopupMenuButton<_MaintenanceSortMode>(
             icon: const Icon(Icons.sort),
-            onSelected: (value) {
-              setState(() => _sortMode = value);
-            },
-            itemBuilder: (context) => [
+            onSelected: (value) => setState(() => _sortMode = value),
+            itemBuilder: (context) => const [
               PopupMenuItem(
-                value: 'status',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'status')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Stato'),
-                  ],
-                ),
+                value: _MaintenanceSortMode.status,
+                child: Text('Predefinito (Stato)'),
               ),
               PopupMenuItem(
-                value: 'alphabetical',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'alphabetical')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Alfabetico'),
-                  ],
-                ),
+                value: _MaintenanceSortMode.alphabetical,
+                child: Text('Alfabetico A-Z'),
               ),
               PopupMenuItem(
-                value: 'lastModified',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'lastModified')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Ultima modifica'),
-                  ],
-                ),
+                value: _MaintenanceSortMode.lastModified,
+                child: Text('Ultima modifica'),
               ),
               PopupMenuItem(
-                value: 'lastActivity',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'lastActivity')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Ultima attività'),
-                  ],
-                ),
+                value: _MaintenanceSortMode.lastActivity,
+                child: Text('Ultima attività'),
               ),
             ],
           ),
-          if (isMobile)
+          if (isMobileLayout)
             PopupMenuButton<String>(
               onSelected: (value) {
                 switch (value) {
@@ -708,158 +847,46 @@ class _AdminPrivilegesDashboardState
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final isDesktop = constraints.maxWidth >= 1200;
-
-                if (isDesktop) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 300,
-                        child: ListView(
-                          padding: const EdgeInsets.all(16),
-                          children: [
-                            _buildNavigationSidebar(),
-                            const SizedBox(height: 16),
-                            _buildFiltersCard(auth),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: RefreshIndicator(
-                          onRefresh: _loadData,
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showDrawerLayout = constraints.maxWidth < 650;
+                  if (!showDrawerLayout) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 300,
                           child: ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
-                              Row(
-                                children: [
-                                  for (
-                                    int i = 0;
-                                    i < statCardData.length;
-                                    i++
-                                  ) ...[
-                                    Expanded(
-                                      child: _StatCard(
-                                        title: statCardData[i].title,
-                                        value: statCardData[i].value,
-                                        icon: statCardData[i].icon,
-                                        color: statCardData[i].color,
-                                        onTap: statCardData[i].onTap,
-                                      ),
-                                    ),
-                                    if (i < statCardData.length - 1)
-                                      const SizedBox(width: 16),
-                                  ],
-                                ],
-                              ),
+                              _buildNavigationSidebar(),
                               const SizedBox(height: 16),
-                              Text(
-                                'Utenti con currency manutentiva',
-                                style: Theme.of(context).textTheme.titleLarge,
-                                textAlign: TextAlign.center,
-                                softWrap: true,
-                              ),
-                              const SizedBox(height: 12),
-                              if (filteredRows.isEmpty)
-                                const Card(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Text(
-                                      'Nessun utente corrisponde ai filtri selezionati.',
-                                      textAlign: TextAlign.center,
-                                      softWrap: true,
-                                    ),
-                                  ),
-                                )
-                              else if (_gridView)
-                                _buildUserGrid(filteredRows)
-                              else
-                                ..._buildListView(filteredRows),
+                              _buildFiltersCard(auth),
                             ],
                           ),
                         ),
-                      ),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.all(16),
+                            children: content,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _buildFiltersCard(auth),
+                      const SizedBox(height: 16),
+                      ...content,
                     ],
                   );
-                } else {
-                  return RefreshIndicator(
-                    onRefresh: _loadData,
-                    child: ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isMobile = constraints.maxWidth < 600;
-                            if (isMobile) {
-                              return Column(
-                                children: [
-                                  for (final data in statCardData)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: _StatCard(
-                                        title: data.title,
-                                        value: data.value,
-                                        icon: data.icon,
-                                        color: data.color,
-                                        compact: true,
-                                        onTap: data.onTap,
-                                      ),
-                                    ),
-                                ],
-                              );
-                            }
-                            return Wrap(
-                              alignment: WrapAlignment.center,
-                              spacing: 16,
-                              runSpacing: 16,
-                              children: [
-                                for (final data in statCardData)
-                                  SizedBox(
-                                    width: 240,
-                                    child: _StatCard(
-                                      title: data.title,
-                                      value: data.value,
-                                      icon: data.icon,
-                                      color: data.color,
-                                      onTap: data.onTap,
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _buildFiltersCard(auth),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Utenti con currency manutentiva',
-                          style: Theme.of(context).textTheme.titleLarge,
-                          textAlign: TextAlign.center,
-                          softWrap: true,
-                        ),
-                        const SizedBox(height: 12),
-                        if (filteredRows.isEmpty)
-                          const Card(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text(
-                                'Nessun utente corrisponde ai filtri selezionati.',
-                                textAlign: TextAlign.center,
-                                softWrap: true,
-                              ),
-                            ),
-                          )
-                        else if (_gridView)
-                          _buildUserGrid(filteredRows)
-                        else
-                          ..._buildListView(filteredRows),
-                      ],
-                    ),
-                  );
-                }
-              },
+                },
+              ),
             ),
     );
   }
@@ -1268,6 +1295,30 @@ class _AdminPrivilegesDashboardState
                 ],
               ),
             ],
+            const SizedBox(height: 16),
+            Text(
+              'Qualifiche istruttori',
+              style: Theme.of(context).textTheme.titleSmall,
+              softWrap: true,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilterChip(
+                  label: const Text('Mostra solo TI'),
+                  selected: _onlyTi,
+                  onSelected: (value) => setState(() => _onlyTi = value),
+                ),
+                FilterChip(
+                  label: const Text('Mostra solo ETP'),
+                  selected: _onlyEtp,
+                  onSelected: (value) => setState(() => _onlyEtp = value),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             // AND/OR toggle
             Wrap(

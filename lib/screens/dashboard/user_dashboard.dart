@@ -290,6 +290,14 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
             onTap: () => context.go('/activities/my?type=tob'),
           ),
         ),
+      if (auth.hasMdbCrew)
+        _CurrencyCard(
+          title: 'Mitragliere di Bordo',
+          status: auth.currency['mdb'],
+          subtitle: _flightSubtitle(auth.currency['mdb']),
+          expiryText: _formatLongDate(auth.currency['mdb']?.expiryDate),
+          onTap: () => context.go('/activities/my?type=flight'),
+        ),
     ];
 
     return Scaffold(
@@ -349,6 +357,26 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                       ? () => context.go('/helicopters/fleet')
                       : null,
                 ),
+                if (user.isTi || user.isEtp) ...[
+                  const SizedBox(height: 16),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (user.isTi)
+                        Chip(
+                          label: const Text('TI'),
+                          backgroundColor: Colors.blue.shade700,
+                        ),
+                      if (user.isEtp)
+                        Chip(
+                          label: const Text('ETP'),
+                          backgroundColor: Colors.purple.shade700,
+                        ),
+                    ],
+                  ),
+                ],
                 if (!user.isApproved) ...[
                   const SizedBox(height: 16),
                   Container(

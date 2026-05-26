@@ -788,8 +788,10 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Set<String> _privilegeKeys = <String>{};
   Set<int> _tCrewHelicopters = <int>{};
   Set<int> _tobCrewHelicopters = <int>{};
+  Set<int> _mdbCrewHelicopters = <int>{};
   Set<String> _tobCapabilityKeys = <String>{};
   Map<int, String> _tobGrades = <int, String>{};
+  Map<int, String> _mdbGrades = <int, String>{};
 
   @override
   void initState() {
@@ -822,8 +824,16 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           .where((i) => i.crewType == 'TOB')
           .map((i) => i.helicopterTypeId)
           .toSet();
+      _mdbCrewHelicopters = crews
+          .where((i) => i.crewType == 'MDB')
+          .map((i) => i.helicopterTypeId)
+          .toSet();
       _tobGrades = {
         for (final i in crews.where((c) => c.crewType == 'TOB'))
+          i.helicopterTypeId: i.fascia ?? 'A',
+      };
+      _mdbGrades = {
+        for (final i in crews.where((c) => c.crewType == 'MDB'))
           i.helicopterTypeId: i.fascia ?? 'A',
       };
       _tobCapabilityKeys = tobCaps
@@ -909,6 +919,26 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     }
   }
 
+  Future<void> _selectMdbCrewHelicopters() async {
+    final selected = await showDialog<Set<int>>(
+      context: context,
+      builder: (ctx) => _HelicopterMultiSelectDialog(
+        title: 'Seleziona elicotteri Mitragliere di Bordo',
+        helicopters: widget.helicopterTypes,
+        initialSelection: _mdbCrewHelicopters,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _mdbCrewHelicopters = selected;
+        _mdbGrades.removeWhere((key, _) => !selected.contains(key));
+        for (final id in selected) {
+          _mdbGrades.putIfAbsent(id, () => 'A');
+        }
+      });
+    }
+  }
+
   Future<void> _approveMaint() async {
     final adminId = ref.read(authProvider).userProfile?.id;
     if (adminId == null) return;
@@ -952,7 +982,13 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await widget.service.updateProfile(_user.copyWith(role: _selectedRole));
+      await widget.service.updateProfile(
+        _user.copyWith(
+          role: _selectedRole,
+          isTi: _user.isTi,
+          isEtp: _user.isEtp,
+        ),
+      );
       await widget.service.setUserLicenses(
         _user.id,
         _licenseKeys.map((k) {
@@ -981,6 +1017,12 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
             'helicopter_type_id': id,
             'crew_type': 'TOB',
             'tob_grade': _tobGrades[id] ?? 'A',
+          },
+        for (final id in _mdbCrewHelicopters)
+          {
+            'helicopter_type_id': id,
+            'crew_type': 'MDB',
+            'tob_grade': _mdbGrades[id] ?? 'A',
           },
       ];
       await widget.service.setUserCrewAssignments(_user.id, assignments);
@@ -1051,6 +1093,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
+    final canEditInstructorQualifications = auth.isAdminPriv;
+
     return Scaffold(
       appBar: AppBar(
         leading: const AdminAppBarLeading(),
@@ -1200,6 +1245,26 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                             textAlign: TextAlign.center,
                           ),
                         ],
+                        if (_user.isTi || _user.isEtp) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              if (_user.isTi)
+                                Chip(
+                                  label: const Text('TI'),
+                                  backgroundColor: Colors.blue.shade700,
+                                ),
+                              if (_user.isEtp)
+                                Chip(
+                                  label: const Text('ETP'),
+                                  backgroundColor: Colors.purple.shade700,
+                                ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         DropdownButtonFormField<String>(
                           key: ValueKey(_selectedRole),
@@ -1231,6 +1296,47 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                   ),
                 ),
                 // ── Maintenance sections ──────────────────────────────────
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Qualifiche Istruttori',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        if (!canEditInstructorQualifications)
+                          Text(
+                            'Solo Admin privilegi può modificare TI/ETP.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Istruttore T.A. (TI)'),
+                          value: _user.isTi,
+                          onChanged: canEditInstructorQualifications
+                              ? (value) => setState(
+                                  () => _user = _user.copyWith(isTi: value),
+                                )
+                              : null,
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Esaminatore T.P. (ETP)'),
+                          value: _user.isEtp,
+                          onChanged: canEditInstructorQualifications
+                              ? (value) => setState(
+                                  () => _user = _user.copyWith(isEtp: value),
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 if (widget.showMaintenanceSections) ...[
                   const SizedBox(height: 16),
                   _Section(
@@ -1649,6 +1755,165 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                   OutlinedButton.icon(
                                     onPressed: _selectTobCrewHelicopters,
                                     icon: const Icon(Icons.flight, size: 16),
+                                    label: const Text('Scegli elicotteri'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Mitragliere di Bordo (MDB)',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleSmall,
+                                        ),
+                                      ),
+                                      if (_mdbCrewHelicopters.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${_mdbCrewHelicopters.length}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimaryContainer,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (_mdbCrewHelicopters.isNotEmpty)
+                                    ...widget.helicopterTypes
+                                        .where(
+                                          (h) => _mdbCrewHelicopters.contains(
+                                            h.id,
+                                          ),
+                                        )
+                                        .map(
+                                          (h) => Card(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(8),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          h.name,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.close,
+                                                          size: 18,
+                                                        ),
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                        constraints:
+                                                            const BoxConstraints(),
+                                                        onPressed: () =>
+                                                            setState(() {
+                                                              _mdbCrewHelicopters
+                                                                  .remove(h.id);
+                                                              _mdbGrades.remove(
+                                                                h.id,
+                                                              );
+                                                            }),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  DropdownButtonFormField<
+                                                    String
+                                                  >(
+                                                    key: ValueKey(
+                                                      'mdb_${h.id}_${_mdbGrades[h.id]}',
+                                                    ),
+                                                    initialValue:
+                                                        _mdbGrades[h.id] ?? 'A',
+                                                    isExpanded: true,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                          labelText:
+                                                              'Fascia MDB',
+                                                          isDense: true,
+                                                        ),
+                                                    items: const [
+                                                      DropdownMenuItem(
+                                                        value: 'A',
+                                                        child: Text('A'),
+                                                      ),
+                                                      DropdownMenuItem(
+                                                        value: 'B',
+                                                        child: Text('B'),
+                                                      ),
+                                                      DropdownMenuItem(
+                                                        value: 'C',
+                                                        child: Text('C'),
+                                                      ),
+                                                    ],
+                                                    onChanged: (v) => setState(
+                                                      () => _mdbGrades[h.id] =
+                                                          v ?? 'A',
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                  else
+                                    const Text(
+                                      'Nessun elicottero selezionato',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: _selectMdbCrewHelicopters,
+                                    icon: const Icon(
+                                      Icons.shield_outlined,
+                                      size: 16,
+                                    ),
                                     label: const Text('Scegli elicotteri'),
                                   ),
                                 ],

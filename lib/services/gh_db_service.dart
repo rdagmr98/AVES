@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/gh_config.dart';
@@ -81,7 +82,17 @@ class GhDbService {
   dynamic _normalizeLoadedData(String fileName, dynamic data) {
     if (fileName == 'users.json') {
       final items = List<Map<String, dynamic>>.from(data as List? ?? const []);
-      return items.map(_decryptUser).toList(growable: false);
+      final decrypted = items.map(_decryptUser).toList(growable: false);
+      final stillEncrypted = decrypted.any((user) {
+        final username = user['username'] as String?;
+        return username != null && username.startsWith('ENC:');
+      });
+      if (stillEncrypted) {
+        debugPrint(
+          'WARNING: Users appear to be encrypted - decryption may have failed',
+        );
+      }
+      return decrypted;
     }
     return data;
   }

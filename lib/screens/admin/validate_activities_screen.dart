@@ -392,7 +392,7 @@ class _ValidateActivitiesScreenState
           items: _seminars,
           titleBuilder: (item) => '${item.userFullName} · ${item.userLicenza}',
           subtitleBuilder: (item) =>
-              'Seminario NAM/MHF\n${item.description ?? 'Nessuna descrizione'}',
+              'Seminario ${item.seminarType}\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.seminarDate,
           onValidate: (item) => _validateSeminar(item.id!),
           onReject: (item) async {

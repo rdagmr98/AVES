@@ -125,10 +125,12 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Salvati ${rows.length} seminari $_seminarType.'),
+          content: Text(
+            'Salvati ${_selectedUserIds.length} seminari $_seminarType.',
+          ),
         ),
       );
-      context.go('/admin/priv');
+      context.go('/admin/p66');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

@@ -101,9 +101,26 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                   '${row.licenseTypes} · ${row.licenseNumber}',
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  row.seminarStatusText,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: row.hasRequiredSeminars
+                        ? const Color(0xFF27AE60)
+                        : const Color(0xFFC0392B),
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(row.statusReason, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
                 Text(
                   'Ultima attività: ${_formatDate(row.lastActivityDate)}',
+                  textAlign: TextAlign.center,
+                ),
+                Text(
+                  'Ultimo seminario: ${_formatDate(row.lastSeminarDate)}',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -124,6 +141,28 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                       : row.coveredMonths
                             .map((month) => Chip(label: Text(month)))
                             .toList(),
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Seminari validi (24 mesi)',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (row.validSeminars.isEmpty)
+                      const Chip(label: Text('Nessun seminario valido')),
+                    ...row.validSeminars.map((type) => Chip(label: Text(type))),
+                    ...row.missingSeminars.map(
+                      (type) => Chip(label: Text('Manca $type')),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -256,9 +295,30 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Mesi attività: ${row.coveredMonths.join(', ')}',
+                        row.coveredMonths.isEmpty
+                            ? 'Mesi attività: nessuna attività valida'
+                            : 'Mesi attività: ${row.coveredMonths.join(', ')}',
                         softWrap: true,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Seminari: ${row.seminarStatusText}',
+                        style: TextStyle(
+                          color: row.hasRequiredSeminars
+                              ? const Color(0xFF27AE60)
+                              : const Color(0xFFC0392B),
+                          fontWeight: FontWeight.w700,
+                        ),
+                        softWrap: true,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(row.statusReason, softWrap: true),
                     ),
                   ],
                 ),
@@ -427,7 +487,7 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                   Wrap(spacing: 16, runSpacing: 16, children: statCards),
                   const SizedBox(height: 24),
                   Text(
-                    'Conformità P-66 (ultimi 24 mesi)',
+                    'Conformità P-66 e seminari (ultimi 24 mesi)',
                     style: Theme.of(context).textTheme.titleLarge,
                     textAlign: TextAlign.center,
                   ),

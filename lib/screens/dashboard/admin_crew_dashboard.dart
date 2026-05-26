@@ -16,6 +16,8 @@ import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/user_avatar.dart';
 
+enum _CrewSortMode { status, alphabetical, lastModified, lastActivity }
+
 class AdminCrewDashboard extends ConsumerStatefulWidget {
   const AdminCrewDashboard({super.key});
 
@@ -45,7 +47,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   bool _andMode = false;
   bool _gridView = true;
   bool _filterModeDropdown = true;
-  String _sortMode = 'status';
+  bool _onlyTi = false;
+  bool _onlyEtp = false;
+  _CrewSortMode _sortMode = _CrewSortMode.status;
 
   @override
   void initState() {
@@ -134,6 +138,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
 
       CurrencyStatus? flightStatus;
       CurrencyStatus? tobBaseStatus;
+      CurrencyStatus? mdbStatus;
       if (assignments.any((item) => item.crewType == 'T')) {
         flightStatus = await _currencyService.getFlightCurrency(user.id);
       }
@@ -142,6 +147,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           user.id,
           fascia,
         );
+      }
+      if (assignments.any((item) => item.crewType == 'MDB')) {
+        mdbStatus = await _currencyService.getMdbCurrency(user.id, assignments);
       }
       final tobStatuses = <String, CurrencyStatus>{};
       for (final capability in tobCapabilities) {
@@ -161,6 +169,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           tobCapabilities: tobCapabilities,
           flightStatus: flightStatus,
           tobBaseStatus: tobBaseStatus,
+          mdbStatus: mdbStatus,
           tobStatuses: tobStatuses,
         ),
       );
@@ -179,45 +188,45 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   List<_CrewUserRow> _sortedRows(List<_CrewUserRow> rows) {
     final sorted = List<_CrewUserRow>.from(rows);
     switch (_sortMode) {
-      case 'alphabetical':
+      case _CrewSortMode.status:
+        sorted.sort((a, b) {
+          final aPriority = _statusPriority(a.overallStatus(_statusCrewFilter));
+          final bPriority = _statusPriority(b.overallStatus(_statusCrewFilter));
+          if (aPriority != bPriority) {
+            return aPriority.compareTo(bPriority);
+          }
+          return a.user.fullName.compareTo(b.user.fullName);
+        });
+        break;
+      case _CrewSortMode.alphabetical:
         sorted.sort((a, b) => a.user.fullName.compareTo(b.user.fullName));
         break;
-      case 'lastModified':
+      case _CrewSortMode.lastModified:
         sorted.sort((a, b) => (b.user.updatedAt).compareTo(a.user.updatedAt));
         break;
-      case 'lastActivity':
+      case _CrewSortMode.lastActivity:
         sorted.sort((a, b) {
           final aDate = a.lastActivityDate ?? DateTime(1970);
           final bDate = b.lastActivityDate ?? DateTime(1970);
           return bDate.compareTo(aDate);
         });
         break;
-      case 'status':
-      default:
-        sorted.sort((a, b) {
-          final aStatuses = a.relevantStatuses(
-            _statusCrewFilter,
-            _tobCapabilityId,
-          );
-          final bStatuses = b.relevantStatuses(
-            _statusCrewFilter,
-            _tobCapabilityId,
-          );
-          final aScore = aStatuses.any((s) => s.isExpired)
-              ? 0
-              : aStatuses.any((s) => s.isWarning)
-              ? 1
-              : 2;
-          final bScore = bStatuses.any((s) => s.isExpired)
-              ? 0
-              : bStatuses.any((s) => s.isWarning)
-              ? 1
-              : 2;
-          return aScore.compareTo(bScore);
-        });
-        break;
     }
     return sorted;
+  }
+
+  int _statusPriority(CurrencyStatusEnum? status) {
+    if (status == CurrencyStatusEnum.expired ||
+        status == CurrencyStatusEnum.suspended) {
+      return 0;
+    }
+    if (status == CurrencyStatusEnum.warning) {
+      return 1;
+    }
+    if (status == CurrencyStatusEnum.noData) {
+      return 2;
+    }
+    return 3;
   }
 
   List<_CrewUserRow> _filteredRows() {
@@ -313,7 +322,10 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           ? activeMatches.every((match) => match)
           : activeMatches.any((match) => match);
 
-      return matchesSearch && matchesFilters;
+      final matchesQualifications =
+          (!_onlyTi || row.user.isTi) && (!_onlyEtp || row.user.isEtp);
+
+      return matchesSearch && matchesFilters && matchesQualifications;
     }).toList();
   }
 
@@ -391,6 +403,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                         label: Text(
                           item.crewType == 'TOB'
                               ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
+                              : item.crewType == 'MDB'
+                              ? '${item.helicopterCode} · MDB ${item.fascia ?? '-'}'
                               : '${item.helicopterCode} · T',
                         ),
                       ),
@@ -526,6 +540,12 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
+              onPressed: () => context.go('/admin/pta'),
+              icon: const Icon(Icons.block_outlined),
+              label: const Text('Gestione PTA', softWrap: true),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
               onPressed: () => context.go('/admin/insert'),
               icon: const Icon(Icons.add_circle_outline),
               label: const Text('Inserisci Attività', softWrap: true),
@@ -541,6 +561,72 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
               onPressed: _reportService.downloadCrewReport,
               icon: const Icon(Icons.picture_as_pdf_outlined),
               label: const Text('Report PDF', softWrap: true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigationDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              'Navigazione',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.people_outlined),
+              title: const Text('Gestione Utenti'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/users');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.verified_outlined),
+              title: const Text('Valida Attività'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/validate');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block_outlined),
+              title: const Text('Gestione PTA'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/pta');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Inserisci Attività'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/insert');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.tune_outlined),
+              title: const Text('Impostazioni Currency'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.go('/admin/settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('Report PDF'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _reportService.downloadCrewReport();
+              },
             ),
           ],
         ),
@@ -682,6 +768,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   DropdownMenuItem<String?>(value: null, child: Text('Tutti')),
                   DropdownMenuItem<String?>(value: 'T', child: Text('T')),
                   DropdownMenuItem<String?>(value: 'TOB', child: Text('TOB')),
+                  DropdownMenuItem<String?>(value: 'MDB', child: Text('MDB')),
                 ],
                 onChanged: (value) {
                   setState(() {
@@ -689,6 +776,29 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                     if (value != null) _crewTypeIds.add(value);
                   });
                 },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Qualifiche istruttori',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Mostra solo TI'),
+                    selected: _onlyTi,
+                    onSelected: (value) => setState(() => _onlyTi = value),
+                  ),
+                  FilterChip(
+                    label: const Text('Mostra solo ETP'),
+                    selected: _onlyEtp,
+                    onSelected: (value) => setState(() => _onlyEtp = value),
+                  ),
+                ],
               ),
             ] else ...[
               Text(
@@ -788,12 +898,35 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final crewType in const ['T', 'TOB'])
+                  for (final crewType in const ['T', 'TOB', 'MDB'])
                     FilterChip(
                       label: Text(crewType),
                       selected: _crewTypeIds.contains(crewType),
                       onSelected: (_) => _toggleCrewTypeFilter(crewType),
                     ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Qualifiche istruttori',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Mostra solo TI'),
+                    selected: _onlyTi,
+                    onSelected: (value) => setState(() => _onlyTi = value),
+                  ),
+                  FilterChip(
+                    label: const Text('Mostra solo ETP'),
+                    selected: _onlyEtp,
+                    onSelected: (value) => setState(() => _onlyEtp = value),
+                  ),
                 ],
               ),
             ],
@@ -821,9 +954,10 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     );
   }
 
-  Widget _buildStatCards(List<_CrewUserRow> filteredRows, bool isDesktop) {
+  Widget _buildStatCards(bool isMobileLayout) {
     final tCrewCount = _rows.where((row) => row.hasTCrew).length;
     final tobCrewCount = _rows.where((row) => row.hasTobCrew).length;
+    final mdbCrewCount = _rows.where((row) => row.hasMdbCrew).length;
 
     final statCardData = <_CrewStatCardData>[
       _CrewStatCardData(
@@ -852,62 +986,36 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
             ..add('TOB'),
         ),
       ),
+      _CrewStatCardData(
+        title: 'Equipaggi MDB',
+        value: '$mdbCrewCount',
+        icon: Icons.shield_outlined,
+        onTap: () => setState(
+          () => _crewTypeIds
+            ..clear()
+            ..add('MDB'),
+        ),
+      ),
     ];
 
-    if (isDesktop) {
-      return Row(
-        children: [
-          for (final data in statCardData)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: _CrewStatCard(
-                  title: data.title,
-                  value: data.value,
-                  icon: data.icon,
-                  onTap: data.onTap,
-                ),
-              ),
-            ),
-        ],
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 600;
-        if (isMobile) {
-          return Column(
-            children: [
-              for (final data in statCardData)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _CrewStatCard(
-                    title: data.title,
-                    value: data.value,
-                    icon: data.icon,
-                    compact: true,
-                    onTap: data.onTap,
-                  ),
-                ),
-            ],
-          );
-        }
-        return Wrap(
-          spacing: 16,
-          runSpacing: 16,
-          children: [
-            for (final data in statCardData)
-              SizedBox(
-                width: 240,
-                child: _CrewStatCard(
-                  title: data.title,
-                  value: data.value,
-                  icon: data.icon,
-                  onTap: data.onTap,
-                ),
-              ),
-          ],
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: statCardData.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isMobileLayout ? 2 : 4,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: isMobileLayout ? 1.1 : 1.45,
+      ),
+      itemBuilder: (context, index) {
+        final data = statCardData[index];
+        return _CrewStatCard(
+          title: data.title,
+          value: data.value,
+          icon: data.icon,
+          compact: isMobileLayout,
+          onTap: data.onTap,
         );
       },
     );
@@ -966,6 +1074,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                               label: Text(
                                 item.crewType == 'TOB'
                                     ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
+                                    : item.crewType == 'MDB'
+                                    ? '${item.helicopterCode} · MDB ${item.fascia ?? '-'}'
                                     : '${item.helicopterCode} · T',
                               ),
                             ),
@@ -998,6 +1108,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                             CurrencyBadgeWidget(status: row.flightStatus!),
                           if (row.tobBaseStatus != null)
                             CurrencyBadgeWidget(status: row.tobBaseStatus!),
+                          if (row.mdbStatus != null)
+                            CurrencyBadgeWidget(status: row.mdbStatus!),
                           ...row.tobCapabilities.map(
                             (item) => CurrencyBadgeWidget(
                               status:
@@ -1023,83 +1135,66 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   @override
   Widget build(BuildContext context) {
     final filteredRows = _sortedRows(_filteredRows());
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobileLayout = screenWidth < 650;
+
+    final content = [
+      _buildStatCards(isMobileLayout),
+      const SizedBox(height: 16),
+      Text(
+        'Utenti equipaggi/volo',
+        style: Theme.of(context).textTheme.titleLarge,
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 12),
+      _buildUserContent(filteredRows),
+    ];
 
     return Scaffold(
+      drawer: isMobileLayout ? _buildNavigationDrawer() : null,
       appBar: AppBar(
-        leading: const AdminAppBarLeading(fallbackRoute: '/admin/crew'),
+        leading: isMobileLayout
+            ? Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                ),
+              )
+            : const AdminAppBarLeading(fallbackRoute: '/admin/crew'),
         titleSpacing: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const AvesLogoWidget(size: 32),
             const SizedBox(width: 8),
-            Text(isMobile ? 'Volo' : 'Volo e TOB'),
+            Text(isMobileLayout ? 'Volo' : 'Volo e TOB'),
           ],
         ),
         centerTitle: true,
         actions: [
-          PopupMenuButton<String>(
+          PopupMenuButton<_CrewSortMode>(
             icon: const Icon(Icons.sort),
-            onSelected: (value) {
-              setState(() => _sortMode = value);
-            },
-            itemBuilder: (context) => [
+            onSelected: (value) => setState(() => _sortMode = value),
+            itemBuilder: (context) => const [
               PopupMenuItem(
-                value: 'status',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'status')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Stato'),
-                  ],
-                ),
+                value: _CrewSortMode.status,
+                child: Text('Predefinito (Stato)'),
               ),
               PopupMenuItem(
-                value: 'alphabetical',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'alphabetical')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Alfabetico'),
-                  ],
-                ),
+                value: _CrewSortMode.alphabetical,
+                child: Text('Alfabetico A-Z'),
               ),
               PopupMenuItem(
-                value: 'lastModified',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'lastModified')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Ultima modifica'),
-                  ],
-                ),
+                value: _CrewSortMode.lastModified,
+                child: Text('Ultima modifica'),
               ),
               PopupMenuItem(
-                value: 'lastActivity',
-                child: Row(
-                  children: [
-                    if (_sortMode == 'lastActivity')
-                      const Icon(Icons.check, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    const Text('Ultima attività'),
-                  ],
-                ),
+                value: _CrewSortMode.lastActivity,
+                child: Text('Ultima attività'),
               ),
             ],
           ),
-          if (isMobile)
+          if (isMobileLayout)
             PopupMenuButton<String>(
               onSelected: (value) {
                 switch (value) {
@@ -1159,9 +1254,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
               onRefresh: _loadData,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final isDesktop = constraints.maxWidth >= 1200;
-
-                  if (isDesktop) {
+                  final showDrawerLayout = constraints.maxWidth < 650;
+                  if (!showDrawerLayout) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1179,17 +1273,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                         Expanded(
                           child: ListView(
                             padding: const EdgeInsets.all(16),
-                            children: [
-                              _buildStatCards(filteredRows, isDesktop),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Utenti equipaggi/volo',
-                                style: Theme.of(context).textTheme.titleLarge,
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              _buildUserContent(filteredRows),
-                            ],
+                            children: content,
                           ),
                         ),
                       ],
@@ -1199,17 +1283,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   return ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      _buildStatCards(filteredRows, isDesktop),
-                      const SizedBox(height: 16),
                       _buildFiltersSection(),
                       const SizedBox(height: 16),
-                      Text(
-                        'Utenti equipaggi/volo',
-                        style: Theme.of(context).textTheme.titleLarge,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildUserContent(filteredRows),
+                      ...content,
                     ],
                   );
                 },
@@ -1226,6 +1302,7 @@ class _CrewUserRow {
     required this.tobCapabilities,
     required this.flightStatus,
     this.tobBaseStatus,
+    this.mdbStatus,
     required this.tobStatuses,
   });
 
@@ -1234,10 +1311,12 @@ class _CrewUserRow {
   final List<UserTobCapability> tobCapabilities;
   final CurrencyStatus? flightStatus;
   final CurrencyStatus? tobBaseStatus;
+  final CurrencyStatus? mdbStatus;
   final Map<String, CurrencyStatus> tobStatuses;
 
   bool get hasTCrew => assignments.any((item) => item.crewType == 'T');
   bool get hasTobCrew => assignments.any((item) => item.crewType == 'TOB');
+  bool get hasMdbCrew => assignments.any((item) => item.crewType == 'MDB');
   DateTime? get lastActivityDate {
     final dates = relevantStatuses('all', null)
         .map((status) => status.lastActivityDate)
@@ -1275,7 +1354,31 @@ class _CrewUserRow {
         }
       }
     }
+    if ((crewTypeFilter == 'all' || crewTypeFilter == 'MDB') &&
+        mdbStatus != null) {
+      statuses.add(mdbStatus!);
+    }
     return statuses;
+  }
+
+  CurrencyStatusEnum? overallStatus(String crewTypeFilter) {
+    final statuses = relevantStatuses(crewTypeFilter, null);
+    if (statuses.isEmpty) {
+      return CurrencyStatusEnum.noData;
+    }
+    if (statuses.any((item) => item.status == CurrencyStatusEnum.expired)) {
+      return CurrencyStatusEnum.expired;
+    }
+    if (statuses.any((item) => item.status == CurrencyStatusEnum.suspended)) {
+      return CurrencyStatusEnum.suspended;
+    }
+    if (statuses.any((item) => item.status == CurrencyStatusEnum.warning)) {
+      return CurrencyStatusEnum.warning;
+    }
+    if (statuses.any((item) => item.status == CurrencyStatusEnum.noData)) {
+      return CurrencyStatusEnum.noData;
+    }
+    return CurrencyStatusEnum.valid;
   }
 }
 

@@ -65,6 +65,7 @@ class _InsertActivityAdminScreenState
 
   int? _flightHelicopterId;
   DateTime _flightDate = DateTime.now();
+  bool _flightIsPoligono = false;
 
   int? _tobHelicopterId;
   int? _tobCapabilityId;
@@ -80,6 +81,7 @@ class _InsertActivityAdminScreenState
 
   int? _crewFlightHelicopterId;
   DateTime _crewFlightDate = DateTime.now();
+  bool _crewFlightIsPoligono = false;
   final List<_CrewEntry> _crewEntries = [];
 
   @override
@@ -252,6 +254,7 @@ class _InsertActivityAdminScreenState
           description: _flightDescCtrl.text.trim().isEmpty
               ? null
               : _flightDescCtrl.text.trim(),
+          isPoligono: _flightIsPoligono,
           submittedBy: adminId,
         ),
         adminId,
@@ -347,6 +350,7 @@ class _InsertActivityAdminScreenState
     final roleItems = <DropdownMenuItem<String>>[
       const DropdownMenuItem(value: 'T', child: Text('T')),
       const DropdownMenuItem(value: 'TOB', child: Text('TOB')),
+      const DropdownMenuItem(value: 'MDB', child: Text('MDB')),
     ];
     final capabilityItems = tobCapabilities
         .map(
@@ -684,11 +688,11 @@ class _InsertActivityAdminScreenState
       );
       return;
     }
-    if (_crewEntries.any((e) => e.role == 'T') &&
+    if (_crewEntries.any((e) => e.role == 'T' || e.role == 'MDB') &&
         (hours == null || hours <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Inserisci le ore di volo per i membri T.'),
+          content: Text('Inserisci le ore di volo per i membri T/MDB.'),
         ),
       );
       return;
@@ -699,7 +703,7 @@ class _InsertActivityAdminScreenState
           ? null
           : _crewFlightDescCtrl.text.trim();
       for (final entry in _crewEntries) {
-        if (entry.role == 'T') {
+        if (entry.role == 'T' || entry.role == 'MDB') {
           await _activityService.addFlightActivityValidated(
             FlightActivity(
               userId: entry.user.id,
@@ -707,6 +711,7 @@ class _InsertActivityAdminScreenState
               activityDate: _crewFlightDate,
               flightHours: hours ?? 0,
               description: desc,
+              isPoligono: entry.role == 'MDB' ? _crewFlightIsPoligono : false,
               submittedBy: adminId,
             ),
             adminId,
@@ -730,6 +735,7 @@ class _InsertActivityAdminScreenState
           _saving = false;
           _crewEntries.clear();
           _crewFlightHelicopterId = null;
+          _crewFlightIsPoligono = false;
           _crewFlightHoursCtrl.clear();
           _crewFlightDescCtrl.clear();
           _crewFlightDate = DateTime.now();
@@ -768,11 +774,23 @@ class _InsertActivityAdminScreenState
         .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
         .toList();
     final tAssignments = _crews.where((item) => item.crewType == 'T').toList();
+    final mdbAssignments = _crews
+        .where((item) => item.crewType == 'MDB')
+        .toList();
     final tobAssignments = _crews
         .where((item) => item.crewType == 'TOB')
         .toList();
-    final flightHelicopters = _uniqueCrewHelicopters(tAssignments);
+    final flightHelicopters = _uniqueCrewHelicopters([
+      ...tAssignments,
+      ...mdbAssignments,
+    ]);
     final tobHelicopters = _uniqueCrewHelicopters(tobAssignments);
+    final mdbHelicopterIds = mdbAssignments
+        .map((item) => item.helicopterTypeId)
+        .toSet();
+    final isMdbFlightHelicopter =
+        _flightHelicopterId != null &&
+        mdbHelicopterIds.contains(_flightHelicopterId);
     final filteredCapabilities = _tobCapabilities
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
@@ -1098,6 +1116,7 @@ class _InsertActivityAdminScreenState
                                   onChanged: (v) => setState(() {
                                     _crewFlightHelicopterId = v;
                                     _crewEntries.clear();
+                                    _crewFlightIsPoligono = false;
                                   }),
                                 ),
                                 const SizedBox(height: 16),
@@ -1113,7 +1132,7 @@ class _InsertActivityAdminScreenState
                                 TextField(
                                   controller: _crewFlightHoursCtrl,
                                   decoration: const InputDecoration(
-                                    labelText: 'Ore di volo (per membri T)',
+                                    labelText: 'Ore di volo (per membri T/MDB)',
                                     hintText: 'es. 1.5',
                                   ),
                                   keyboardType:
@@ -1121,6 +1140,22 @@ class _InsertActivityAdminScreenState
                                         decimal: true,
                                       ),
                                 ),
+                                if (_crewEntries.any(
+                                  (entry) => entry.role == 'MDB',
+                                )) ...[
+                                  const SizedBox(height: 8),
+                                  CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text(
+                                      'Attività a fuoco (solo membri MDB)',
+                                    ),
+                                    value: _crewFlightIsPoligono,
+                                    onChanged: (value) => setState(
+                                      () => _crewFlightIsPoligono =
+                                          value ?? false,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 16),
                                 TextField(
                                   controller: _crewFlightDescCtrl,
@@ -1171,6 +1206,8 @@ class _InsertActivityAdminScreenState
                                       subtitle: Text(
                                         entry.role == 'TOB'
                                             ? 'TOB · ${entry.tobCapabilityName ?? ''}'
+                                            : entry.role == 'MDB'
+                                            ? 'MDB · Mitragliere di Bordo'
                                             : 'T · Pilota/Equipaggio',
                                       ),
                                       trailing: IconButton(
@@ -1393,9 +1430,13 @@ class _InsertActivityAdminScreenState
                                         ),
                                       )
                                       .toList(),
-                                  onChanged: (value) => setState(
-                                    () => _flightHelicopterId = value,
-                                  ),
+                                  onChanged: (value) => setState(() {
+                                    _flightHelicopterId = value;
+                                    if (value == null ||
+                                        !mdbHelicopterIds.contains(value)) {
+                                      _flightIsPoligono = false;
+                                    }
+                                  }),
                                 ),
                                 const SizedBox(height: 16),
                                 _AdminDateButton(
@@ -1417,6 +1458,19 @@ class _InsertActivityAdminScreenState
                                         decimal: true,
                                       ),
                                 ),
+                                if (isMdbFlightHelicopter) ...[
+                                  const SizedBox(height: 8),
+                                  CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text(
+                                      'Attività a fuoco (Poligono)',
+                                    ),
+                                    value: _flightIsPoligono,
+                                    onChanged: (value) => setState(
+                                      () => _flightIsPoligono = value ?? false,
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 16),
                                 TextField(
                                   controller: _flightDescCtrl,

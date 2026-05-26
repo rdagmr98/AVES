@@ -58,6 +58,7 @@ class AuthProvider extends ChangeNotifier {
 
   bool get hasTCrew => _crewAssignments.any((item) => item.crewType == 'T');
   bool get hasTobCrew => _crewAssignments.any((item) => item.crewType == 'TOB');
+  bool get hasMdbCrew => _crewAssignments.any((item) => item.crewType == 'MDB');
 
   Future<void> initialize() async {
     _isLoading = true;

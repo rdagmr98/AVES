@@ -527,7 +527,7 @@ class ActivityService {
     await _notifications.notifyMaintenanceAdmins(
       type: 'SEMINAR_PENDING',
       message:
-          'Seminario NAM/MHF da validare: ${_userName(act.userId)} · ${_formatDate(act.seminarDate)}.',
+          'Seminario ${act.seminarType} da validare: ${_userName(act.userId)} · ${_formatDate(act.seminarDate)}.',
     );
   }
 
@@ -550,7 +550,7 @@ class ActivityService {
       userId: act.userId,
       type: 'SEMINAR_INSERTED_BY_ADMIN',
       message:
-          'Seminario NAM/MHF inserito e validato dall\'admin: ${_formatDate(act.seminarDate)}.',
+          'Seminario ${act.seminarType} inserito e validato dall\'admin: ${_formatDate(act.seminarDate)}.',
     );
   }
 
@@ -570,7 +570,7 @@ class ActivityService {
       userId: activity.userId,
       type: 'SEMINAR_VALIDATED',
       message:
-          'Seminario NAM/MHF approvato: ${_formatDate(activity.seminarDate)}.',
+          'Seminario ${activity.seminarType} approvato: ${_formatDate(activity.seminarDate)}.',
     );
   }
 
@@ -587,7 +587,7 @@ class ActivityService {
         userId: activity.userId,
         type: 'SEMINAR_REJECTED',
         message:
-            'Seminario NAM/MHF non approvato: ${_formatDate(activity.seminarDate)}.',
+            'Seminario ${activity.seminarType} non approvato: ${_formatDate(activity.seminarDate)}.',
       );
     }
   }

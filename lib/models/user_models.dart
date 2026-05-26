@@ -13,6 +13,8 @@ class UserProfile {
   final bool isApprovedMaint;
   final bool isApprovedCrew;
   final bool isActive;
+  final bool isTi;
+  final bool isEtp;
   final String? note;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -32,6 +34,8 @@ class UserProfile {
     this.isApprovedMaint = false,
     this.isApprovedCrew = false,
     this.isActive = true,
+    this.isTi = false,
+    this.isEtp = false,
     this.note,
     required this.createdAt,
     required this.updatedAt,
@@ -70,6 +74,8 @@ class UserProfile {
       isApprovedMaint: isApprovedMaint,
       isApprovedCrew: isApprovedCrew,
       isActive: j['is_active'] as bool? ?? true,
+      isTi: j['is_ti'] as bool? ?? false,
+      isEtp: j['is_etp'] as bool? ?? false,
       note: j['note'] as String?,
       createdAt: DateTime.parse(
         j['created_at'] as String? ?? DateTime.now().toIso8601String(),
@@ -93,6 +99,8 @@ class UserProfile {
     'is_approved_maint': isApprovedMaint,
     'is_approved_crew': isApprovedCrew,
     'is_active': isActive,
+    'is_ti': isTi,
+    'is_etp': isEtp,
     'note': note,
   };
 
@@ -110,6 +118,8 @@ class UserProfile {
     bool? isApprovedMaint,
     bool? isApprovedCrew,
     bool? isActive,
+    bool? isTi,
+    bool? isEtp,
     String? note,
   }) => UserProfile(
     id: id,
@@ -126,6 +136,8 @@ class UserProfile {
     isApprovedMaint: isApprovedMaint ?? this.isApprovedMaint,
     isApprovedCrew: isApprovedCrew ?? this.isApprovedCrew,
     isActive: isActive ?? this.isActive,
+    isTi: isTi ?? this.isTi,
+    isEtp: isEtp ?? this.isEtp,
     note: note ?? this.note,
     createdAt: createdAt,
     updatedAt: DateTime.now(),
@@ -263,7 +275,7 @@ class UserCrewAssignment {
   final int? id;
   final String userId;
   final int helicopterTypeId;
-  final String crewType; // 'T' or 'TOB'
+  final String crewType; // 'T', 'TOB' or 'MDB'
   final String? fascia; // 'A', 'B', 'C'
   final bool active;
 

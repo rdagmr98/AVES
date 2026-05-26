@@ -12,7 +12,9 @@
     "is_active": true,
     "note": null,
     "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
+    "updated_at": "2024-01-01T00:00:00.000Z",
+    "is_ti": false,
+    "is_etp": false
   },
   {
     "id": "admin_crew_001",
@@ -27,6 +29,8 @@
     "is_active": true,
     "note": null,
     "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
+    "updated_at": "2024-01-01T00:00:00.000Z",
+    "is_ti": false,
+    "is_etp": false
   }
 ]

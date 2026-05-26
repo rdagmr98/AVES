@@ -28,13 +28,15 @@ class _CurrencySettingsScreenState
     final auth = ref.read(authProvider);
     final isAdminCrew = auth.isAdminCrew;
 
-    // Admin priv edits MAINTENANCE; admin crew edits TOB_BASE and TOB_CAPABILITY and FLIGHT_T
+    // Admin priv edits MAINTENANCE; admin crew edits crew and MDB criteria.
     final canEdit =
         (auth.isAdminPriv && criteria.criteriaType == 'MAINTENANCE') ||
         (isAdminCrew &&
             (criteria.criteriaType == 'FLIGHT_T' ||
                 criteria.criteriaType == 'TOB_BASE' ||
-                criteria.criteriaType == 'TOB_CAPABILITY'));
+                criteria.criteriaType == 'TOB_CAPABILITY' ||
+                criteria.criteriaType == 'MDB_FLIGHT' ||
+                criteria.criteriaType == 'MDB_POLIGONO'));
     if (!canEdit) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -48,10 +50,19 @@ class _CurrencySettingsScreenState
     final hoursCtrl = TextEditingController(
       text: criteria.minHours == null ? '' : '${criteria.minHours}',
     );
+    final countCtrl = TextEditingController(
+      text: criteria.minCount == null ? '' : '${criteria.minCount}',
+    );
     // Fascia-specific fields (only for TOB_BASE and TOB_CAPABILITY)
     final hasFascia =
         criteria.criteriaType == 'TOB_BASE' ||
         criteria.criteriaType == 'TOB_CAPABILITY';
+    final hasHoursField =
+        criteria.criteriaType == 'FLIGHT_T' ||
+        criteria.criteriaType == 'MDB_FLIGHT' ||
+        criteria.minHours != null;
+    final hasCountField =
+        criteria.criteriaType == 'MDB_POLIGONO' || criteria.minCount != null;
     final periodACtrl = TextEditingController(
       text: criteria.periodDaysA != null ? '${criteria.periodDaysA}' : '',
     );
@@ -76,16 +87,30 @@ class _CurrencySettingsScreenState
                     labelText: 'Periodo (giorni)',
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: hoursCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                if (hasHoursField) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: hoursCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: criteria.criteriaType == 'MDB_FLIGHT'
+                          ? 'Ore di volo semestrale MDB'
+                          : 'Ore minime (volo)',
+                    ),
                   ),
-                  decoration: const InputDecoration(
-                    labelText: 'Ore minime (volo)',
+                ],
+                if (hasCountField) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: countCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Poligoni annuali MDB',
+                    ),
                   ),
-                ),
+                ],
               ] else ...[
                 const Text(
                   'Periodi massimi di inattività per fascia:',
@@ -145,6 +170,9 @@ class _CurrencySettingsScreenState
                   final hours = hoursCtrl.text.trim().isEmpty
                       ? null
                       : double.tryParse(hoursCtrl.text.replaceAll(',', '.'));
+                  final count = countCtrl.text.trim().isEmpty
+                      ? null
+                      : int.tryParse(countCtrl.text.trim());
                   if (period == null) return;
                   await ref
                       .read(currencyProviderProv)
@@ -154,7 +182,8 @@ class _CurrencySettingsScreenState
                           criteriaType: criteria.criteriaType,
                           tobCapabilityId: criteria.tobCapabilityId,
                           periodDays: period,
-                          minHours: hours,
+                          minHours: hasHoursField ? hours : null,
+                          minCount: hasCountField ? count : null,
                           description: criteria.description,
                           tobCapabilityName: criteria.tobCapabilityName,
                         ),
@@ -181,6 +210,7 @@ class _CurrencySettingsScreenState
 
     periodCtrl.dispose();
     hoursCtrl.dispose();
+    countCtrl.dispose();
     periodACtrl.dispose();
     periodBCCtrl.dispose();
   }
@@ -197,7 +227,9 @@ class _CurrencySettingsScreenState
       if (auth.isAdminCrew) {
         return c.criteriaType == 'FLIGHT_T' ||
             c.criteriaType == 'TOB_BASE' ||
-            c.criteriaType == 'TOB_CAPABILITY';
+            c.criteriaType == 'TOB_CAPABILITY' ||
+            c.criteriaType == 'MDB_FLIGHT' ||
+            c.criteriaType == 'MDB_POLIGONO';
       }
       return false;
     }).toList();
@@ -246,6 +278,10 @@ class _CurrencySettingsScreenState
         return 'Currency base TOB (qualsiasi volo come equipaggio)';
       case 'TOB_CAPABILITY':
         return 'TOB · ${criteria.tobCapabilityName ?? 'Capacità'}';
+      case 'MDB_FLIGHT':
+        return 'Mitragliere di Bordo · Ore di volo';
+      case 'MDB_POLIGONO':
+        return 'Mitragliere di Bordo · Poligoni';
       default:
         return criteria.criteriaType;
     }
@@ -257,8 +293,11 @@ class _CurrencySettingsScreenState
       final bc = c.periodDaysBC != null ? '${c.periodDaysBC} gg' : 'N/A';
       return 'Fascia A: $a gg · Fascia B/C: $bc';
     }
-    if (c.criteriaType == 'FLIGHT_T') {
+    if (c.criteriaType == 'FLIGHT_T' || c.criteriaType == 'MDB_FLIGHT') {
       return 'Periodo: ${c.periodDays} gg · Ore minime: ${c.minHours?.toStringAsFixed(1) ?? '-'}';
+    }
+    if (c.criteriaType == 'MDB_POLIGONO') {
+      return 'Periodo: ${c.periodDays} gg · Poligoni minimi: ${c.minCount ?? '-'}';
     }
     return 'Periodo: ${c.periodDays} giorni';
   }

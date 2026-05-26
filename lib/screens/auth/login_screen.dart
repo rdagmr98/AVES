@@ -159,12 +159,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 style: Theme.of(context).textTheme.titleLarge
                                     ?.copyWith(letterSpacing: 1.8),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Accedi al tuo profilo operativo.',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 16),
                               TextFormField(
                                 controller: _usernameCtrl,
                                 focusNode: _usernameFocus,

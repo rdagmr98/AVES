@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user_models.dart';
@@ -29,9 +30,28 @@ class AuthService {
     return null;
   }
 
+  String? _rawUserUsername(Map<String, dynamic> user) {
+    final username = user['username'] as String?;
+    if (username != null && username.trim().isNotEmpty) {
+      return username.trim();
+    }
+
+    final numeroLicenza = user['numero_licenza'] as String?;
+    if (numeroLicenza != null && numeroLicenza.trim().isNotEmpty) {
+      return numeroLicenza.trim();
+    }
+
+    return null;
+  }
+
   Future<UserProfile?> signIn(String username, String password) async {
+    if (_db.users.isEmpty) {
+      throw Exception('Database non caricato. Riprova tra qualche secondo.');
+    }
+
     final hash = GhDbService.hashPassword(password);
     final normalizedUsername = _normalizeUsername(username);
+    final rawUsername = username.trim();
     Map<String, dynamic>? match;
 
     for (final user in _db.users) {
@@ -43,7 +63,27 @@ class AuthService {
     }
 
     if (match == null) {
-      return null;
+      debugPrint(
+        'AuthService.signIn mismatch for "$rawUsername": no normalized match, trying raw case-insensitive fallback.',
+      );
+      for (final user in _db.users) {
+        final candidate = _rawUserUsername(user);
+        if (candidate != null &&
+            candidate.toLowerCase() == rawUsername.toLowerCase() &&
+            user['password_hash'] == hash) {
+          debugPrint(
+            'AuthService.signIn fallback matched raw username "$candidate" for "$rawUsername".',
+          );
+          match = user;
+          break;
+        }
+      }
+      if (match == null) {
+        debugPrint(
+          'AuthService.signIn failed for "$rawUsername": no user matched provided credentials.',
+        );
+        return null;
+      }
     }
     if (match['is_active'] == false) {
       throw Exception('Account disabilitato');
@@ -105,6 +145,8 @@ class AuthService {
       'is_approved_maint': false,
       'is_approved_crew': false,
       'is_active': true,
+      'is_ti': false,
+      'is_etp': false,
       'note': null,
       'created_at': now,
       'updated_at': now,

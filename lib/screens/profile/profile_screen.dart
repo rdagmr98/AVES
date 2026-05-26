@@ -820,6 +820,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         icon: const Icon(Icons.lock_reset_outlined),
                         label: const Text('Cambia password'),
                       ),
+                      if (profile.isTi || profile.isEtp) ...[
+                        const SizedBox(height: 16),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (profile.isTi)
+                              Chip(
+                                label: const Text(
+                                  'TI – Istruttore Tecnico-Aeronautico',
+                                ),
+                                backgroundColor: Colors.blue.shade700,
+                              ),
+                            if (profile.isEtp)
+                              Chip(
+                                label: const Text(
+                                  'ETP – Esaminatore Teorico-Pratico',
+                                ),
+                                backgroundColor: Colors.purple.shade700,
+                              ),
+                          ],
+                        ),
+                      ],
                       if (isAdminProfile) ...[
                         const SizedBox(height: 16),
                         Text(

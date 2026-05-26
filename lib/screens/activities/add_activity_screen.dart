@@ -36,6 +36,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
 
   int? _flightHelicopterId;
   DateTime _flightDate = DateTime.now();
+  bool _flightIsPoligono = false;
 
   int? _tobHelicopterId;
   int? _tobCapabilityId;
@@ -134,6 +135,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
           description: _flightDescCtrl.text.trim().isEmpty
               ? null
               : _flightDescCtrl.text.trim(),
+          isPoligono: _flightIsPoligono,
           submittedBy: user.id,
         ),
       );
@@ -208,6 +210,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
     setState(() {
       _saving = false;
       _maintenanceActivityType = null;
+      _flightIsPoligono = false;
     });
     _maintenanceDescCtrl.clear();
     _maintenanceMatricolaCtrl.clear();
@@ -251,11 +254,23 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
     final tCrewAssignments = auth.crewAssignments
         .where((item) => item.crewType == 'T')
         .toList();
+    final mdbCrewAssignments = auth.crewAssignments
+        .where((item) => item.crewType == 'MDB')
+        .toList();
     final tobCrewAssignments = auth.crewAssignments
         .where((item) => item.crewType == 'TOB')
         .toList();
-    final flightHelicopters = _uniqueCrewHelicopters(tCrewAssignments);
+    final flightHelicopters = _uniqueCrewHelicopters([
+      ...tCrewAssignments,
+      ...mdbCrewAssignments,
+    ]);
     final tobHelicopters = _uniqueCrewHelicopters(tobCrewAssignments);
+    final mdbHelicopterIds = mdbCrewAssignments
+        .map((item) => item.helicopterTypeId)
+        .toSet();
+    final isMdbFlightHelicopter =
+        _flightHelicopterId != null &&
+        mdbHelicopterIds.contains(_flightHelicopterId);
     final filteredCapabilities = auth.tobCapabilities
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
@@ -428,8 +443,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             ),
           ),
           _ActivityTab(
-            enabled: auth.hasTCrew,
-            disabledMessage: 'Nessuna abilitazione equipaggio T assegnata.',
+            enabled: auth.hasTCrew || auth.hasMdbCrew,
+            disabledMessage:
+                'Nessuna abilitazione equipaggio T o MDB assegnata.',
             child: _ActivityFormCard(
               children: [
                 DropdownButtonFormField<int>(
@@ -442,8 +458,12 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Elicottero'),
                   items: flightHelicopterItems,
-                  onChanged: (value) =>
-                      setState(() => _flightHelicopterId = value),
+                  onChanged: (value) => setState(() {
+                    _flightHelicopterId = value;
+                    if (value == null || !mdbHelicopterIds.contains(value)) {
+                      _flightIsPoligono = false;
+                    }
+                  }),
                 ),
                 const SizedBox(height: 16),
                 _DateSelector(
@@ -460,6 +480,16 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   ),
                   decoration: const InputDecoration(labelText: 'Ore di volo'),
                 ),
+                if (isMdbFlightHelicopter) ...[
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Attività a fuoco (Poligono)'),
+                    value: _flightIsPoligono,
+                    onChanged: (value) =>
+                        setState(() => _flightIsPoligono = value ?? false),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _flightDescCtrl,

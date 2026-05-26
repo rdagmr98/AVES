@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/activity_models.dart';
+import '../models/user_models.dart';
 import 'activity_service.dart';
 import 'currency_service.dart';
 import 'p66_service.dart';
@@ -18,6 +19,13 @@ class ReportService {
   final _currencyService = CurrencyService();
   final _p66Service = P66Service();
   final _userService = UserService();
+
+  String _qualificationLabel(UserProfile user) {
+    final quals = <String>[];
+    if (user.isTi == true) quals.add('TI');
+    if (user.isEtp == true) quals.add('ETP');
+    return quals.isEmpty ? '-' : quals.join(', ');
+  }
 
   Future<void> downloadMaintenanceReport() async {
     final users = await _userService.getAllUsers();
@@ -127,8 +135,12 @@ class ReportService {
           break;
         }
       }
+      final qualifications = _qualificationLabel(user);
       final flightStatus = assignments.any((item) => item.crewType == 'T')
           ? await _currencyService.getFlightCurrency(user.id)
+          : null;
+      final mdbStatus = assignments.any((item) => item.crewType == 'MDB')
+          ? await _currencyService.getMdbCurrency(user.id, assignments)
           : null;
 
       for (final assignment in assignments) {
@@ -138,12 +150,30 @@ class ReportService {
             user.nome,
             user.numeroLicenza ?? '-',
             user.orgUnitName,
+            qualifications,
             'T',
             assignment.helicopterCode,
             '-',
             '-',
             _formatDate(lastFlight?.activityDate),
             flightStatus?.statusText ?? 'NESSUN DATO',
+          ]);
+          continue;
+        }
+
+        if (assignment.crewType == 'MDB') {
+          rows.add([
+            user.cognome,
+            user.nome,
+            user.numeroLicenza ?? '-',
+            user.orgUnitName,
+            qualifications,
+            'MDB',
+            assignment.helicopterCode,
+            assignment.fascia ?? '-',
+            '-',
+            _formatDate(lastFlight?.activityDate),
+            mdbStatus?.statusText ?? 'NESSUN DATO',
           ]);
           continue;
         }
@@ -160,6 +190,7 @@ class ReportService {
             user.nome,
             user.numeroLicenza ?? '-',
             user.orgUnitName,
+            qualifications,
             'TOB',
             assignment.helicopterCode,
             assignment.fascia ?? '-',
@@ -188,6 +219,7 @@ class ReportService {
             user.nome,
             user.numeroLicenza ?? '-',
             user.orgUnitName,
+            qualifications,
             'TOB',
             assignment.helicopterCode,
             assignment.fascia ?? '-',
@@ -206,6 +238,7 @@ class ReportService {
         'Nome',
         'N. Licenza',
         'U.O.',
+        'Qualifiche',
         'Tipo Eq.',
         'Elicottero',
         'Fascia',
@@ -229,7 +262,9 @@ class ReportService {
         'Tipo Licenza',
         'N. Licenza',
         'Mesi Attività 24m',
+        'Seminari',
         'Stato P-66',
+        'Dettaglio',
         'Mesi coperti',
       ],
       rows: rows
@@ -240,7 +275,9 @@ class ReportService {
               row.licenseTypes,
               row.licenseNumber,
               '${row.monthCount}',
+              row.seminarStatusText,
               row.statusText,
+              row.statusReason,
               row.coveredMonths.join(', '),
             ],
           )

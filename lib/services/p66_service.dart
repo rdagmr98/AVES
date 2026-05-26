@@ -1,3 +1,4 @@
+import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
 import 'user_service.dart';
@@ -12,7 +13,11 @@ class P66UserData {
     required this.monthCount,
     required this.status,
     required this.coveredMonths,
+    required this.validSeminars,
+    required this.missingSeminars,
+    required this.statusReason,
     this.lastActivityDate,
+    this.lastSeminarDate,
   });
 
   final UserProfile user;
@@ -21,7 +26,17 @@ class P66UserData {
   final int monthCount;
   final P66Status status;
   final List<String> coveredMonths;
+  final List<String> validSeminars;
+  final List<String> missingSeminars;
+  final String statusReason;
   final DateTime? lastActivityDate;
+  final DateTime? lastSeminarDate;
+
+  bool get hasRequiredSeminars => missingSeminars.isEmpty;
+
+  String get seminarStatusText => hasRequiredSeminars
+      ? 'Seminari OK (${validSeminars.join(' + ')})'
+      : 'Seminari mancanti: ${missingSeminars.join(', ')}';
 
   String get statusText => switch (status) {
     P66Status.go => 'GO',
@@ -34,9 +49,63 @@ class P66Service {
   final _db = GhDbService();
   final _userService = UserService();
 
+  DateTime _cutoff24Months() =>
+      DateTime.now().subtract(const Duration(days: 730));
+
   DateTime _effectiveDate(Map<String, dynamic> activity) => DateTime.parse(
     (activity['date_to'] ?? activity['activity_date']) as String,
   );
+
+  String _normalizeSeminarType(String value) {
+    final upper = value.trim().toUpperCase();
+    return upper.replaceAll(RegExp(r'[^A-Z]+'), '_');
+  }
+
+  bool _seminarMatches(String rawType, String requiredType) {
+    final normalized = _normalizeSeminarType(rawType);
+    return switch (requiredType) {
+      'NAM' => normalized == 'NAM' || normalized == 'NAM_MHF',
+      'MHF' => normalized == 'MHF' || normalized == 'NAM_MHF',
+      _ => false,
+    };
+  }
+
+  List<SeminarActivity> seminarsInLast24(String userId) {
+    final cutoff = _cutoff24Months();
+    final items =
+        _db.seminars
+            .where(
+              (item) =>
+                  item['user_id'] == userId && item['is_validated'] == true,
+            )
+            .map(SeminarActivity.fromJson)
+            .where((item) => !item.seminarDate.isBefore(cutoff))
+            .toList(growable: false)
+          ..sort((a, b) => b.seminarDate.compareTo(a.seminarDate));
+    return items;
+  }
+
+  Set<String> validSeminarTypesInLast24(String userId) {
+    final seminars = seminarsInLast24(userId);
+    final types = <String>{};
+    for (final seminar in seminars) {
+      if (_seminarMatches(seminar.seminarType, 'NAM')) {
+        types.add('NAM');
+      }
+      if (_seminarMatches(seminar.seminarType, 'MHF')) {
+        types.add('MHF');
+      }
+    }
+    return types;
+  }
+
+  List<String> missingSeminarsInLast24(String userId) {
+    final valid = validSeminarTypesInLast24(userId);
+    return [
+      'NAM',
+      'MHF',
+    ].where((type) => !valid.contains(type)).toList(growable: false);
+  }
 
   Set<String> _monthsFromActivity(
     Map<String, dynamic> activity,
@@ -68,7 +137,7 @@ class P66Service {
   int countMonthsInLast24(String userId) => monthsInLast24(userId).length;
 
   List<String> monthsInLast24(String userId) {
-    final cutoff = DateTime.now().subtract(const Duration(days: 730));
+    final cutoff = _cutoff24Months();
     final months = <String>{};
 
     for (final activity in _db.maintenanceActs.where(
@@ -98,10 +167,33 @@ class P66Service {
     return _effectiveDate(acts.first);
   }
 
-  P66Status getP66Status(int monthCount) {
+  DateTime? lastSeminarDate(String userId) {
+    final seminars = seminarsInLast24(userId);
+    return seminars.isEmpty ? null : seminars.first.seminarDate;
+  }
+
+  P66Status getP66Status({
+    required int monthCount,
+    required bool hasRequiredSeminars,
+  }) {
+    if (!hasRequiredSeminars) return P66Status.noGo;
     if (monthCount >= 6) return P66Status.go;
     if (monthCount >= 4) return P66Status.warning;
     return P66Status.noGo;
+  }
+
+  String buildStatusReason({
+    required int monthCount,
+    required List<String> missingSeminars,
+  }) {
+    final reasons = <String>[];
+    if (monthCount < 6) {
+      reasons.add('Mesi attività insufficienti ($monthCount/6)');
+    }
+    if (missingSeminars.isNotEmpty) {
+      reasons.add('Seminari mancanti: ${missingSeminars.join(', ')}');
+    }
+    return reasons.isEmpty ? 'Requisiti completi' : reasons.join(' · ');
   }
 
   Future<List<P66UserData>> getAllP66Data() async {
@@ -119,6 +211,8 @@ class P66Service {
           licenses.map((item) => item.licenseName).toSet().toList()..sort();
       final coveredMonths = monthsInLast24(user.id);
       final monthCount = coveredMonths.length;
+      final validSeminars = validSeminarTypesInLast24(user.id).toList()..sort();
+      final missingSeminars = missingSeminarsInLast24(user.id);
 
       rows.add(
         P66UserData(
@@ -126,9 +220,19 @@ class P66Service {
           licenseTypes: licenseTypes.isEmpty ? '-' : licenseTypes.join(', '),
           licenseNumber: user.numeroLicenza ?? '-',
           monthCount: monthCount,
-          status: getP66Status(monthCount),
+          status: getP66Status(
+            monthCount: monthCount,
+            hasRequiredSeminars: missingSeminars.isEmpty,
+          ),
           coveredMonths: coveredMonths,
+          validSeminars: validSeminars,
+          missingSeminars: missingSeminars,
+          statusReason: buildStatusReason(
+            monthCount: monthCount,
+            missingSeminars: missingSeminars,
+          ),
           lastActivityDate: lastActivityDate(user.id),
+          lastSeminarDate: lastSeminarDate(user.id),
         ),
       );
     }
