@@ -8,6 +8,7 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/pta_service.dart';
@@ -44,10 +45,14 @@ class _AdminPrivilegesDashboardState
   int? _orgUnitId;
   int? _licenseTypeId;
   String _statusFilter = 'all';
+  final List<int> _orgUnitChipIds = [];
+  final List<int> _licenseTypeChipIds = [];
+  final List<String> _statusChipFilters = [];
   final List<int> _helicopterTypeIds = [];
   final List<int> _privilegeTypeIds = [];
   bool _andMode = false;
   bool _gridView = true;
+  bool _useDropdownFilters = true;
 
   @override
   void initState() {
@@ -71,6 +76,26 @@ class _AdminPrivilegesDashboardState
     });
   }
 
+  void _toggleFilterValue(List<String> values, String value) {
+    setState(() {
+      if (values.contains(value)) {
+        values.remove(value);
+      } else {
+        values.add(value);
+      }
+    });
+  }
+
+  bool _matchSelectedValues<T>(
+    List<T> selected,
+    bool Function(T value) predicate,
+  ) {
+    if (selected.isEmpty) {
+      return false;
+    }
+    return _andMode ? selected.every(predicate) : selected.any(predicate);
+  }
+
   Future<void> _loadData() async {
     setState(() => _loading = true);
     final users = await _userService.getAllUsers();
@@ -88,6 +113,11 @@ class _AdminPrivilegesDashboardState
       final lastActivity = await _activityService.getLastValidatedMaintenance(
         user.id,
       );
+
+      // Fetch per-privilege currency
+      final perPrivilegeCurrency = await _currencyService
+          .getPerPrivilegeCurrency(user.id);
+
       rows.add(
         _MaintenanceUserRow(
           user: user,
@@ -95,6 +125,7 @@ class _AdminPrivilegesDashboardState
           privileges: privileges,
           status: status,
           lastActivityDate: lastActivity?.activityDate,
+          perPrivilegeCurrency: perPrivilegeCurrency,
         ),
       );
     }
@@ -118,16 +149,6 @@ class _AdminPrivilegesDashboardState
           search.isEmpty ||
           row.user.fullName.toLowerCase().contains(search) ||
           (row.user.numeroLicenza ?? '').toLowerCase().contains(search);
-      final matchesOrg = _orgUnitId == null || row.user.orgUnitId == _orgUnitId;
-      final matchesLicenseType =
-          _licenseTypeId == null ||
-          row.licenses.any((item) => item.licenseTypeId == _licenseTypeId);
-      final matchesStatus = switch (_statusFilter) {
-        'valid' => row.status.isValid,
-        'warning' => row.status.isWarning,
-        'expired' => row.status.isExpired,
-        _ => true,
-      };
 
       final privilegeHelicopters = row.privileges
           .map((item) => item.helicopterTypeId)
@@ -135,29 +156,76 @@ class _AdminPrivilegesDashboardState
       final privilegeTypes = row.privileges
           .map((item) => item.privilegeTypeId)
           .toSet();
-      final hasHelicopterFilter = _helicopterTypeIds.isNotEmpty;
-      final hasPrivilegeFilter = _privilegeTypeIds.isNotEmpty;
-      final matchesHelicopters = !hasHelicopterFilter
-          ? true
-          : _andMode
-          ? _helicopterTypeIds.every(privilegeHelicopters.contains)
-          : _helicopterTypeIds.any(privilegeHelicopters.contains);
-      final matchesPrivileges = !hasPrivilegeFilter
-          ? true
-          : _andMode
-          ? _privilegeTypeIds.every(privilegeTypes.contains)
-          : _privilegeTypeIds.any(privilegeTypes.contains);
-      final matchesSelection = !(hasHelicopterFilter || hasPrivilegeFilter)
-          ? true
-          : _andMode
-          ? matchesHelicopters && matchesPrivileges
-          : matchesHelicopters || matchesPrivileges;
+      final rowStatusKey = row.status.isExpired
+          ? 'expired'
+          : row.status.isWarning
+          ? 'warning'
+          : row.status.isValid
+          ? 'valid'
+          : 'all';
 
-      return matchesSearch &&
-          matchesOrg &&
-          matchesLicenseType &&
-          matchesStatus &&
-          matchesSelection;
+      final activeMatches = <bool>[];
+      if (_useDropdownFilters) {
+        if (_orgUnitId != null) {
+          activeMatches.add(row.user.orgUnitId == _orgUnitId);
+        }
+        if (_licenseTypeId != null) {
+          activeMatches.add(
+            row.licenses.any((item) => item.licenseTypeId == _licenseTypeId),
+          );
+        }
+        if (_statusFilter != 'all') {
+          activeMatches.add(rowStatusKey == _statusFilter);
+        }
+      } else {
+        if (_orgUnitChipIds.isNotEmpty) {
+          activeMatches.add(
+            _matchSelectedValues<int>(
+              _orgUnitChipIds,
+              (value) => row.user.orgUnitId == value,
+            ),
+          );
+        }
+        if (_licenseTypeChipIds.isNotEmpty) {
+          activeMatches.add(
+            _matchSelectedValues<int>(
+              _licenseTypeChipIds,
+              (value) =>
+                  row.licenses.any((item) => item.licenseTypeId == value),
+            ),
+          );
+        }
+        if (_statusChipFilters.isNotEmpty) {
+          activeMatches.add(
+            _matchSelectedValues<String>(
+              _statusChipFilters,
+              (value) => rowStatusKey == value,
+            ),
+          );
+        }
+      }
+
+      if (_helicopterTypeIds.isNotEmpty) {
+        activeMatches.add(
+          _matchSelectedValues<int>(
+            _helicopterTypeIds,
+            privilegeHelicopters.contains,
+          ),
+        );
+      }
+      if (_privilegeTypeIds.isNotEmpty) {
+        activeMatches.add(
+          _matchSelectedValues<int>(_privilegeTypeIds, privilegeTypes.contains),
+        );
+      }
+
+      final matchesFilters = activeMatches.isEmpty
+          ? true
+          : _andMode
+          ? activeMatches.every((match) => match)
+          : activeMatches.any((match) => match);
+
+      return matchesSearch && matchesFilters;
     }).toList();
   }
 
@@ -201,7 +269,11 @@ class _AdminPrivilegesDashboardState
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(row.user.fullName, textAlign: TextAlign.center),
+        title: Text(
+          row.user.fullName,
+          textAlign: TextAlign.center,
+          softWrap: true,
+        ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: SingleChildScrollView(
@@ -213,27 +285,123 @@ class _AdminPrivilegesDashboardState
                 const SizedBox(height: 12),
                 CurrencyBadgeWidget(status: row.status),
                 const SizedBox(height: 12),
-                Text(row.status.label, textAlign: TextAlign.center),
+                Text(
+                  row.status.label,
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'Ultima attività: ${_formatDate(row.lastActivityDate)}\nScadenza: ${_formatDate(row.status.expiryDate)}',
                   textAlign: TextAlign.center,
+                  softWrap: true,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Privilegi per elicottero',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: row.privileges
-                      .map(
-                        (item) => Chip(
-                          label: Text(
-                            '${item.helicopterCode} · ${item.privilegeName}',
+                ...row.perPrivilegeCurrency.map((privStatus) {
+                  final isExpired = privStatus.status.isExpired;
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  '${privStatus.helicopterCode} · ${privStatus.privilegeName}',
+                                  textAlign: TextAlign.center,
+                                  softWrap: true,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: privStatus.status.isExpired
+                                      ? const Color(0xFFC0392B)
+                                      : privStatus.status.isWarning
+                                      ? const Color(0xFFE67E22)
+                                      : const Color(0xFF27AE60),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  privStatus.status.statusText,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      )
-                      .toList(),
-                ),
+                          if (isExpired) ...[
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: dialogContext,
+                                  builder: (confirmContext) => AlertDialog(
+                                    title: const Text(
+                                      'Conferma rimozione',
+                                      softWrap: true,
+                                    ),
+                                    content: Text(
+                                      'Vuoi rimuovere il privilegio ${privStatus.privilegeName} su ${privStatus.helicopterCode} dall\'utente ${row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
+                                      softWrap: true,
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(
+                                          confirmContext,
+                                        ).pop(false),
+                                        child: const Text('Annulla'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.of(
+                                          confirmContext,
+                                        ).pop(true),
+                                        child: const Text('Rimuovi'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirmed == true && context.mounted) {
+                                  await _userService.removePrivilege(
+                                    row.user.id,
+                                    privStatus.helicopterTypeId,
+                                    privStatus.privilegeTypeId,
+                                  );
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                  await _loadData();
+                                }
+                              },
+                              child: const Text('Rimuovi privilegio scaduto'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }),
               ],
             ),
           ),
@@ -272,7 +440,7 @@ class _AdminPrivilegesDashboardState
           itemCount: filteredRows.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            mainAxisExtent: 88,
+            childAspectRatio: 1.0,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
           ),
@@ -409,29 +577,11 @@ class _AdminPrivilegesDashboardState
       ),
     ];
 
-    final orgUnitItems = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
-      ...auth.orgUnits.map(
-        (unit) =>
-            DropdownMenuItem<int?>(value: unit.id, child: Text(unit.name)),
-      ),
-    ];
-    final licenseTypeItems = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
-      ...auth.licenseTypes.map(
-        (item) =>
-            DropdownMenuItem<int?>(value: item.id, child: Text(item.name)),
-      ),
-    ];
-    final licenseTypeLabels = <String>[
-      'Tutte',
-      ...auth.licenseTypes.map((item) => item.name),
-    ];
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       appBar: AppBar(
-        leading: const AdminAppBarLeading(),
+        leading: const AdminAppBarLeading(fallbackRoute: '/admin/priv'),
         titleSpacing: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -499,472 +649,395 @@ class _AdminPrivilegesDashboardState
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1200),
-                  child: ListView(
-                    shrinkWrap: false,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isDesktop = constraints.maxWidth >= 1200;
+
+                if (isDesktop) {
+                  // Desktop layout: sidebar + content
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isMobile = constraints.maxWidth < 600;
-                          if (isMobile) {
-                            return Column(
+                      // Left sidebar (300px fixed)
+                      SizedBox(
+                        width: 300,
+                        child: ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            _buildNavigationSidebar(),
+                            const SizedBox(height: 16),
+                            _buildFiltersCard(auth),
+                          ],
+                        ),
+                      ),
+                      // Right content (expanded)
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _loadData,
+                          child: ListView(
+                            padding: const EdgeInsets.all(16),
+                            children: [
+                              // Stat cards - equal width with Row + Expanded
+                              Row(
+                                children: [
+                                  for (
+                                    int i = 0;
+                                    i < statCardData.length;
+                                    i++
+                                  ) ...[
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: statCardData[i].title,
+                                        value: statCardData[i].value,
+                                        icon: statCardData[i].icon,
+                                        color: statCardData[i].color,
+                                      ),
+                                    ),
+                                    if (i < statCardData.length - 1)
+                                      const SizedBox(width: 16),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              // Action buttons - evenly sized with Row + Expanded
+                              Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    children: [
+                                      for (
+                                        int i = 0;
+                                        i < quickActions.length;
+                                        i++
+                                      ) ...[
+                                        Expanded(
+                                          child: quickActions[i].highlighted
+                                              ? ElevatedButton.icon(
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                        minimumSize: const Size(
+                                                          0,
+                                                          52,
+                                                        ),
+                                                      ),
+                                                  onPressed:
+                                                      quickActions[i].onTap,
+                                                  icon: Icon(
+                                                    quickActions[i].icon,
+                                                    size: 20,
+                                                  ),
+                                                  label: Text(
+                                                    quickActions[i].label,
+                                                    softWrap: true,
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                )
+                                              : OutlinedButton.icon(
+                                                  style:
+                                                      OutlinedButton.styleFrom(
+                                                        minimumSize: const Size(
+                                                          0,
+                                                          52,
+                                                        ),
+                                                      ),
+                                                  onPressed:
+                                                      quickActions[i].onTap,
+                                                  icon: Icon(
+                                                    quickActions[i].icon,
+                                                    size: 20,
+                                                  ),
+                                                  label: Text(
+                                                    quickActions[i].label,
+                                                    softWrap: true,
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                        ),
+                                        if (i < quickActions.length - 1)
+                                          const SizedBox(width: 12),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Utenti con currency manutentiva',
+                                style: Theme.of(context).textTheme.titleLarge,
+                                textAlign: TextAlign.center,
+                                softWrap: true,
+                              ),
+                              const SizedBox(height: 12),
+                              if (filteredRows.isEmpty)
+                                const Card(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                      'Nessun utente corrisponde ai filtri selezionati.',
+                                      textAlign: TextAlign.center,
+                                      softWrap: true,
+                                    ),
+                                  ),
+                                )
+                              else if (_gridView)
+                                _buildUserGrid(filteredRows)
+                              else
+                                ..._buildListView(filteredRows),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  // Mobile/Tablet layout: single column with scrolling
+                  return RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        // Stat cards
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isMobile = constraints.maxWidth < 600;
+                            if (isMobile) {
+                              return Column(
+                                children: [
+                                  for (final data in statCardData)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: _StatCard(
+                                        title: data.title,
+                                        value: data.value,
+                                        icon: data.icon,
+                                        color: data.color,
+                                        compact: true,
+                                      ),
+                                    ),
+                                ],
+                              );
+                            }
+                            return Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 16,
+                              runSpacing: 16,
                               children: [
                                 for (final data in statCardData)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
+                                  SizedBox(
+                                    width: 240,
                                     child: _StatCard(
                                       title: data.title,
                                       value: data.value,
                                       icon: data.icon,
                                       color: data.color,
-                                      compact: true,
                                     ),
                                   ),
                               ],
                             );
-                          }
-                          return Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
-                            children: [
-                              for (final data in statCardData)
-                                SizedBox(
-                                  width: 240,
-                                  child: _StatCard(
-                                    title: data.title,
-                                    value: data.value,
-                                    icon: data.icon,
-                                    color: data.color,
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isMobile = constraints.maxWidth < 600;
-                              if (isMobile) {
-                                return GridView.count(
-                                  crossAxisCount: 2,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  childAspectRatio: 1.15,
-                                  children: [
-                                    for (final action in quickActions)
-                                      _QuickActionTile(config: action),
-                                  ],
-                                );
-                              }
-                              return Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: [
-                                  for (final action in quickActions)
-                                    SizedBox(
-                                      width: 240,
-                                      child: action.highlighted
-                                          ? ElevatedButton.icon(
-                                              style: ElevatedButton.styleFrom(
-                                                minimumSize: const Size(0, 52),
-                                              ),
-                                              onPressed: action.onTap,
-                                              icon: Icon(action.icon),
-                                              label: Text(action.label),
-                                            )
-                                          : OutlinedButton.icon(
-                                              onPressed: action.onTap,
-                                              icon: Icon(action.icon),
-                                              label: Text(action.label),
-                                            ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Filtri',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: 16),
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final useFullWidth =
-                                      constraints.maxWidth < 600;
-                                  return Column(
+                        const SizedBox(height: 24),
+                        // Action buttons - centered with Wrap
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isMobile = constraints.maxWidth < 600;
+                                if (isMobile) {
+                                  return GridView.count(
+                                    crossAxisCount: 2,
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    childAspectRatio: 1.15,
                                     children: [
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 12,
-                                        runSpacing: 12,
-                                        children: [
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 260,
-                                            child: TextField(
-                                              controller: _searchCtrl,
-                                              decoration: const InputDecoration(
-                                                labelText:
-                                                    'Cerca per nome o licenza',
-                                                prefixIcon: Icon(Icons.search),
-                                              ),
-                                              onChanged: (value) => setState(
-                                                () => _search = value,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 220,
-                                            child: DropdownButtonFormField<int?>(
-                                              isExpanded: true,
-                                              initialValue: _orgUnitId,
-                                              menuMaxHeight: 300,
-                                              decoration: const InputDecoration(
-                                                labelText:
-                                                    'Unità organizzativa',
-                                              ),
-                                              items: orgUnitItems,
-                                              onChanged: (value) => setState(
-                                                () => _orgUnitId = value,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 220,
-                                            child: DropdownButtonFormField<int?>(
-                                              isExpanded: true,
-                                              initialValue: _licenseTypeId,
-                                              menuMaxHeight: 300,
-                                              selectedItemBuilder: (context) =>
-                                                  licenseTypeLabels
-                                                      .map(
-                                                        (label) => Align(
-                                                          alignment: Alignment
-                                                              .centerLeft,
-                                                          child: Text(
-                                                            label,
-                                                            softWrap: true,
-                                                          ),
-                                                        ),
-                                                      )
-                                                      .toList(),
-                                              decoration: const InputDecoration(
-                                                labelText: 'Tipo licenza',
-                                              ),
-                                              items: licenseTypeItems,
-                                              onChanged: (value) => setState(
-                                                () => _licenseTypeId = value,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 220,
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                                  isExpanded: true,
-                                                  initialValue: _statusFilter,
-                                                  menuMaxHeight: 300,
-                                                  decoration:
-                                                      const InputDecoration(
-                                                        labelText:
-                                                            'Stato currency',
-                                                      ),
-                                                  items: const [
-                                                    DropdownMenuItem(
-                                                      value: 'all',
-                                                      child: Text('Tutte'),
-                                                    ),
-                                                    DropdownMenuItem(
-                                                      value: 'valid',
-                                                      child: Text('GO'),
-                                                    ),
-                                                    DropdownMenuItem(
-                                                      value: 'warning',
-                                                      child: Text(
-                                                        'In Scadenza',
-                                                      ),
-                                                    ),
-                                                    DropdownMenuItem(
-                                                      value: 'expired',
-                                                      child: Text('NO GO'),
-                                                    ),
-                                                  ],
-                                                  onChanged: (value) =>
-                                                      setState(
-                                                        () => _statusFilter =
-                                                            value ?? 'all',
-                                                      ),
-                                                ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          ChoiceChip(
-                                            label: const Text('OR'),
-                                            selected: !_andMode,
-                                            onSelected: (_) => setState(
-                                              () => _andMode = false,
-                                            ),
-                                          ),
-                                          ChoiceChip(
-                                            label: const Text('AND'),
-                                            selected: _andMode,
-                                            onSelected: (_) =>
-                                                setState(() => _andMode = true),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Elicotteri',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          for (final helicopter
-                                              in auth.helicopterTypes)
-                                            FilterChip(
-                                              label: Text(
-                                                helicopter.code,
-                                                softWrap: true,
-                                              ),
-                                              selected: _helicopterTypeIds
-                                                  .contains(helicopter.id),
-                                              onSelected: (_) =>
-                                                  _toggleFilterId(
-                                                    _helicopterTypeIds,
-                                                    helicopter.id,
-                                                  ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Privilegi',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          for (final privilege
-                                              in auth.privilegeTypes)
-                                            FilterChip(
-                                              label: Text(
-                                                privilege.name,
-                                                softWrap: true,
-                                              ),
-                                              selected: _privilegeTypeIds
-                                                  .contains(privilege.id),
-                                              onSelected: (_) =>
-                                                  _toggleFilterId(
-                                                    _privilegeTypeIds,
-                                                    privilege.id,
-                                                  ),
-                                            ),
-                                        ],
-                                      ),
+                                      for (final action in quickActions)
+                                        _QuickActionTile(config: action),
                                     ],
                                   );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Utenti con currency manutentiva',
-                        style: Theme.of(context).textTheme.titleLarge,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      if (filteredRows.isEmpty)
-                        const Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Text(
-                              'Nessun utente corrisponde ai filtri selezionati.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                      else if (_gridView)
-                        _buildUserGrid(filteredRows)
-                      else
-                        ...filteredRows.map(
-                          (row) => Card(
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: () => _showUserDetail(row),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                }
+                                return Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 12,
                                   children: [
-                                    LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        final compact =
-                                            constraints.maxWidth < 520;
-                                        final identity = _UserIdentityHeader(
-                                          user: row.user,
-                                        );
-                                        final emailButton =
-                                            row.user.email == null ||
-                                                row.user.email!.trim().isEmpty
-                                            ? const SizedBox.shrink()
-                                            : IconButton(
-                                                onPressed: () =>
-                                                    _launchMaintenanceEmail([
-                                                      row,
-                                                    ]),
-                                                icon: const Icon(
-                                                  Icons.email_outlined,
-                                                ),
-                                                tooltip: 'Invia Email',
-                                              );
-                                        if (compact) {
-                                          return Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              identity,
-                                              const SizedBox(height: 12),
-                                              CurrencyBadgeWidget(
-                                                status: row.status,
-                                              ),
-                                              emailButton,
-                                            ],
-                                          );
-                                        }
-                                        return Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            Expanded(child: identity),
-                                            emailButton,
-                                            const SizedBox(width: 16),
-                                            CurrencyBadgeWidget(
-                                              status: row.status,
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: row.licenses.isEmpty
-                                          ? const [
-                                              Chip(
-                                                label: Text('Nessuna licenza'),
-                                              ),
-                                            ]
-                                          : row.licenses
-                                                .map(
-                                                  (item) => Chip(
-                                                    label: Text(
-                                                      '${item.helicopterCode} · ${item.licenseName}',
-                                                    ),
+                                    for (final action in quickActions)
+                                      SizedBox(
+                                        width: 240,
+                                        child: action.highlighted
+                                            ? ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  minimumSize: const Size(
+                                                    0,
+                                                    52,
                                                   ),
-                                                )
-                                                .toList(),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'Privilegi',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: AppColors.textSecondary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      row.privileges.isEmpty
-                                          ? '-'
-                                          : row.privileges
-                                                .map(
-                                                  (item) =>
-                                                      '${item.helicopterCode} ${item.privilegeName}',
-                                                )
-                                                .join(', '),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'Ultima attività: ${_formatDate(row.lastActivityDate)}',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Scadenza: ${_formatDate(row.status.expiryDate)}',
-                                      textAlign: TextAlign.center,
-                                    ),
+                                                ),
+                                                onPressed: action.onTap,
+                                                icon: Icon(action.icon),
+                                                label: Text(
+                                                  action.label,
+                                                  softWrap: true,
+                                                ),
+                                              )
+                                            : OutlinedButton.icon(
+                                                onPressed: action.onTap,
+                                                icon: Icon(action.icon),
+                                                label: Text(
+                                                  action.label,
+                                                  softWrap: true,
+                                                ),
+                                              ),
+                                      ),
                                   ],
-                                ),
-                              ),
+                                );
+                              },
                             ),
                           ),
                         ),
-                    ],
-                  ),
+                        const SizedBox(height: 16),
+                        _buildFiltersCard(auth),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Utenti con currency manutentiva',
+                          style: Theme.of(context).textTheme.titleLarge,
+                          textAlign: TextAlign.center,
+                          softWrap: true,
+                        ),
+                        const SizedBox(height: 12),
+                        if (filteredRows.isEmpty)
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text(
+                                'Nessun utente corrisponde ai filtri selezionati.',
+                                textAlign: TextAlign.center,
+                                softWrap: true,
+                              ),
+                            ),
+                          )
+                        else if (_gridView)
+                          _buildUserGrid(filteredRows)
+                        else
+                          ..._buildListView(filteredRows),
+                      ],
+                    ),
+                  );
+                }
+              },
+            ),
+    );
+  }
+
+  List<Widget> _buildListView(List<_MaintenanceUserRow> filteredRows) {
+    return filteredRows
+        .map(
+          (row) => Card(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _showUserDetail(row),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxWidth < 520;
+                        final identity = _UserIdentityHeader(user: row.user);
+                        final emailButton =
+                            row.user.email == null ||
+                                row.user.email!.trim().isEmpty
+                            ? const SizedBox.shrink()
+                            : IconButton(
+                                onPressed: () => _launchMaintenanceEmail([row]),
+                                icon: const Icon(Icons.email_outlined),
+                                tooltip: 'Invia Email',
+                              );
+                        if (compact) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              identity,
+                              const SizedBox(height: 12),
+                              CurrencyBadgeWidget(status: row.status),
+                              emailButton,
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(child: identity),
+                            emailButton,
+                            const SizedBox(width: 16),
+                            CurrencyBadgeWidget(status: row.status),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: row.licenses.isEmpty
+                          ? const [Chip(label: Text('Nessuna licenza'))]
+                          : row.licenses
+                                .map(
+                                  (item) => Chip(
+                                    label: Text(
+                                      '${item.helicopterCode} · ${item.licenseName}',
+                                      softWrap: true,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Privilegi',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      row.privileges.isEmpty
+                          ? '-'
+                          : row.privileges
+                                .map(
+                                  (item) =>
+                                      '${item.helicopterCode} ${item.privilegeName}',
+                                )
+                                .join(', '),
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Ultima attività: ${_formatDate(row.lastActivityDate)}',
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Scadenza: ${_formatDate(row.status.expiryDate)}',
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                    ),
+                  ],
                 ),
               ),
             ),
-    );
+          ),
+        )
+        .toList();
   }
 
   String _formatDate(DateTime? date) {
@@ -972,6 +1045,373 @@ class _AdminPrivilegesDashboardState
       return '-';
     }
     return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  Widget _buildFiltersCard(AuthProvider auth) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Filtri',
+              style: Theme.of(context).textTheme.titleLarge,
+              softWrap: true,
+            ),
+            const SizedBox(height: 16),
+            // Filter mode toggle
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Dropdown'),
+                  selected: _useDropdownFilters,
+                  onSelected: (_) => setState(() => _useDropdownFilters = true),
+                ),
+                ChoiceChip(
+                  label: const Text('Chip'),
+                  selected: !_useDropdownFilters,
+                  onSelected: (_) =>
+                      setState(() => _useDropdownFilters = false),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Search bar
+            TextField(
+              controller: _searchCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Cerca per nome o licenza',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => _search = value),
+            ),
+            const SizedBox(height: 16),
+            if (_useDropdownFilters) ...[
+              // Dropdown mode
+              DropdownButtonFormField<int?>(
+                isExpanded: true,
+                initialValue: _orgUnitId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(
+                  labelText: 'Unità organizzativa',
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutte'),
+                  ),
+                  ...auth.orgUnits.map(
+                    (unit) => DropdownMenuItem<int?>(
+                      value: unit.id,
+                      child: Text(unit.name, softWrap: true),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _orgUnitId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int?>(
+                isExpanded: true,
+                initialValue: _licenseTypeId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Tipo licenza'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutte'),
+                  ),
+                  ...auth.licenseTypes.map(
+                    (item) => DropdownMenuItem<int?>(
+                      value: item.id,
+                      child: Text(item.name, softWrap: true),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _licenseTypeId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _statusFilter,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Stato currency'),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('Tutte')),
+                  DropdownMenuItem(value: 'valid', child: Text('GO')),
+                  DropdownMenuItem(
+                    value: 'warning',
+                    child: Text('In Scadenza'),
+                  ),
+                  DropdownMenuItem(value: 'expired', child: Text('NO GO')),
+                ],
+                onChanged: (value) =>
+                    setState(() => _statusFilter = value ?? 'all'),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Elicotteri',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int?>(
+                isExpanded: true,
+                initialValue: _helicopterTypeIds.isEmpty
+                    ? null
+                    : _helicopterTypeIds.first,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Elicottero'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutti'),
+                  ),
+                  ...auth.helicopterTypes.map(
+                    (heli) => DropdownMenuItem<int?>(
+                      value: heli.id,
+                      child: Text(heli.code, softWrap: true),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _helicopterTypeIds.clear();
+                    if (value != null) _helicopterTypeIds.add(value);
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Privilegi',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int?>(
+                isExpanded: true,
+                initialValue: _privilegeTypeIds.isEmpty
+                    ? null
+                    : _privilegeTypeIds.first,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Privilegio'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutti'),
+                  ),
+                  ...auth.privilegeTypes.map(
+                    (priv) => DropdownMenuItem<int?>(
+                      value: priv.id,
+                      child: Text(priv.name, softWrap: true),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _privilegeTypeIds.clear();
+                    if (value != null) _privilegeTypeIds.add(value);
+                  });
+                },
+              ),
+            ] else ...[
+              // Chip mode
+              Text(
+                'Unità organizzativa',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final unit in auth.orgUnits)
+                    FilterChip(
+                      label: Text(unit.name, softWrap: true),
+                      selected: _orgUnitChipIds.contains(unit.id),
+                      onSelected: (_) =>
+                          _toggleFilterId(_orgUnitChipIds, unit.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tipo licenza',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final licenseType in auth.licenseTypes)
+                    FilterChip(
+                      label: Text(licenseType.name, softWrap: true),
+                      selected: _licenseTypeChipIds.contains(licenseType.id),
+                      onSelected: (_) =>
+                          _toggleFilterId(_licenseTypeChipIds, licenseType.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Stato currency',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('GO'),
+                    selected: _statusChipFilters.contains('valid'),
+                    onSelected: (_) =>
+                        _toggleFilterValue(_statusChipFilters, 'valid'),
+                  ),
+                  FilterChip(
+                    label: const Text('In Scadenza'),
+                    selected: _statusChipFilters.contains('warning'),
+                    onSelected: (_) =>
+                        _toggleFilterValue(_statusChipFilters, 'warning'),
+                  ),
+                  FilterChip(
+                    label: const Text('NO GO'),
+                    selected: _statusChipFilters.contains('expired'),
+                    onSelected: (_) =>
+                        _toggleFilterValue(_statusChipFilters, 'expired'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Elicotteri',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final helicopter in auth.helicopterTypes)
+                    FilterChip(
+                      label: Text(helicopter.code, softWrap: true),
+                      selected: _helicopterTypeIds.contains(helicopter.id),
+                      onSelected: (_) =>
+                          _toggleFilterId(_helicopterTypeIds, helicopter.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Privilegi',
+                style: Theme.of(context).textTheme.titleSmall,
+                softWrap: true,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final privilege in auth.privilegeTypes)
+                    FilterChip(
+                      label: Text(privilege.name, softWrap: true),
+                      selected: _privilegeTypeIds.contains(privilege.id),
+                      onSelected: (_) =>
+                          _toggleFilterId(_privilegeTypeIds, privilege.id),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            // AND/OR toggle
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('OR'),
+                  selected: !_andMode,
+                  onSelected: (_) => setState(() => _andMode = false),
+                ),
+                ChoiceChip(
+                  label: const Text('AND'),
+                  selected: _andMode,
+                  onSelected: (_) => setState(() => _andMode = true),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigationSidebar() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Navigazione',
+              style: Theme.of(context).textTheme.titleLarge,
+              softWrap: true,
+            ),
+            const SizedBox(height: 16),
+            _NavButton(
+              label: 'Gestione Utenti',
+              icon: Icons.manage_accounts_outlined,
+              onTap: () => context.go('/admin/users'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Valida Attività',
+              icon: Icons.verified_outlined,
+              onTap: () => context.go('/admin/validate'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Gestione PTA',
+              icon: Icons.block_outlined,
+              onTap: () => context.go('/admin/pta'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Inserisci Attività',
+              icon: Icons.add_task_outlined,
+              onTap: () => context.go('/admin/insert'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Impostazioni Currency',
+              icon: Icons.settings_outlined,
+              onTap: () => context.go('/admin/settings'),
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Report PDF',
+              icon: Icons.picture_as_pdf_outlined,
+              onTap: _reportService.downloadMaintenanceReport,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -982,6 +1422,7 @@ class _MaintenanceUserRow {
     required this.privileges,
     required this.status,
     required this.lastActivityDate,
+    this.perPrivilegeCurrency = const [],
   });
 
   final UserProfile user;
@@ -989,6 +1430,7 @@ class _MaintenanceUserRow {
   final List<UserPrivilege> privileges;
   final CurrencyStatus status;
   final DateTime? lastActivityDate;
+  final List<PrivilegeCurrencyStatus> perPrivilegeCurrency;
 }
 
 class _StatCardData {
@@ -1178,6 +1620,7 @@ class _UserIdentityHeader extends StatelessWidget {
                 user.fullName,
                 style: Theme.of(context).textTheme.titleMedium,
                 textAlign: TextAlign.center,
+                softWrap: true,
               ),
               const SizedBox(height: 4),
               Text(
@@ -1189,6 +1632,31 @@ class _UserIdentityHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 20),
+      label: Text(label, softWrap: true),
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
     );
   }
 }

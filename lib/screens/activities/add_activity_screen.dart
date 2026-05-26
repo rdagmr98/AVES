@@ -80,8 +80,8 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   }
 
   Future<void> _submitMaintenance(UserProfile user) async {
-    if (_maintenanceHelicopterId == null || _maintenancePrivilegeId == null) {
-      _showMessage('Seleziona elicottero e privilegio.');
+    if (_maintenanceHelicopterId == null) {
+      _showMessage('Seleziona l\'elicottero.');
       return;
     }
     setState(() => _saving = true);
@@ -90,7 +90,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
         MaintenanceActivity(
           userId: user.id,
           helicopterTypeId: _maintenanceHelicopterId!,
-          privilegeTypeId: _maintenancePrivilegeId!,
+          privilegeTypeId: _maintenancePrivilegeId,
           activityDate: _maintenanceDate,
           description: _maintenanceDescCtrl.text.trim().isEmpty
               ? null
@@ -266,14 +266,18 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
               DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
         )
         .toList(growable: false);
-    final maintenancePrivilegeItems = filteredPrivileges
-        .map(
-          (item) => DropdownMenuItem<int>(
-            value: item.privilegeTypeId,
-            child: Text(item.privilegeName),
-          ),
-        )
-        .toList(growable: false);
+    final maintenancePrivilegeItems = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(
+        value: null,
+        child: Text('Tutti i privilegi / legacy'),
+      ),
+      ...filteredPrivileges.map(
+        (item) => DropdownMenuItem<int?>(
+          value: item.privilegeTypeId,
+          child: Text(item.privilegeName),
+        ),
+      ),
+    ];
     final flightHelicopterItems = flightHelicopters
         .map(
           (item) =>
@@ -340,16 +344,21 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
+                DropdownButtonFormField<int?>(
                   initialValue:
-                      filteredPrivileges.any(
-                        (item) =>
-                            item.privilegeTypeId == _maintenancePrivilegeId,
-                      )
+                      _maintenancePrivilegeId == null ||
+                          filteredPrivileges.any(
+                            (item) =>
+                                item.privilegeTypeId == _maintenancePrivilegeId,
+                          )
                       ? _maintenancePrivilegeId
                       : null,
                   menuMaxHeight: 300,
-                  decoration: const InputDecoration(labelText: 'Privilegio'),
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo attività (privilegio)',
+                    helperText:
+                        'Opzionale per compatibilità con attività legacy',
+                  ),
                   items: maintenancePrivilegeItems,
                   onChanged: (value) =>
                       setState(() => _maintenancePrivilegeId = value),
@@ -561,7 +570,8 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   maxLines: 3,
                   decoration: const InputDecoration(
                     labelText: 'Note (opzionale)',
-                    hintText: 'es. Sede: CAAE Viterbo - Nr. ordine giornale ...',
+                    hintText:
+                        'es. Sede: CAAE Viterbo - Nr. ordine giornale ...',
                   ),
                 ),
                 const SizedBox(height: 24),

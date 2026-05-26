@@ -35,12 +35,16 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   List<_CrewUserRow> _rows = [];
   String _search = '';
   int? _orgUnitId;
+  final List<int> _orgUnitChipIds = [];
   final List<int> _helicopterTypeIds = [];
   final List<String> _crewTypeIds = [];
   int? _tobCapabilityId;
+  final List<int> _tobCapabilityChipIds = [];
   String _statusFilter = 'all';
+  final List<String> _statusChipFilters = [];
   bool _andMode = false;
   bool _gridView = true;
+  bool _filterModeDropdown = true;
 
   @override
   void initState() {
@@ -72,6 +76,36 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         _crewTypeIds.add(value);
       }
     });
+  }
+
+  void _toggleIntFilter(List<int> values, int value) {
+    setState(() {
+      if (values.contains(value)) {
+        values.remove(value);
+      } else {
+        values.add(value);
+      }
+    });
+  }
+
+  void _toggleStringFilter(List<String> values, String value) {
+    setState(() {
+      if (values.contains(value)) {
+        values.remove(value);
+      } else {
+        values.add(value);
+      }
+    });
+  }
+
+  bool _matchSelectedValues<T>(
+    List<T> selected,
+    bool Function(T value) predicate,
+  ) {
+    if (selected.isEmpty) {
+      return false;
+    }
+    return _andMode ? selected.every(predicate) : selected.any(predicate);
   }
 
   String get _statusCrewFilter =>
@@ -148,50 +182,93 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           search.isEmpty ||
           row.user.fullName.toLowerCase().contains(search) ||
           (row.user.numeroLicenza ?? '').toLowerCase().contains(search);
-      final matchesOrg = _orgUnitId == null || row.user.orgUnitId == _orgUnitId;
       final assignmentHelicopters = row.assignments
           .map((item) => item.helicopterTypeId)
           .toSet();
       final assignmentTypes = row.assignments
           .map((item) => item.crewType)
           .toSet();
-      final hasHelicopterFilter = _helicopterTypeIds.isNotEmpty;
-      final hasCrewTypeFilter = _crewTypeIds.isNotEmpty;
-      final matchesHelicopters = !hasHelicopterFilter
-          ? true
-          : _andMode
-          ? _helicopterTypeIds.every(assignmentHelicopters.contains)
-          : _helicopterTypeIds.any(assignmentHelicopters.contains);
-      final matchesCrewTypes = !hasCrewTypeFilter
-          ? true
-          : _andMode
-          ? _crewTypeIds.every(assignmentTypes.contains)
-          : _crewTypeIds.any(assignmentTypes.contains);
-      final matchesSelection = !(hasHelicopterFilter || hasCrewTypeFilter)
-          ? true
-          : _andMode
-          ? matchesHelicopters && matchesCrewTypes
-          : matchesHelicopters || matchesCrewTypes;
-      final matchesCapability =
-          _tobCapabilityId == null ||
-          row.tobCapabilities.any(
-            (item) => item.tobCapabilityId == _tobCapabilityId,
-          );
-      final statuses = row.relevantStatuses(
-        _statusCrewFilter,
-        _tobCapabilityId,
+      final capabilityIds = row.tobCapabilities
+          .map((item) => item.tobCapabilityId)
+          .toSet();
+
+      final statusCrewFilter = _crewTypeIds.length == 1
+          ? _crewTypeIds.first
+          : 'all';
+      final statusCapabilityFilter = _filterModeDropdown
+          ? _tobCapabilityId
+          : _tobCapabilityChipIds.length == 1
+          ? _tobCapabilityChipIds.first
+          : null;
+      final rowStatuses = row.relevantStatuses(
+        statusCrewFilter,
+        statusCapabilityFilter,
       );
-      final matchesStatus = switch (_statusFilter) {
-        'valid' => statuses.any((item) => item.isValid),
-        'warning' => statuses.any((item) => item.isWarning),
-        'expired' => statuses.any((item) => item.isExpired),
-        _ => true,
+      final statusKeys = <String>{
+        if (rowStatuses.any((item) => item.isValid)) 'valid',
+        if (rowStatuses.any((item) => item.isWarning)) 'warning',
+        if (rowStatuses.any((item) => item.isExpired)) 'expired',
       };
-      return matchesSearch &&
-          matchesOrg &&
-          matchesSelection &&
-          matchesCapability &&
-          matchesStatus;
+
+      final activeMatches = <bool>[];
+      if (_filterModeDropdown) {
+        if (_orgUnitId != null) {
+          activeMatches.add(row.user.orgUnitId == _orgUnitId);
+        }
+        if (_tobCapabilityId != null) {
+          activeMatches.add(capabilityIds.contains(_tobCapabilityId));
+        }
+        if (_statusFilter != 'all') {
+          activeMatches.add(statusKeys.contains(_statusFilter));
+        }
+      } else {
+        if (_orgUnitChipIds.isNotEmpty) {
+          activeMatches.add(
+            _matchSelectedValues<int>(
+              _orgUnitChipIds,
+              (value) => row.user.orgUnitId == value,
+            ),
+          );
+        }
+        if (_tobCapabilityChipIds.isNotEmpty) {
+          activeMatches.add(
+            _matchSelectedValues<int>(
+              _tobCapabilityChipIds,
+              capabilityIds.contains,
+            ),
+          );
+        }
+        if (_statusChipFilters.isNotEmpty) {
+          activeMatches.add(
+            _matchSelectedValues<String>(
+              _statusChipFilters,
+              statusKeys.contains,
+            ),
+          );
+        }
+      }
+
+      if (_helicopterTypeIds.isNotEmpty) {
+        activeMatches.add(
+          _matchSelectedValues<int>(
+            _helicopterTypeIds,
+            assignmentHelicopters.contains,
+          ),
+        );
+      }
+      if (_crewTypeIds.isNotEmpty) {
+        activeMatches.add(
+          _matchSelectedValues<String>(_crewTypeIds, assignmentTypes.contains),
+        );
+      }
+
+      final matchesFilters = activeMatches.isEmpty
+          ? true
+          : _andMode
+          ? activeMatches.every((match) => match)
+          : activeMatches.any((match) => match);
+
+      return matchesSearch && matchesFilters;
     }).toList();
   }
 
@@ -320,7 +397,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           itemCount: filteredRows.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            mainAxisExtent: 88,
+            childAspectRatio: 1.0,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
           ),
@@ -390,10 +467,328 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildNavigationSidebar() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Navigazione',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/admin/users'),
+              icon: const Icon(Icons.people_outlined),
+              label: const Text('Gestione Utenti', softWrap: true),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/admin/validate'),
+              icon: const Icon(Icons.verified_outlined),
+              label: const Text('Valida Attività', softWrap: true),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/admin/insert'),
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Inserisci Attività', softWrap: true),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/admin/settings'),
+              icon: const Icon(Icons.tune_outlined),
+              label: const Text('Impostazioni Currency', softWrap: true),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _reportService.downloadCrewReport,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Report PDF', softWrap: true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFiltersSection() {
     final auth = ref.watch(authProvider);
-    final filteredRows = _filteredRows();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Filtri', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Dropdown'),
+                  selected: _filterModeDropdown,
+                  onSelected: (_) => setState(() => _filterModeDropdown = true),
+                ),
+                ChoiceChip(
+                  label: const Text('Chip'),
+                  selected: !_filterModeDropdown,
+                  onSelected: (_) =>
+                      setState(() => _filterModeDropdown = false),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Cerca per nome o licenza',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => _search = value),
+            ),
+            const SizedBox(height: 16),
+            if (_filterModeDropdown) ...[
+              DropdownButtonFormField<int?>(
+                initialValue: _orgUnitId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(
+                  labelText: 'Unità organizzativa',
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutte'),
+                  ),
+                  ...auth.orgUnits.map(
+                    (unit) => DropdownMenuItem<int?>(
+                      value: unit.id,
+                      child: Text(unit.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _orgUnitId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int?>(
+                initialValue: _tobCapabilityId,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Capacità TOB'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutte'),
+                  ),
+                  ...auth.tobCapabilityTypes.map(
+                    (item) => DropdownMenuItem<int?>(
+                      value: item.id,
+                      child: Text(item.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _tobCapabilityId = value),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _statusFilter,
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Stato currency'),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('Tutte')),
+                  DropdownMenuItem(value: 'valid', child: Text('GO')),
+                  DropdownMenuItem(
+                    value: 'warning',
+                    child: Text('In Scadenza'),
+                  ),
+                  DropdownMenuItem(value: 'expired', child: Text('NO GO')),
+                ],
+                onChanged: (value) =>
+                    setState(() => _statusFilter = value ?? 'all'),
+              ),
+              const SizedBox(height: 16),
+              Text('Elicotteri', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int?>(
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Elicottero'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Tutti'),
+                  ),
+                  ...auth.helicopterTypes.map(
+                    (h) => DropdownMenuItem<int?>(
+                      value: h.id,
+                      child: Text(h.code),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _helicopterTypeIds.clear();
+                    if (value != null) _helicopterTypeIds.add(value);
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tipi equipaggio',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String?>(
+                menuMaxHeight: 300,
+                decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
+                items: const [
+                  DropdownMenuItem<String?>(value: null, child: Text('Tutti')),
+                  DropdownMenuItem<String?>(value: 'T', child: Text('T')),
+                  DropdownMenuItem<String?>(value: 'TOB', child: Text('TOB')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _crewTypeIds.clear();
+                    if (value != null) _crewTypeIds.add(value);
+                  });
+                },
+              ),
+            ] else ...[
+              Text(
+                'Unità organizzativa',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final unit in auth.orgUnits)
+                    FilterChip(
+                      label: Text(unit.name, softWrap: true),
+                      selected: _orgUnitChipIds.contains(unit.id),
+                      onSelected: (_) =>
+                          _toggleIntFilter(_orgUnitChipIds, unit.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Capacità TOB',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final cap in auth.tobCapabilityTypes)
+                    FilterChip(
+                      label: Text(cap.name, softWrap: true),
+                      selected: _tobCapabilityChipIds.contains(cap.id),
+                      onSelected: (_) =>
+                          _toggleIntFilter(_tobCapabilityChipIds, cap.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Stato currency',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('GO'),
+                    selected: _statusChipFilters.contains('valid'),
+                    onSelected: (_) =>
+                        _toggleStringFilter(_statusChipFilters, 'valid'),
+                  ),
+                  FilterChip(
+                    label: const Text('In Scadenza'),
+                    selected: _statusChipFilters.contains('warning'),
+                    onSelected: (_) =>
+                        _toggleStringFilter(_statusChipFilters, 'warning'),
+                  ),
+                  FilterChip(
+                    label: const Text('NO GO'),
+                    selected: _statusChipFilters.contains('expired'),
+                    onSelected: (_) =>
+                        _toggleStringFilter(_statusChipFilters, 'expired'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text('Elicotteri', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final helicopter in auth.helicopterTypes)
+                    FilterChip(
+                      label: Text(helicopter.code, softWrap: true),
+                      selected: _helicopterTypeIds.contains(helicopter.id),
+                      onSelected: (_) => _toggleHelicopterFilter(helicopter.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Tipi equipaggio',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final crewType in const ['T', 'TOB'])
+                    FilterChip(
+                      label: Text(crewType),
+                      selected: _crewTypeIds.contains(crewType),
+                      onSelected: (_) => _toggleCrewTypeFilter(crewType),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('OR'),
+                  selected: !_andMode,
+                  onSelected: (_) => setState(() => _andMode = false),
+                ),
+                ChoiceChip(
+                  label: const Text('AND'),
+                  selected: _andMode,
+                  onSelected: (_) => setState(() => _andMode = true),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCards(List<_CrewUserRow> filteredRows, bool isDesktop) {
     final tCrewCount = _rows.where((row) => row.hasTCrew).length;
     final tobCrewCount = _rows.where((row) => row.hasTobCrew).length;
 
@@ -415,6 +810,63 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       ),
     ];
 
+    if (isDesktop) {
+      return Row(
+        children: [
+          for (final data in statCardData)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: _CrewStatCard(
+                  title: data.title,
+                  value: data.value,
+                  icon: data.icon,
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        if (isMobile) {
+          return Column(
+            children: [
+              for (final data in statCardData)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _CrewStatCard(
+                    title: data.title,
+                    value: data.value,
+                    icon: data.icon,
+                    compact: true,
+                  ),
+                ),
+            ],
+          );
+        }
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            for (final data in statCardData)
+              SizedBox(
+                width: 240,
+                child: _CrewStatCard(
+                  title: data.title,
+                  value: data.value,
+                  icon: data.icon,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActionButtons(bool isDesktop) {
     final quickActions = <_CrewActionConfig>[
       _CrewActionConfig(
         label: 'Inserisci Volo',
@@ -445,25 +897,215 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       ),
     ];
 
-    final orgUnitItems = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
-      ...auth.orgUnits.map(
-        (unit) =>
-            DropdownMenuItem<int?>(value: unit.id, child: Text(unit.name)),
+    if (isDesktop) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              for (final action in quickActions)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: action.highlighted
+                        ? ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 52),
+                            ),
+                            onPressed: action.onTap,
+                            icon: Icon(action.icon),
+                            label: Text(
+                              action.label,
+                              softWrap: true,
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 52),
+                            ),
+                            onPressed: action.onTap,
+                            icon: Icon(action.icon),
+                            label: Text(
+                              action.label,
+                              softWrap: true,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 600;
+            if (isMobile) {
+              return GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.15,
+                children: [
+                  for (final action in quickActions)
+                    _CrewQuickActionTile(config: action),
+                ],
+              );
+            }
+            return Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final action in quickActions)
+                  SizedBox(
+                    width: 240,
+                    child: action.highlighted
+                        ? ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 52),
+                            ),
+                            onPressed: action.onTap,
+                            icon: Icon(action.icon),
+                            label: Text(action.label, softWrap: true),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: action.onTap,
+                            icon: Icon(action.icon),
+                            label: Text(action.label, softWrap: true),
+                          ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
-    ];
-    final tobCapabilityItems = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(value: null, child: Text('Tutte')),
-      ...auth.tobCapabilityTypes.map(
-        (item) =>
-            DropdownMenuItem<int?>(value: item.id, child: Text(item.name)),
-      ),
-    ];
+    );
+  }
+
+  Widget _buildUserContent(List<_CrewUserRow> filteredRows) {
+    if (filteredRows.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Nessun utente corrisponde ai filtri selezionati.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    if (_gridView) {
+      return _buildUserGrid(filteredRows);
+    }
+
+    return Column(
+      children: filteredRows
+          .map(
+            (row) => Card(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => _showUserDetail(row),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: _CrewIdentityHeader(user: row.user)),
+                          if (row.user.email != null &&
+                              row.user.email!.trim().isNotEmpty)
+                            IconButton(
+                              onPressed: () => _launchCrewEmail([row]),
+                              icon: const Icon(Icons.email_outlined),
+                              tooltip: 'Invia Email',
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ...row.assignments.map(
+                            (item) => Chip(
+                              label: Text(
+                                item.crewType == 'TOB'
+                                    ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
+                                    : '${item.helicopterCode} · T',
+                              ),
+                            ),
+                          ),
+                          ...row.tobCapabilities.map(
+                            (item) => Chip(
+                              label: Text(
+                                '${item.helicopterCode} · ${item.capabilityName}',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Currency assegnate',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (row.flightStatus != null)
+                            CurrencyBadgeWidget(status: row.flightStatus!),
+                          if (row.tobBaseStatus != null)
+                            CurrencyBadgeWidget(status: row.tobBaseStatus!),
+                          ...row.tobCapabilities.map(
+                            (item) => CurrencyBadgeWidget(
+                              status:
+                                  row.tobStatuses['${item.helicopterTypeId}:${item.tobCapabilityId}'] ??
+                                  const CurrencyStatus(
+                                    status: CurrencyStatusEnum.noData,
+                                    label: 'Nessun dato',
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredRows = _filteredRows();
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       appBar: AppBar(
-        leading: const AdminAppBarLeading(),
+        leading: const AdminAppBarLeading(fallbackRoute: '/admin/crew'),
         titleSpacing: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -533,310 +1175,55 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadData,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1200),
-                  child: ListView(
-                    shrinkWrap: false,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                    children: [
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isMobile = constraints.maxWidth < 600;
-                          if (isMobile) {
-                            return Column(
-                              children: [
-                                for (final data in statCardData)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: _CrewStatCard(
-                                      title: data.title,
-                                      value: data.value,
-                                      icon: data.icon,
-                                      compact: true,
-                                    ),
-                                  ),
-                              ],
-                            );
-                          }
-                          return Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isDesktop = constraints.maxWidth >= 1200;
+
+                  if (isDesktop) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 300,
+                          child: ListView(
+                            padding: const EdgeInsets.all(16),
                             children: [
-                              for (final data in statCardData)
-                                SizedBox(
-                                  width: 240,
-                                  child: _CrewStatCard(
-                                    title: data.title,
-                                    value: data.value,
-                                    icon: data.icon,
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isMobile = constraints.maxWidth < 600;
-                              if (isMobile) {
-                                return GridView.count(
-                                  crossAxisCount: 2,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  childAspectRatio: 1.15,
-                                  children: [
-                                    for (final action in quickActions)
-                                      _CrewQuickActionTile(config: action),
-                                  ],
-                                );
-                              }
-                              return Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: [
-                                  for (final action in quickActions)
-                                    SizedBox(
-                                      width: 240,
-                                      child: action.highlighted
-                                          ? ElevatedButton.icon(
-                                              style: ElevatedButton.styleFrom(
-                                                minimumSize: const Size(0, 52),
-                                              ),
-                                              onPressed: action.onTap,
-                                              icon: Icon(action.icon),
-                                              label: Text(action.label),
-                                            )
-                                          : OutlinedButton.icon(
-                                              onPressed: action.onTap,
-                                              icon: Icon(action.icon),
-                                              label: Text(action.label),
-                                            ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Filtri',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
+                              _buildNavigationSidebar(),
                               const SizedBox(height: 16),
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final useFullWidth =
-                                      constraints.maxWidth < 600;
-                                  return Column(
-                                    children: [
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 12,
-                                        runSpacing: 12,
-                                        children: [
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 260,
-                                            child: TextField(
-                                              controller: _searchCtrl,
-                                              decoration: const InputDecoration(
-                                                labelText:
-                                                    'Cerca per nome o licenza',
-                                                prefixIcon: Icon(Icons.search),
-                                              ),
-                                              onChanged: (value) => setState(
-                                                () => _search = value,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 220,
-                                            child: DropdownButtonFormField<int?>(
-                                              initialValue: _orgUnitId,
-                                              menuMaxHeight: 300,
-                                              decoration: const InputDecoration(
-                                                labelText:
-                                                    'Unità organizzativa',
-                                              ),
-                                              items: orgUnitItems,
-                                              onChanged: (value) => setState(
-                                                () => _orgUnitId = value,
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 220,
-                                            child:
-                                                DropdownButtonFormField<int?>(
-                                                  initialValue:
-                                                      _tobCapabilityId,
-                                                  menuMaxHeight: 300,
-                                                  decoration:
-                                                      const InputDecoration(
-                                                        labelText:
-                                                            'Capacità TOB',
-                                                      ),
-                                                  items: tobCapabilityItems,
-                                                  onChanged: (value) =>
-                                                      setState(
-                                                        () => _tobCapabilityId =
-                                                            value,
-                                                      ),
-                                                ),
-                                          ),
-                                          SizedBox(
-                                            width: useFullWidth
-                                                ? constraints.maxWidth
-                                                : 220,
-                                            child:
-                                                DropdownButtonFormField<String>(
-                                                  initialValue: _statusFilter,
-                                                  menuMaxHeight: 300,
-                                                  decoration:
-                                                      const InputDecoration(
-                                                        labelText:
-                                                            'Stato currency',
-                                                      ),
-                                                  items: const [
-                                                    DropdownMenuItem(
-                                                      value: 'all',
-                                                      child: Text('Tutte'),
-                                                    ),
-                                                    DropdownMenuItem(
-                                                      value: 'valid',
-                                                      child: Text('GO'),
-                                                    ),
-                                                    DropdownMenuItem(
-                                                      value: 'warning',
-                                                      child: Text(
-                                                        'In Scadenza',
-                                                      ),
-                                                    ),
-                                                    DropdownMenuItem(
-                                                      value: 'expired',
-                                                      child: Text('NO GO'),
-                                                    ),
-                                                  ],
-                                                  onChanged: (value) =>
-                                                      setState(
-                                                        () => _statusFilter =
-                                                            value ?? 'all',
-                                                      ),
-                                                ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          ChoiceChip(
-                                            label: const Text('OR'),
-                                            selected: !_andMode,
-                                            onSelected: (_) => setState(
-                                              () => _andMode = false,
-                                            ),
-                                          ),
-                                          ChoiceChip(
-                                            label: const Text('AND'),
-                                            selected: _andMode,
-                                            onSelected: (_) =>
-                                                setState(() => _andMode = true),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Elicotteri',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          for (final helicopter
-                                              in auth.helicopterTypes)
-                                            FilterChip(
-                                              label: Text(
-                                                helicopter.code,
-                                                softWrap: true,
-                                              ),
-                                              selected: _helicopterTypeIds
-                                                  .contains(helicopter.id),
-                                              onSelected: (_) =>
-                                                  _toggleHelicopterFilter(
-                                                    helicopter.id,
-                                                  ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Tipi equipaggio',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        alignment: WrapAlignment.center,
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          for (final crewType in const [
-                                            'T',
-                                            'TOB',
-                                          ])
-                                            FilterChip(
-                                              label: Text(crewType),
-                                              selected: _crewTypeIds.contains(
-                                                crewType,
-                                              ),
-                                              onSelected: (_) =>
-                                                  _toggleCrewTypeFilter(
-                                                    crewType,
-                                                  ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
+                              _buildFiltersSection(),
                             ],
                           ),
                         ),
-                      ),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.all(16),
+                            children: [
+                              _buildStatCards(filteredRows, isDesktop),
+                              const SizedBox(height: 24),
+                              _buildActionButtons(isDesktop),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Utenti equipaggi/volo',
+                                style: Theme.of(context).textTheme.titleLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildUserContent(filteredRows),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _buildStatCards(filteredRows, isDesktop),
+                      const SizedBox(height: 24),
+                      _buildActionButtons(isDesktop),
+                      const SizedBox(height: 16),
+                      _buildFiltersSection(),
                       const SizedBox(height: 16),
                       Text(
                         'Utenti equipaggi/volo',
@@ -844,122 +1231,10 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
-                      if (filteredRows.isEmpty)
-                        const Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Text(
-                              'Nessun utente corrisponde ai filtri selezionati.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                      else if (_gridView)
-                        _buildUserGrid(filteredRows)
-                      else
-                        ...filteredRows.map(
-                          (row) => Card(
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: () => _showUserDetail(row),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          child: _CrewIdentityHeader(
-                                            user: row.user,
-                                          ),
-                                        ),
-                                        if (row.user.email != null &&
-                                            row.user.email!.trim().isNotEmpty)
-                                          IconButton(
-                                            onPressed: () =>
-                                                _launchCrewEmail([row]),
-                                            icon: const Icon(
-                                              Icons.email_outlined,
-                                            ),
-                                            tooltip: 'Invia Email',
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        ...row.assignments.map(
-                                          (item) => Chip(
-                                            label: Text(
-                                              item.crewType == 'TOB'
-                                                  ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
-                                                  : '${item.helicopterCode} · T',
-                                            ),
-                                          ),
-                                        ),
-                                        ...row.tobCapabilities.map(
-                                          (item) => Chip(
-                                            label: Text(
-                                              '${item.helicopterCode} · ${item.capabilityName}',
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Currency assegnate',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: AppColors.textSecondary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        if (row.flightStatus != null)
-                                          CurrencyBadgeWidget(
-                                            status: row.flightStatus!,
-                                          ),
-                                        if (row.tobBaseStatus != null)
-                                          CurrencyBadgeWidget(
-                                            status: row.tobBaseStatus!,
-                                          ),
-                                        ...row.tobCapabilities.map(
-                                          (item) => CurrencyBadgeWidget(
-                                            status:
-                                                row.tobStatuses['${item.helicopterTypeId}:${item.tobCapabilityId}'] ??
-                                                const CurrencyStatus(
-                                                  status:
-                                                      CurrencyStatusEnum.noData,
-                                                  label: 'Nessun dato',
-                                                ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      _buildUserContent(filteredRows),
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
             ),
     );

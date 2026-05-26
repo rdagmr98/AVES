@@ -99,6 +99,7 @@ class PtaService {
           type: 'PTA_CLOSED',
           message:
               'PTA ${record.number} su ${record.helicopterCode} chiusa. La sospensione manutentiva non è più attiva.',
+          metadata: null,
         ),
       ),
       dedupeUnread: true,
@@ -321,6 +322,7 @@ class PtaService {
           type: 'PTA_ISSUED',
           message:
               'Nuova PTA ${pta.number} su ${pta.helicopterCode}: "${pta.title}". Currency manutentiva sospesa fino a presa visione validata.',
+          metadata: null,
         ),
       ),
       dedupeUnread: true,

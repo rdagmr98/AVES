@@ -58,9 +58,9 @@ class _NotificationPanelWidgetState
       ref.read(authProvider).decrementUnread();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -90,9 +90,9 @@ class _NotificationPanelWidgetState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -108,9 +108,9 @@ class _NotificationPanelWidgetState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -149,9 +149,9 @@ class _NotificationPanelWidgetState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -222,7 +222,8 @@ class _NotificationPanelWidgetState
                   : ListView.separated(
                       padding: const EdgeInsets.all(12),
                       itemCount: _notifications.length,
-                      separatorBuilder: (context, _) => const SizedBox(height: 6),
+                      separatorBuilder: (context, _) =>
+                          const SizedBox(height: 6),
                       itemBuilder: (context, index) {
                         final item = _notifications[index];
                         return Dismissible(

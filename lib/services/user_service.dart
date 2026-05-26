@@ -639,6 +639,45 @@ class UserService {
     await _db.savePrivileges(privileges);
   }
 
+  Future<void> removePrivilege(
+    String userId,
+    int helicopterTypeId,
+    int privilegeTypeId,
+  ) async {
+    final privileges = _db.privileges;
+    var changed = false;
+    for (var i = 0; i < privileges.length; i++) {
+      final privilege = privileges[i];
+      if (privilege['user_id'] == userId &&
+          privilege['helicopter_type_id'] == helicopterTypeId &&
+          privilege['privilege_type_id'] == privilegeTypeId &&
+          privilege['active'] != false) {
+        privileges[i] = {
+          ...privilege,
+          'active': false,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        changed = true;
+      }
+    }
+    if (!changed) {
+      return;
+    }
+
+    await _db.savePrivileges(privileges);
+    final helicopter = _findReference('helicopterTypes', helicopterTypeId);
+    final privilege = _findReference('privilegeTypes', privilegeTypeId);
+    final helicopterLabel =
+        helicopter?['code'] as String? ?? helicopter?['name'] as String? ?? '-';
+    final privilegeLabel = privilege?['name'] as String? ?? 'privilegio';
+    await _notificationService.createNotification(
+      userId: userId,
+      type: 'PRIVILEGE_REMOVED_BY_ADMIN',
+      message:
+          'Il privilegio $privilegeLabel su $helicopterLabel è stato rimosso dall\'amministratore.',
+    );
+  }
+
   Future<void> addUserCrewAssignment(UserCrewAssignment crew) async {
     final crews = _db.crew;
     final now = DateTime.now().toIso8601String();

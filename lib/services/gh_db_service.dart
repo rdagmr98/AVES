@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/gh_config.dart';
+import 'crypto_service.dart';
 
 class GhDbService {
   static final GhDbService _instance = GhDbService._internal();
@@ -17,6 +18,7 @@ class GhDbService {
       'https://api.github.com/repos/${GhConfig.owner}/${GhConfig.dataRepo}/contents/db';
 
   final Map<String, Map<String, dynamic>> _cache = {};
+  final _crypto = CryptoService();
 
   // ignore: unused_field
   String? _writePat;
@@ -54,6 +56,36 @@ class GhDbService {
 
   bool get hasWritePat => GhConfig.readPat.trim().isNotEmpty;
 
+  Map<String, dynamic> _encryptUser(Map<String, dynamic> user) => {
+    ...user,
+    'nome': _crypto.encryptNullable(user['nome'] as String?),
+    'cognome': _crypto.encryptNullable(user['cognome'] as String?),
+    'email': _crypto.encryptNullable(user['email'] as String?),
+    'numero_licenza': _crypto.encryptNullable(
+      user['numero_licenza'] as String?,
+    ),
+    'username': _crypto.encryptNullable(user['username'] as String?),
+  };
+
+  Map<String, dynamic> _decryptUser(Map<String, dynamic> user) => {
+    ...user,
+    'nome': _crypto.decryptNullable(user['nome'] as String?),
+    'cognome': _crypto.decryptNullable(user['cognome'] as String?),
+    'email': _crypto.decryptNullable(user['email'] as String?),
+    'numero_licenza': _crypto.decryptNullable(
+      user['numero_licenza'] as String?,
+    ),
+    'username': _crypto.decryptNullable(user['username'] as String?),
+  };
+
+  dynamic _normalizeLoadedData(String fileName, dynamic data) {
+    if (fileName == 'users.json') {
+      final items = List<Map<String, dynamic>>.from(data as List? ?? const []);
+      return items.map(_decryptUser).toList(growable: false);
+    }
+    return data;
+  }
+
   Future<void> _loadFile(String fileName) async {
     final response = await http.get(
       Uri.parse('$_base/$fileName'),
@@ -70,7 +102,11 @@ class GhDbService {
       final content = utf8.decode(
         base64.decode((json['content'] as String).replaceAll('\n', '')),
       );
-      _cache[fileName] = {'data': jsonDecode(content), 'sha': sha};
+      final decoded = jsonDecode(content);
+      _cache[fileName] = {
+        'data': _normalizeLoadedData(fileName, decoded),
+        'sha': sha,
+      };
       return;
     }
 
@@ -156,8 +192,11 @@ class GhDbService {
   List<Map<String, dynamic>> get users =>
       List<Map<String, dynamic>>.from(_getData('users.json') as List? ?? []);
 
-  Future<void> saveUsers(List<Map<String, dynamic>> data) =>
-      _writeFile('users.json', data, 'aggiornamento profili utenti');
+  Future<void> saveUsers(List<Map<String, dynamic>> data) async {
+    final encrypted = data.map(_encryptUser).toList(growable: false);
+    await _writeFile('users.json', encrypted, 'aggiornamento profili utenti');
+    _cache['users.json'] = {'data': data, 'sha': _getSha('users.json')};
+  }
 
   List<Map<String, dynamic>> get licenses =>
       List<Map<String, dynamic>>.from(_getData('licenses.json') as List? ?? []);

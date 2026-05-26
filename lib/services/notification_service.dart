@@ -64,9 +64,11 @@ class NotificationService {
     required String type,
     required String message,
     bool dedupeUnread = false,
+    Map<String, dynamic>? metadata,
   }) async {
     final notifications = _db.notifications;
-    final exists = dedupeUnread &&
+    final exists =
+        dedupeUnread &&
         notifications.any(
           (item) =>
               item['user_id'] == userId &&
@@ -83,6 +85,7 @@ class NotificationService {
       'user_id': userId,
       'type': type,
       'message': message,
+      'metadata': metadata,
       'is_read': false,
       'created_at': DateTime.now().toIso8601String(),
     });
@@ -90,13 +93,22 @@ class NotificationService {
   }
 
   Future<void> createNotifications(
-    Iterable<({String userId, String type, String message})> entries, {
+    Iterable<
+      ({
+        String userId,
+        String type,
+        String message,
+        Map<String, dynamic>? metadata,
+      })
+    >
+    entries, {
     bool dedupeUnread = false,
   }) async {
     final notifications = _db.notifications;
     var changed = false;
     for (final entry in entries) {
-      final exists = dedupeUnread &&
+      final exists =
+          dedupeUnread &&
           notifications.any(
             (item) =>
                 item['user_id'] == entry.userId &&
@@ -112,6 +124,7 @@ class NotificationService {
         'user_id': entry.userId,
         'type': entry.type,
         'message': entry.message,
+        'metadata': entry.metadata,
         'is_read': false,
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -128,9 +141,10 @@ class NotificationService {
     bool dedupeUnread = false,
   }) async {
     await createNotifications(
-      _adminIds(
-        maintenanceOnly: true,
-      ).map((userId) => (userId: userId, type: type, message: message)),
+      _adminIds(maintenanceOnly: true).map(
+        (userId) =>
+            (userId: userId, type: type, message: message, metadata: null),
+      ),
       dedupeUnread: dedupeUnread,
     );
   }
@@ -141,9 +155,10 @@ class NotificationService {
     bool dedupeUnread = false,
   }) async {
     await createNotifications(
-      _adminIds(
-        crewOnly: true,
-      ).map((userId) => (userId: userId, type: type, message: message)),
+      _adminIds(crewOnly: true).map(
+        (userId) =>
+            (userId: userId, type: type, message: message, metadata: null),
+      ),
       dedupeUnread: dedupeUnread,
     );
   }
@@ -154,32 +169,37 @@ class NotificationService {
     bool dedupeUnread = false,
   }) async {
     await createNotifications(
-      _adminIds().map((userId) => (userId: userId, type: type, message: message)),
+      _adminIds().map(
+        (userId) =>
+            (userId: userId, type: type, message: message, metadata: null),
+      ),
       dedupeUnread: dedupeUnread,
     );
   }
 
   Future<List<NotificationModel>> getNotifications(String userId) async {
-    final items = _db.notifications
-        .where((item) => item['user_id'] == userId)
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(b['created_at'] as String).compareTo(
-          DateTime.parse(a['created_at'] as String),
-        ),
-      );
+    final items =
+        _db.notifications.where((item) => item['user_id'] == userId).toList()
+          ..sort(
+            (a, b) => DateTime.parse(
+              b['created_at'] as String,
+            ).compareTo(DateTime.parse(a['created_at'] as String)),
+          );
     return items.take(50).map(NotificationModel.fromJson).toList();
   }
 
   Future<List<NotificationModel>> getUnreadNotifications(String userId) async {
-    final items = _db.notifications
-        .where((item) => item['user_id'] == userId && item['is_read'] == false)
-        .toList()
-      ..sort(
-        (a, b) => DateTime.parse(b['created_at'] as String).compareTo(
-          DateTime.parse(a['created_at'] as String),
-        ),
-      );
+    final items =
+        _db.notifications
+            .where(
+              (item) => item['user_id'] == userId && item['is_read'] == false,
+            )
+            .toList()
+          ..sort(
+            (a, b) => DateTime.parse(
+              b['created_at'] as String,
+            ).compareTo(DateTime.parse(a['created_at'] as String)),
+          );
     return items.map(NotificationModel.fromJson).toList();
   }
 
@@ -191,7 +211,9 @@ class NotificationService {
 
   Future<void> markAsRead(int notificationId) async {
     final notifications = _db.notifications;
-    final index = notifications.indexWhere((item) => item['id'] == notificationId);
+    final index = notifications.indexWhere(
+      (item) => item['id'] == notificationId,
+    );
     if (index == -1) {
       return;
     }
@@ -203,7 +225,8 @@ class NotificationService {
     final notifications = _db.notifications;
     var changed = false;
     for (var i = 0; i < notifications.length; i++) {
-      if (notifications[i]['user_id'] == userId && notifications[i]['is_read'] != true) {
+      if (notifications[i]['user_id'] == userId &&
+          notifications[i]['is_read'] != true) {
         notifications[i] = {...notifications[i], 'is_read': true};
         changed = true;
       }
@@ -215,7 +238,9 @@ class NotificationService {
 
   Future<void> deleteNotification(int notificationId) async {
     final notifications = _db.notifications;
-    final updated = notifications.where((n) => n['id'] != notificationId).toList();
+    final updated = notifications
+        .where((n) => n['id'] != notificationId)
+        .toList();
     if (updated.length != notifications.length) {
       await _db.saveNotifications(updated);
     }
@@ -253,10 +278,7 @@ class NotificationService {
     }
 
     if (updatedSeen.length > _shownNotificationLimit) {
-      updatedSeen.removeRange(
-        0,
-        updatedSeen.length - _shownNotificationLimit,
-      );
+      updatedSeen.removeRange(0, updatedSeen.length - _shownNotificationLimit);
     }
     await prefs.setStringList(key, updatedSeen);
   }

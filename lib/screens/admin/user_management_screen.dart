@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../app.dart';
+import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
@@ -954,29 +955,68 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                   const SizedBox(height: 16),
                   _Section(
                     title: 'Licenze',
-                    children: widget.helicopterTypes
-                        .map(
-                          (h) => _ChipGroup(
-                            title: h.name,
-                            chips: widget.licenseTypes
-                                .map(
-                                  (l) => FilterChip(
-                                    selected: _licenseKeys.contains(
-                                      '${h.id}:${l.id}',
-                                    ),
-                                    label: Text(l.name),
-                                    onSelected: (_) => setState(
-                                      () => _toggle(
-                                        _licenseKeys,
-                                        '${h.id}:${l.id}',
+                    children: widget.helicopterTypes.map((h) {
+                      return SizedBox(
+                        width: double.infinity,
+                        child: Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  h.name,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                  textAlign: TextAlign.center,
+                                  softWrap: true,
+                                ),
+                                const SizedBox(height: 8),
+                                ...widget.licenseTypes.map((l) {
+                                  final key = '${h.id}:${l.id}';
+                                  final selected = _licenseKeys.contains(key);
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    decoration: BoxDecoration(
+                                      color: selected
+                                          ? AppColors.accent.withValues(
+                                              alpha: 0.12,
+                                            )
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: selected
+                                            ? AppColors.accent
+                                            : AppColors.border,
                                       ),
                                     ),
-                                  ),
-                                )
-                                .toList(),
+                                    child: CheckboxListTile(
+                                      value: selected,
+                                      controlAffinity:
+                                          ListTileControlAffinity.leading,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                      title: Text(l.name, softWrap: true),
+                                      subtitle: Text(
+                                        selected
+                                            ? 'Licenza assegnata'
+                                            : 'Tocca per assegnare',
+                                        softWrap: true,
+                                      ),
+                                      onChanged: (_) => setState(
+                                        () => _toggle(_licenseKeys, key),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
                           ),
-                        )
-                        .toList(),
+                        ),
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 16),
                   _Section(

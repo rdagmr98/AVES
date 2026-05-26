@@ -32,7 +32,7 @@ jobs:
         run: flutter pub get
 
       - name: Build web
-        run: flutter build web --release --base-href /AVES/ --dart-define=READ_PAT=${{ secrets.AVES_READ_PAT }}
+        run: flutter build web --release --base-href /AVES/ --dart-define=READ_PAT=${{ secrets.AVES_READ_PAT }} --dart-define=DATA_KEY=${{ secrets.AVES_DATA_KEY }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

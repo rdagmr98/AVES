@@ -11,6 +11,7 @@ class CurrencyService {
   final _ptaService = PtaService();
 
   static const int warningDays = 30;
+  static const String _adminPrivNotificationUserId = 'admin_priv_001';
 
   int _nextNotificationId(Iterable<Map<String, dynamic>> items) {
     final ids = items.map((item) => item['id']).whereType<int>().toSet();
@@ -34,6 +35,99 @@ class CurrencyService {
       }
     }
     return null;
+  }
+
+  Map<String, dynamic>? _findReference(String key, Object? id) {
+    if (id == null) {
+      return null;
+    }
+    final items = List<Map<String, dynamic>>.from(
+      (_db.referenceData[key] as List<dynamic>? ?? const []),
+    );
+    for (final item in items) {
+      if (item['id'] == id) {
+        return Map<String, dynamic>.from(item);
+      }
+    }
+    return null;
+  }
+
+  String _userFullName(String userId) {
+    for (final user in _db.users) {
+      if (user['id'] != userId) {
+        continue;
+      }
+      final nome = user['nome'] as String? ?? '';
+      final cognome = user['cognome'] as String? ?? '';
+      final fullName = '$nome $cognome'.trim();
+      return fullName.isEmpty ? userId : fullName;
+    }
+    return userId;
+  }
+
+  int _compareByExpiry(CurrencyStatus a, CurrencyStatus b) {
+    final aDate = a.expiryDate;
+    final bDate = b.expiryDate;
+    if (aDate == null && bDate == null) {
+      return a.label.compareTo(b.label);
+    }
+    if (aDate == null) {
+      return 1;
+    }
+    if (bDate == null) {
+      return -1;
+    }
+    return aDate.compareTo(bDate);
+  }
+
+  CurrencyStatus _summarizeMaintenanceStatus(
+    List<PrivilegeCurrencyStatus> perPrivilegeStatuses,
+    CurrencyStatus fallback,
+  ) {
+    if (perPrivilegeStatuses.isEmpty) {
+      return fallback;
+    }
+
+    final expired =
+        perPrivilegeStatuses.where((item) => item.status.isExpired).toList()
+          ..sort((a, b) => _compareByExpiry(a.status, b.status));
+    if (expired.isNotEmpty) {
+      final target = expired.first;
+      return CurrencyStatus(
+        status: CurrencyStatusEnum.expired,
+        lastActivityDate: target.status.lastActivityDate,
+        expiryDate: target.status.expiryDate,
+        daysUntilExpiry: target.status.daysUntilExpiry,
+        label:
+            'Currency Manutentiva — ${target.helicopterCode} · ${target.privilegeName} scaduto',
+      );
+    }
+
+    final warning =
+        perPrivilegeStatuses.where((item) => item.status.isWarning).toList()
+          ..sort((a, b) => _compareByExpiry(a.status, b.status));
+    if (warning.isNotEmpty) {
+      final target = warning.first;
+      return CurrencyStatus(
+        status: CurrencyStatusEnum.warning,
+        lastActivityDate: target.status.lastActivityDate,
+        expiryDate: target.status.expiryDate,
+        daysUntilExpiry: target.status.daysUntilExpiry,
+        label:
+            'Currency Manutentiva — ${target.helicopterCode} · ${target.privilegeName} in scadenza',
+      );
+    }
+
+    final valid = perPrivilegeStatuses.map((item) => item.status).toList()
+      ..sort(_compareByExpiry);
+    final nearest = valid.isEmpty ? fallback : valid.first;
+    return CurrencyStatus(
+      status: CurrencyStatusEnum.valid,
+      lastActivityDate: nearest.lastActivityDate,
+      expiryDate: nearest.expiryDate,
+      daysUntilExpiry: nearest.daysUntilExpiry,
+      label: 'Currency Manutentiva',
+    );
   }
 
   Future<List<CurrencyCriteria>> getAllCriteria() async {
@@ -178,7 +272,6 @@ class CurrencyService {
       );
     }
 
-    // Check if any active PTA suspends this user's currency
     final blockingPtas = _ptaService.getBlockingPtaForUser(userId);
     if (blockingPtas.isNotEmpty) {
       final ptaNumbers = blockingPtas.map((p) => p.number).join(', ');
@@ -197,6 +290,7 @@ class CurrencyService {
             'Currency Manutentiva – NO GO (nessun seminario NAM/MHF registrato)',
       );
     }
+
     final seminarExpiry = lastSeminar.seminarDate.add(
       const Duration(days: seminarPeriodDays),
     );
@@ -204,37 +298,56 @@ class CurrencyService {
     if (seminarDaysLeft < 0) {
       return CurrencyStatus(
         status: CurrencyStatusEnum.expired,
-        label:
-            'Currency Manutentiva – NO GO (seminario NAM/MHF scaduto il ${seminarExpiry.day.toString().padLeft(2, '0')}/${seminarExpiry.month.toString().padLeft(2, '0')}/${seminarExpiry.year})',
+        label: 'Currency Manutentiva – seminario NAM/MHF scaduto',
         lastActivityDate: lastSeminar.seminarDate,
         expiryDate: seminarExpiry,
         daysUntilExpiry: seminarDaysLeft.clamp(-9999, 9999),
       );
     }
-    if (seminarDaysLeft <= warningDays) {
-      // Seminar is about to expire — warn but still check task currency
-    }
 
     final criteria = await getMaintenanceCriteria();
     final periodDays = criteria?.periodDays ?? 180;
     final last = await _activityService.getLastValidatedMaintenance(userId);
-    final taskStatus = _computeStatus(
+    final fallbackStatus = _computeStatus(
       lastDate: last?.activityDate,
       periodDays: periodDays,
       label: 'Currency Manutentiva',
     );
+    final perPrivilegeStatuses = await getPerPrivilegeCurrency(userId);
+    final taskStatus = _summarizeMaintenanceStatus(
+      perPrivilegeStatuses,
+      fallbackStatus,
+    );
 
-    if (seminarDaysLeft <= warningDays && taskStatus.isValid) {
+    if (taskStatus.isExpired) {
       return CurrencyStatus(
+        status: taskStatus.status,
+        lastActivityDate: taskStatus.lastActivityDate,
+        expiryDate: taskStatus.expiryDate,
+        secondaryExpiryDate: seminarExpiry,
+        secondaryExpiryLabel: 'Sem. scad.',
+        daysUntilExpiry: taskStatus.daysUntilExpiry,
+        label: taskStatus.label,
+      );
+    }
+
+    if (seminarDaysLeft <= warningDays) {
+      final seminarWarning = CurrencyStatus(
         status: CurrencyStatusEnum.warning,
-        lastActivityDate: last?.activityDate,
+        lastActivityDate: lastSeminar.seminarDate,
         expiryDate: taskStatus.expiryDate,
         secondaryExpiryDate: seminarExpiry,
         secondaryExpiryLabel: 'Sem. scad.',
         daysUntilExpiry: seminarDaysLeft,
-        label:
-            'Currency Manutentiva (seminario NAM/MHF in scadenza tra $seminarDaysLeft gg)',
+        label: 'Currency Manutentiva – seminario NAM/MHF in scadenza',
       );
+      if (taskStatus.isValid) {
+        return seminarWarning;
+      }
+      final taskExpiry = taskStatus.expiryDate;
+      if (taskExpiry == null || seminarExpiry.isBefore(taskExpiry)) {
+        return seminarWarning;
+      }
     }
 
     return CurrencyStatus(
@@ -246,6 +359,75 @@ class CurrencyService {
       daysUntilExpiry: taskStatus.daysUntilExpiry,
       label: taskStatus.label,
     );
+  }
+
+  Future<List<PrivilegeCurrencyStatus>> getPerPrivilegeCurrency(
+    String userId,
+  ) async {
+    final result = <PrivilegeCurrencyStatus>[];
+    final userPrivileges = _db.privileges
+        .where((p) => p['user_id'] == userId && p['active'] != false)
+        .toList();
+
+    final criteria = await getMaintenanceCriteria();
+    final periodDays = criteria?.periodDays ?? 180;
+
+    for (final priv in userPrivileges) {
+      final helicopterTypeId = priv['helicopter_type_id'] as int?;
+      final privilegeTypeId = priv['privilege_type_id'] as int?;
+      if (helicopterTypeId == null || privilegeTypeId == null) {
+        continue;
+      }
+
+      final heli =
+          _findReference('helicopterTypes', helicopterTypeId) ??
+          const {'code': '?', 'name': '?'};
+      final privType =
+          _findReference('privilegeTypes', privilegeTypeId) ??
+          const {'name': '?'};
+
+      final acts =
+          _db.maintenanceActs
+              .where(
+                (a) =>
+                    a['user_id'] == userId &&
+                    a['is_validated'] == true &&
+                    a['helicopter_type_id'] == helicopterTypeId &&
+                    ((a['privilege_type_id'] as int?) == privilegeTypeId ||
+                        a['privilege_type_id'] == null),
+              )
+              .toList()
+            ..sort(
+              (a, b) => DateTime.parse(
+                b['activity_date'] as String,
+              ).compareTo(DateTime.parse(a['activity_date'] as String)),
+            );
+
+      final lastDate = acts.isEmpty
+          ? null
+          : DateTime.parse(acts.first['activity_date'] as String);
+
+      result.add(
+        PrivilegeCurrencyStatus(
+          helicopterTypeId: helicopterTypeId,
+          helicopterCode: heli['code'] as String? ?? '?',
+          privilegeTypeId: privilegeTypeId,
+          privilegeName: privType['name'] as String? ?? '?',
+          status: _computeStatus(
+            lastDate: lastDate,
+            periodDays: periodDays,
+            label: '${heli['code']} · ${privType['name']}',
+          ),
+        ),
+      );
+    }
+
+    result.sort(
+      (a, b) => ('${a.helicopterCode}|${a.privilegeName}').compareTo(
+        '${b.helicopterCode}|${b.privilegeName}',
+      ),
+    );
+    return result;
   }
 
   Future<CurrencyStatus> getFlightCurrency(String userId) async {
@@ -460,6 +642,49 @@ class CurrencyService {
         WebNotificationService.showNotification('AVES Tecnici', message);
       }
     }
+
+    final userFullName = _userFullName(userId);
+    final perPrivilegeStatuses = await getPerPrivilegeCurrency(userId);
+    for (final privilege in perPrivilegeStatuses) {
+      if (!privilege.status.isExpired && !privilege.status.isWarning) {
+        continue;
+      }
+
+      final isExpired = privilege.status.isExpired;
+      final userMessage = isExpired
+          ? 'Il privilegio ${privilege.privilegeName} su ${privilege.helicopterCode} è scaduto.'
+          : 'Il privilegio ${privilege.privilegeName} su ${privilege.helicopterCode} è in scadenza.';
+      final adminMessage = isExpired
+          ? 'Utente $userFullName: privilegio ${privilege.privilegeName} su ${privilege.helicopterCode} scaduto.'
+          : 'Utente $userFullName: privilegio ${privilege.privilegeName} su ${privilege.helicopterCode} in scadenza.';
+      final metadata = {
+        'userId': userId,
+        'privilegeTypeId': privilege.privilegeTypeId,
+        'helicopterTypeId': privilege.helicopterTypeId,
+      };
+
+      final privilegeNotification = await _upsertNotification(
+        userId,
+        isExpired ? 'PRIVILEGE_EXPIRED' : 'PRIVILEGE_EXPIRING',
+        '${privilege.helicopterCode} · ${privilege.privilegeName} · ${isExpired ? 'scaduto' : 'in scadenza'}',
+        message: userMessage,
+        metadata: metadata,
+      );
+      if (privilegeNotification != null) {
+        WebNotificationService.showNotification(
+          'AVES Tecnici',
+          privilegeNotification,
+        );
+      }
+
+      await _upsertNotification(
+        _adminPrivNotificationUserId,
+        'PRIVILEGE_EXPIRED_ADMIN',
+        '${userId}_${privilege.helicopterTypeId}_${privilege.privilegeTypeId}_${isExpired ? 'expired' : 'warning'}',
+        message: adminMessage,
+        metadata: metadata,
+      );
+    }
   }
 
   String _notifType(String key, {required bool expired}) {
@@ -480,17 +705,22 @@ class CurrencyService {
     String type,
     String label, {
     int? daysLeft,
+    String? message,
+    Map<String, dynamic>? metadata,
   }) async {
     final notifications = _db.notifications;
-    final message = daysLeft != null
-        ? '⚠️ $label in scadenza tra $daysLeft giorni!'
-        : '🔴 $label – NO GO. Eseguire attività di mantenimento.';
+    final resolvedMessage =
+        message ??
+        (daysLeft != null
+            ? '⚠️ $label in scadenza tra $daysLeft giorni!'
+            : '🔴 $label – NO GO. Eseguire attività di mantenimento.');
     final exists = notifications.any(
       (item) =>
           item['user_id'] == userId &&
           item['type'] == type &&
           item['is_read'] == false &&
-          ((item['label'] as String?) == label || item['message'] == message),
+          ((item['label'] as String?) == label ||
+              item['message'] == resolvedMessage),
     );
     if (exists) {
       return null;
@@ -501,11 +731,12 @@ class CurrencyService {
       'user_id': userId,
       'type': type,
       'label': label,
-      'message': message,
+      'message': resolvedMessage,
+      'metadata': metadata,
       'is_read': false,
       'created_at': DateTime.now().toIso8601String(),
     });
     await _db.saveNotifications(notifications);
-    return message;
+    return resolvedMessage;
   }
 }

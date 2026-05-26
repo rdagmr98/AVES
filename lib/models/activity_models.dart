@@ -77,6 +77,22 @@ class CurrencyStatus {
   }
 }
 
+class PrivilegeCurrencyStatus {
+  final int helicopterTypeId;
+  final String helicopterCode;
+  final int privilegeTypeId;
+  final String privilegeName;
+  final CurrencyStatus status;
+
+  const PrivilegeCurrencyStatus({
+    required this.helicopterTypeId,
+    required this.helicopterCode,
+    required this.privilegeTypeId,
+    required this.privilegeName,
+    required this.status,
+  });
+}
+
 class CurrencyCriteria {
   final int? id;
   final String
@@ -140,7 +156,7 @@ class MaintenanceActivity {
   final int? id;
   final String userId;
   final int helicopterTypeId;
-  final int privilegeTypeId;
+  final int? privilegeTypeId;
   final DateTime activityDate;
   final String? description;
   final String? activityType;
@@ -187,7 +203,7 @@ class MaintenanceActivity {
     id: j['id'] as int?,
     userId: j['user_id'] as String,
     helicopterTypeId: j['helicopter_type_id'] as int,
-    privilegeTypeId: j['privilege_type_id'] as int,
+    privilegeTypeId: j['privilege_type_id'] as int?,
     activityDate: DateTime.parse(j['activity_date'] as String),
     description: j['description'] as String?,
     activityType: j['activity_type'] as String?,
@@ -208,7 +224,7 @@ class MaintenanceActivity {
         '',
     privilegeName:
         (j['privilege_types'] as Map<String, dynamic>?)?['name'] as String? ??
-        '',
+        (j['privilege_type_id'] == null ? 'Tutti i privilegi' : ''),
     userFullName: () {
       final u = j['user_profiles'] as Map<String, dynamic>?;
       if (u == null) return '';
@@ -223,7 +239,7 @@ class MaintenanceActivity {
   Map<String, dynamic> toInsertJson() => {
     'user_id': userId,
     'helicopter_type_id': helicopterTypeId,
-    'privilege_type_id': privilegeTypeId,
+    if (privilegeTypeId != null) 'privilege_type_id': privilegeTypeId,
     'activity_date': activityDate.toIso8601String().split('T').first,
     'description': description,
     if (activityType != null) 'activity_type': activityType,
@@ -467,6 +483,7 @@ class NotificationModel {
   final String message;
   final bool isRead;
   final DateTime createdAt;
+  final Map<String, dynamic>? metadata;
 
   const NotificationModel({
     required this.id,
@@ -475,6 +492,7 @@ class NotificationModel {
     required this.message,
     required this.isRead,
     required this.createdAt,
+    this.metadata,
   });
 
   factory NotificationModel.fromJson(Map<String, dynamic> j) =>
@@ -485,6 +503,7 @@ class NotificationModel {
         message: j['message'] as String,
         isRead: j['is_read'] as bool? ?? false,
         createdAt: DateTime.parse(j['created_at'] as String),
+        metadata: (j['metadata'] as Map?)?.cast<String, dynamic>(),
       );
 
   IconData get icon {
