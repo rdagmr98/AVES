@@ -168,6 +168,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         color: AppColors.textSecondary,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'v1.0.1 • 27-05-2026',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary.withAlpha(120),
+                        fontSize: 10,
+                      ),
+                    ),
                     const SizedBox(height: 36),
                     // Banner di avviso se il database non è ancora caricato
                     if (GhDbService().users.isEmpty)
