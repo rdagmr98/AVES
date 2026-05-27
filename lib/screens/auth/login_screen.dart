@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
+import '../../services/gh_db_service.dart';
 import '../../widgets/aves_logo_widget.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -55,6 +56,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
+    // Se il DB è vuoto, prova a ricaricare prima di procedere
+    final db = GhDbService();
+    if (db.users.isEmpty) {
+      try {
+        await db.init();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Impossibile contattare il server. Controlla la connessione e riprova.',
+            ),
+            backgroundColor: AppColors.currencyExpired,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(label: 'Riprova', onPressed: _login),
+          ),
+        );
+        return;
+      }
+    }
+
     final auth = ref.read(authProvider);
     final username = _usernameCtrl.text.trim();
     final ok = await auth.signIn(username, _passCtrl.text);
@@ -146,6 +169,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 36),
+                    // Banner di avviso se il database non è ancora caricato
+                    if (GhDbService().users.isEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade900.withAlpha(180),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Connessione al database in corso… Se l\'accesso fallisce, riprova tra qualche secondo.',
+                                style: TextStyle(
+                                  color: Colors.orange.shade200,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Card(
                       child: Padding(
                         padding: EdgeInsets.all(cardPadding),

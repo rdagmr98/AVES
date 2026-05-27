@@ -13,7 +13,12 @@ Future<void> main() async {
     runApp(const _SetupApp());
     return;
   }
-  await GhDbService().init();
+  try {
+    await GhDbService().init();
+  } catch (e) {
+    // L'app si avvia comunque: l'errore viene mostrato alla schermata di login
+    debugPrint('AVES DB init failed: $e');
+  }
   runApp(const ProviderScope(child: AvesApp()));
 }
 

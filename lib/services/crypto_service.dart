@@ -5,14 +5,11 @@ class CryptoService {
   factory CryptoService() => _instance;
   CryptoService._internal();
 
-  static String get _effectiveKey {
-    const env = String.fromEnvironment('DATA_KEY');
-    return env.isEmpty ? 'd694b158908b35cc05cf4f4b39ab0e3c' : env;
-  }
+  // Chiave AES-256 fissa. I dati sono nel repository privato aves-data,
+  // che costituisce il livello di sicurezza principale.
+  static const String _rawKey = 'd694b158908b35cc05cf4f4b39ab0e3c';
 
-  late final Key _key = Key.fromUtf8(
-    _effectiveKey.padRight(32, '0').substring(0, 32),
-  );
+  late final Key _key = Key.fromUtf8(_rawKey);
   final IV _iv = IV.fromLength(16);
   late final Encrypter _encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
 
