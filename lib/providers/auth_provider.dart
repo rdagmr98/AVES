@@ -74,6 +74,11 @@ class AuthProvider extends ChangeNotifier {
         await _loadUserData(userId);
         if (_userProfile == null) {
           await _authService.signOut();
+        } else if (_userProfile!.nome.startsWith('ENC:') ||
+            _userProfile!.cognome.startsWith('ENC:')) {
+          // Sessione obsoleta con chiave di cifratura diversa: forza logout
+          await _authService.signOut();
+          _userProfile = null;
         }
       }
     } catch (e) {
