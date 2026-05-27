@@ -10,7 +10,9 @@ class CryptoService {
   static const String _rawKey = 'd694b158908b35cc05cf4f4b39ab0e3c';
 
   late final Key _key = Key.fromUtf8(_rawKey);
-  final IV _iv = IV.fromLength(16);
+  // IV fisso (all-zero). La sicurezza si basa sul repository privato aves-data
+  // e sulla chiave AES; un IV fisso è necessario per la persistenza dei dati.
+  final IV _iv = IV.allZerosOfLength(16);
   late final Encrypter _encrypter = Encrypter(AES(_key, mode: AESMode.cbc));
 
   String encrypt(String plaintext) {

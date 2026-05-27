@@ -1266,31 +1266,29 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                           ),
                         ],
                         const SizedBox(height: 14),
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(_selectedRole),
-                          initialValue: _selectedRole,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Ruolo',
-                            isDense: true,
+                        // Il ruolo admin è fisso e non modificabile da qui.
+                        // Esistono solo 2 admin (admin_priv / admin_crew).
+                        if (_user.isAdminPriv || _user.isAdminCrew)
+                          InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Ruolo',
+                              isDense: true,
+                            ),
+                            child: Text(
+                              _user.isAdminPriv
+                                  ? 'Admin Privilegi (non modificabile)'
+                                  : 'Admin Equipaggi (non modificabile)',
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        else
+                          InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Ruolo',
+                              isDense: true,
+                            ),
+                            child: const Text('Utente'),
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'user',
-                              child: Text('Utente'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'admin_priv',
-                              child: Text('Admin privilegi'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'admin_crew',
-                              child: Text('Admin equipaggi'),
-                            ),
-                          ],
-                          onChanged: (v) =>
-                              setState(() => _selectedRole = v ?? 'user'),
-                        ),
                       ],
                     ),
                   ),
