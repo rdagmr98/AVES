@@ -652,15 +652,16 @@ class _AdminPrivilegesDashboardState
     List<_StatCardData> statCardData,
     bool isMobileLayout,
   ) {
+    final count = statCardData.length;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: statCardData.length,
+      itemCount: count,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isMobileLayout ? 2 : 4,
+        crossAxisCount: isMobileLayout ? 2 : count,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: isMobileLayout ? 1.1 : 1.5,
+        childAspectRatio: isMobileLayout ? 1.1 : 3.2,
       ),
       itemBuilder: (context, index) {
         final data = statCardData[index];
@@ -670,7 +671,7 @@ class _AdminPrivilegesDashboardState
           icon: data.icon,
           color: data.color,
           onTap: data.onTap,
-          compact: isMobileLayout,
+          compact: true,
         );
       },
     );

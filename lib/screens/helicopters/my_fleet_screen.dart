@@ -80,7 +80,7 @@ class MyFleetScreen extends ConsumerWidget {
                       itemCount: assignedHelicopters.length,
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: columns,
-                        mainAxisExtent: 340,
+                        mainAxisExtent: 420,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
                       ),

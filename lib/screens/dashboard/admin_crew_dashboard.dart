@@ -998,15 +998,16 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       ),
     ];
 
+    final count = statCardData.length;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: statCardData.length,
+      itemCount: count,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isMobileLayout ? 2 : 4,
+        crossAxisCount: isMobileLayout ? 2 : count,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: isMobileLayout ? 1.1 : 1.45,
+        childAspectRatio: isMobileLayout ? 1.1 : 3.2,
       ),
       itemBuilder: (context, index) {
         final data = statCardData[index];
@@ -1014,7 +1015,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           title: data.title,
           value: data.value,
           icon: data.icon,
-          compact: isMobileLayout,
+          compact: true,
           onTap: data.onTap,
         );
       },

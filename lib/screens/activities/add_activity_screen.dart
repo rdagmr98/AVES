@@ -29,7 +29,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   int? _maintenanceHelicopterId;
   int? _maintenancePrivilegeId;
   DateTime _maintenanceDate = DateTime.now();
-  String? _maintenanceActivityType;
+  bool _maintenanceIsWorkOrder = false;
+  DateTime? _maintenanceDateFrom;
+  DateTime? _maintenanceDateTo;
   final _maintenanceMatricolaCtrl = TextEditingController();
   final _maintenanceNumCarrCtrl = TextEditingController();
   final _maintenanceOrdLavCtrl = TextEditingController();
@@ -85,6 +87,22 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
       _showMessage('Seleziona l\'elicottero.');
       return;
     }
+    if (_maintenanceIsWorkOrder) {
+      if (_maintenanceDateFrom == null || _maintenanceDateTo == null) {
+        _showMessage(
+          'Inserisci entrambe le date (Dal / Al) per l\'ordine di lavoro.',
+        );
+        return;
+      }
+      if (_maintenanceDateTo!.isBefore(_maintenanceDateFrom!)) {
+        _showMessage('La data "Al" deve essere successiva alla data "Dal".');
+        return;
+      }
+      if (_maintenanceOrdLavCtrl.text.trim().isEmpty) {
+        _showMessage('Inserisci il numero ordine di lavoro.');
+        return;
+      }
+    }
     setState(() => _saving = true);
     try {
       await _service.addMaintenanceActivity(
@@ -92,11 +110,15 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
           userId: user.id,
           helicopterTypeId: _maintenanceHelicopterId!,
           privilegeTypeId: _maintenancePrivilegeId,
-          activityDate: _maintenanceDate,
+          activityDate: _maintenanceIsWorkOrder
+              ? (_maintenanceDateTo ?? _maintenanceDate)
+              : _maintenanceDate,
+          dateFrom: _maintenanceIsWorkOrder ? _maintenanceDateFrom : null,
+          dateTo: _maintenanceIsWorkOrder ? _maintenanceDateTo : null,
           description: _maintenanceDescCtrl.text.trim().isEmpty
               ? null
               : _maintenanceDescCtrl.text.trim(),
-          activityType: _maintenanceActivityType,
+          activityType: null,
           matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
               ? null
               : _maintenanceMatricolaCtrl.text.trim(),
@@ -209,7 +231,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   void _finishSubmit() {
     setState(() {
       _saving = false;
-      _maintenanceActivityType = null;
+      _maintenanceIsWorkOrder = false;
+      _maintenanceDateFrom = null;
+      _maintenanceDateTo = null;
       _flightIsPoligono = false;
     });
     _maintenanceDescCtrl.clear();
@@ -379,33 +403,70 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       setState(() => _maintenancePrivilegeId = value),
                 ),
                 const SizedBox(height: 16),
-                _DateSelector(
-                  label: 'Data attività',
-                  date: _maintenanceDate,
-                  onPressed: () => _pickDate(
-                    (value) => _maintenanceDate = value,
-                    _maintenanceDate,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Attività singola'),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: _maintenanceIsWorkOrder,
+                      onChanged: (value) => setState(() {
+                        _maintenanceIsWorkOrder = value;
+                        if (!value) {
+                          _maintenanceDateFrom = null;
+                          _maintenanceDateTo = null;
+                          _maintenanceOrdLavCtrl.clear();
+                        }
+                      }),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('Ordine di lavoro'),
+                  ],
                 ),
+                const SizedBox(height: 8),
+                if (!_maintenanceIsWorkOrder)
+                  _DateSelector(
+                    label: 'Data attività',
+                    date: _maintenanceDate,
+                    onPressed: () => _pickDate(
+                      (value) => _maintenanceDate = value,
+                      _maintenanceDate,
+                    ),
+                  )
+                else ...[
+                  _DateSelector(
+                    label: 'Dal (inizio OL)',
+                    date: _maintenanceDateFrom ?? DateTime.now(),
+                    onPressed: () => _pickDate(
+                      (value) => _maintenanceDateFrom = value,
+                      _maintenanceDateFrom ?? DateTime.now(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _DateSelector(
+                    label: 'Al (fine OL)',
+                    date: _maintenanceDateTo ?? DateTime.now(),
+                    onPressed: () => _pickDate(
+                      (value) => _maintenanceDateTo = value,
+                      _maintenanceDateTo ?? DateTime.now(),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
+                if (_maintenanceIsWorkOrder) ...[
+                  TextField(
+                    controller: _maintenanceOrdLavCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Numero Ordine di Lavoro',
+                      helperText: 'Obbligatorio per Ordine di lavoro',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 TextField(
                   controller: _maintenanceDescCtrl,
                   maxLines: 3,
                   decoration: const InputDecoration(labelText: 'Descrizione'),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _maintenanceActivityType,
-                  decoration: const InputDecoration(
-                    labelText: 'Tipo attività (opzionale)',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Linea', child: Text('Linea')),
-                    DropdownMenuItem(value: 'Motori', child: Text('Motori')),
-                    DropdownMenuItem(value: 'Altri', child: Text('Altri')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _maintenanceActivityType = value),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -420,13 +481,6 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   controller: _maintenanceNumCarrCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Num. carrozzella (opzionale)',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _maintenanceOrdLavCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Ordine di lavoro (opzionale)',
                   ),
                 ),
                 const SizedBox(height: 24),

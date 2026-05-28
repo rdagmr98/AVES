@@ -107,51 +107,44 @@ class P66Service {
     ].where((type) => !valid.contains(type)).toList(growable: false);
   }
 
-  Set<String> _monthsFromActivity(
+  Set<String> _daysFromActivity(
     Map<String, dynamic> activity,
     DateTime cutoff,
   ) {
-    final months = <String>{};
+    final days = <String>{};
     final dateTo = _effectiveDate(activity);
     final dateFromRaw = activity['date_from'] as String?;
     final dateFrom = dateFromRaw != null
         ? DateTime.tryParse(dateFromRaw)
         : null;
-    var cursor = DateTime(
-      (dateFrom ?? dateTo).year,
-      (dateFrom ?? dateTo).month,
-    );
-    final lastMonth = DateTime(dateTo.year, dateTo.month);
-
-    while (!cursor.isAfter(lastMonth)) {
-      final monthAnchor = DateTime(cursor.year, cursor.month, 1);
-      if (!monthAnchor.isBefore(DateTime(cutoff.year, cutoff.month, 1))) {
-        months.add('${cursor.year}-${cursor.month.toString().padLeft(2, '0')}');
+    var cursor = dateFrom ?? dateTo;
+    while (!cursor.isAfter(dateTo)) {
+      if (!cursor.isBefore(cutoff)) {
+        days.add(
+          '${cursor.year}-${cursor.month.toString().padLeft(2, '0')}-${cursor.day.toString().padLeft(2, '0')}',
+        );
       }
-      cursor = DateTime(cursor.year, cursor.month + 1, 1);
+      cursor = cursor.add(const Duration(days: 1));
     }
-
-    return months;
+    return days;
   }
 
   int countMonthsInLast24(String userId) => monthsInLast24(userId).length;
 
   List<String> monthsInLast24(String userId) {
     final cutoff = _cutoff24Months();
-    final months = <String>{};
+    final days = <String>{};
 
     for (final activity in _db.maintenanceActs.where(
       (item) => item['user_id'] == userId && item['is_validated'] == true,
     )) {
       final effectiveDate = _effectiveDate(activity);
-      if (effectiveDate.isBefore(cutoff)) {
-        continue;
-      }
-      months.addAll(_monthsFromActivity(activity, cutoff));
+      if (effectiveDate.isBefore(cutoff)) continue;
+      days.addAll(_daysFromActivity(activity, cutoff));
     }
 
-    final ordered = months.toList()..sort();
-    return ordered;
+    final months = days.map((day) => day.substring(0, 7)).toSet();
+    return months.toList()..sort();
   }
 
   DateTime? lastActivityDate(String userId) {
