@@ -205,12 +205,15 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> changePassword(String newPassword) async {
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
     final userId = _userProfile?.id;
     if (userId == null) {
       throw Exception('Utente non autenticato');
     }
-    await _authService.changePassword(userId, newPassword);
+    await _authService.changePassword(userId, currentPassword, newPassword);
   }
 
   Future<void> refreshUserData() async {

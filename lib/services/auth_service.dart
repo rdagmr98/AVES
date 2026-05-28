@@ -192,11 +192,21 @@ class AuthService {
     }
   }
 
-  Future<void> changePassword(String userId, String newPassword) async {
+  Future<void> changePassword(
+    String userId,
+    String currentPassword,
+    String newPassword,
+  ) async {
     final users = _db.users;
     final index = users.indexWhere((user) => user['id'] == userId);
     if (index == -1) {
       throw Exception('Utente non trovato');
+    }
+
+    final currentHash = GhDbService.hashPassword(currentPassword);
+    final storedHash = users[index]['password_hash'] as String? ?? '';
+    if (storedHash != currentHash) {
+      throw Exception('Password attuale non corretta');
     }
 
     users[index] = {

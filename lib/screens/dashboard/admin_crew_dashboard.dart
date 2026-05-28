@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -1044,6 +1046,58 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     );
   }
 
+  CurrencyStatus _combineCrewStatuses(
+    Iterable<CurrencyStatus> statuses, {
+    String label = 'Nessun dato',
+  }) {
+    final items = statuses.toList(growable: false);
+    if (items.isEmpty) {
+      return CurrencyStatus(status: CurrencyStatusEnum.noData, label: label);
+    }
+
+    final activityDates = items
+        .map((item) => item.lastActivityDate)
+        .whereType<DateTime>()
+        .toList(growable: false)
+      ..sort();
+    final expiryDates = items
+        .map((item) => item.expiryDate)
+        .whereType<DateTime>()
+        .toList(growable: false)
+      ..sort();
+    final aggregatedStatus = items.any((item) => item.status == CurrencyStatusEnum.expired)
+        ? CurrencyStatusEnum.expired
+        : items.any((item) => item.status == CurrencyStatusEnum.suspended)
+        ? CurrencyStatusEnum.suspended
+        : items.any((item) => item.status == CurrencyStatusEnum.warning)
+        ? CurrencyStatusEnum.warning
+        : items.any((item) => item.status == CurrencyStatusEnum.noData)
+        ? CurrencyStatusEnum.noData
+        : CurrencyStatusEnum.valid;
+
+    return CurrencyStatus(
+      status: aggregatedStatus,
+      label: label,
+      lastActivityDate: activityDates.isEmpty ? null : activityDates.last,
+      expiryDate: expiryDates.isEmpty ? null : expiryDates.first,
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '-';
+    return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  String _joinCrewLabels(Iterable<String> values) {
+    final items = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false)
+      ..sort();
+    return items.isEmpty ? '-' : items.join(', ');
+  }
+
   Widget _buildUserContent(List<_CrewUserRow> filteredRows) {
     if (filteredRows.isEmpty) {
       return const Card(
@@ -1070,82 +1124,298 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                 onTap: () => _showUserDetail(row),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(child: _CrewIdentityHeader(user: row.user)),
-                          if (row.user.email != null &&
-                              row.user.email!.trim().isNotEmpty)
-                            IconButton(
-                              onPressed: () => _launchCrewEmail([row]),
-                              icon: const Icon(Icons.email_outlined),
-                              tooltip: 'Invia Email',
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          ...row.assignments.map(
-                            (item) => Chip(
-                              label: Text(
-                                item.crewType == 'TOB'
-                                    ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
-                                    : item.crewType == 'MDB'
-                                    ? '${item.helicopterCode} · MDB ${item.fascia ?? '-'}'
-                                    : '${item.helicopterCode} · T',
-                              ),
-                            ),
-                          ),
-                          ...row.tobCapabilities.map(
-                            (item) => Chip(
-                              label: Text(
-                                '${item.helicopterCode} · ${item.capabilityName}',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Currency assegnate',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w700,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 780;
+                      final helicopterIds = {
+                        ...row.assignments.map((item) => item.helicopterTypeId),
+                        ...row.tobCapabilities.map(
+                          (item) => item.helicopterTypeId,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (row.flightStatus != null)
-                            CurrencyBadgeWidget(status: row.flightStatus!),
-                          if (row.tobBaseStatus != null)
-                            CurrencyBadgeWidget(status: row.tobBaseStatus!),
-                          if (row.mdbStatus != null)
-                            CurrencyBadgeWidget(status: row.mdbStatus!),
-                          ...row.tobCapabilities.map(
-                            (item) => CurrencyBadgeWidget(
-                              status:
-                                  row.tobStatuses['${item.helicopterTypeId}:${item.tobCapabilityId}'] ??
-                                  const CurrencyStatus(
-                                    status: CurrencyStatusEnum.noData,
-                                    label: 'Nessun dato',
+                      }.toList(growable: false)
+                        ..sort((a, b) {
+                          String codeFor(int id) {
+                            for (final item in row.assignments) {
+                              if (item.helicopterTypeId == id) return item.helicopterCode;
+                            }
+                            for (final item in row.tobCapabilities) {
+                              if (item.helicopterTypeId == id) return item.helicopterCode;
+                            }
+                            return '$id';
+                          }
+
+                          return codeFor(a).compareTo(codeFor(b));
+                        });
+
+                      Widget buildInfoPill(IconData icon, String label) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceVariant.withValues(alpha: 0.72),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, size: 16, color: AppColors.textSecondary),
+                              const SizedBox(width: 8),
+                              Flexible(child: Text(label, softWrap: true)),
+                            ],
+                          ),
+                        );
+                      }
+
+                      Widget buildHelicopterBlock(int helicopterTypeId) {
+                        final assignments = row.assignments
+                            .where(
+                              (item) => item.helicopterTypeId == helicopterTypeId,
+                            )
+                            .toList(growable: false);
+                        final capabilities = row.tobCapabilities
+                            .where(
+                              (item) => item.helicopterTypeId == helicopterTypeId,
+                            )
+                            .toList(growable: false);
+                        String helicopterCode = '-';
+                        if (assignments.isNotEmpty) {
+                          helicopterCode = assignments.first.helicopterCode;
+                        } else if (capabilities.isNotEmpty) {
+                          helicopterCode = capabilities.first.helicopterCode;
+                        }
+
+                        final statusItems = <CurrencyStatus>[];
+                        if (assignments.any((item) => item.crewType == 'T') &&
+                            row.flightStatus != null) {
+                          statusItems.add(row.flightStatus!);
+                        }
+                        if (assignments.any((item) => item.crewType == 'TOB') &&
+                            row.tobBaseStatus != null) {
+                          statusItems.add(row.tobBaseStatus!);
+                        }
+                        for (final capability in capabilities) {
+                          final capabilityStatus = row.tobStatuses[
+                              '${capability.helicopterTypeId}:${capability.tobCapabilityId}'];
+                          if (capabilityStatus != null) {
+                            statusItems.add(capabilityStatus);
+                          }
+                        }
+                        if (assignments.any((item) => item.crewType == 'MDB') &&
+                            row.mdbStatus != null) {
+                          statusItems.add(row.mdbStatus!);
+                        }
+                        final status = _combineCrewStatuses(
+                          statusItems,
+                          label: 'Stato $helicopterCode',
+                        );
+
+                        return Container(
+                          width: compact ? double.infinity : 250,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.secondary.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: AppColors.secondary.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      helicopterCode,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.secondary,
+                                      ),
+                                    ),
                                   ),
+                                  const Spacer(),
+                                  Icon(status.icon, color: status.color, size: 18),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: status.color,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _joinCrewLabels(
+                                  assignments.map(
+                                    (item) => item.crewType == 'TOB'
+                                        ? 'TOB ${item.fascia ?? '-'}'
+                                        : item.crewType,
+                                  ),
+                                ),
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                                softWrap: true,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                capabilities.isEmpty
+                                    ? 'Capacità: -'
+                                    : 'Capacità: ${_joinCrewLabels(capabilities.map((item) => item.capabilityName))}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                softWrap: true,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final leftPanel = Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceVariant.withValues(alpha: 0.42),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: compact
+                              ? CrossAxisAlignment.center
+                              : CrossAxisAlignment.start,
+                          children: [
+                            UserAvatar(user: row.user, radius: 30),
+                            const SizedBox(height: 14),
+                            Text(
+                              row.user.fullName,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                              textAlign: compact ? TextAlign.center : TextAlign.left,
+                              softWrap: true,
                             ),
+                            const SizedBox(height: 8),
+                            Text(
+                              row.user.numeroLicenza ?? 'Licenza non indicata',
+                              style: Theme.of(context).textTheme.bodyLarge,
+                              textAlign: compact ? TextAlign.center : TextAlign.left,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              row.user.orgUnitName.isEmpty
+                                  ? 'Unità non indicata'
+                                  : row.user.orgUnitName,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: AppColors.textSecondary),
+                              textAlign: compact ? TextAlign.center : TextAlign.left,
+                              softWrap: true,
+                            ),
+                          ],
+                        ),
+                      );
+
+                      final rightPanel = helicopterIds.isEmpty
+                          ? Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceVariant.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: const Text(
+                                'Nessuna assegnazione equipaggio disponibile.',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : compact
+                          ? Column(
+                              children: [
+                                for (final helicopterTypeId in helicopterIds) ...[
+                                  buildHelicopterBlock(helicopterTypeId),
+                                  const SizedBox(height: 12),
+                                ],
+                              ],
+                            )
+                          : Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: helicopterIds
+                                  .map(buildHelicopterBlock)
+                                  .toList(growable: false),
+                            );
+
+                      final emailAvailable = row.user.email != null &&
+                          row.user.email!.trim().isNotEmpty;
+                      final overallStatus = _combineCrewStatuses(
+                        row.relevantStatuses('all', null),
+                        label: 'Stato equipaggio',
+                      );
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (compact) ...[
+                            leftPanel,
+                            const SizedBox(height: 16),
+                            rightPanel,
+                          ] else
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: constraints.maxWidth * 0.35,
+                                  child: leftPanel,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(child: rightPanel),
+                              ],
+                            ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              buildInfoPill(
+                                Icons.flight_takeoff_outlined,
+                                'Ultima attività: ${_formatDate(row.lastActivityDate)}',
+                              ),
+                              CurrencyBadgeWidget(status: overallStatus),
+                              if (emailAvailable)
+                                OutlinedButton.icon(
+                                  onPressed: () => _launchCrewEmail([row]),
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(0, 42),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.email_outlined, size: 18),
+                                  label: const Text('Email'),
+                                ),
+                            ],
                           ),
                         ],
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -1504,41 +1774,6 @@ class _CrewStatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: content,
       ),
-    );
-  }
-}
-
-class _CrewIdentityHeader extends StatelessWidget {
-  const _CrewIdentityHeader({required this.user});
-
-  final UserProfile user;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        UserAvatar(user: user, radius: 23),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                user.fullName,
-                style: Theme.of(context).textTheme.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${user.numeroLicenza ?? 'Licenza non indicata'} · ${user.orgUnitName}',
-                textAlign: TextAlign.center,
-                softWrap: true,
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

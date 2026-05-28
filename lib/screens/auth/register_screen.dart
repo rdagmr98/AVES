@@ -258,17 +258,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     setState(() => _pendingLicenses.add(result));
   }
 
-  Future<void> _addCrew(List<HelicopterType> helicopterTypes) async {
+  Future<void> _addCrew(
+    List<HelicopterType> helicopterTypes,
+    List<TobCapability> tobCapabilities,
+  ) async {
     final helicopterItems = helicopterTypes
         .map(
           (item) =>
               DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
         )
         .toList(growable: false);
-    const crewTypeItems = [
-      DropdownMenuItem(value: 'T', child: Text('T')),
-      DropdownMenuItem(value: 'TOB', child: Text('TOB')),
-    ];
     const fasciaItems = [
       DropdownMenuItem(value: 'A', child: Text('A')),
       DropdownMenuItem(value: 'B', child: Text('B')),
@@ -281,6 +280,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         int? helicopterId;
         String crewType = 'T';
         String fascia = 'A';
+        final selectedCapabilityIds = <int>{};
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: const Text('Aggiungi equipaggio'),
@@ -295,13 +295,28 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     setDialogState(() => helicopterId = value),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: crewType,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
-                items: crewTypeItems,
-                onChanged: (value) =>
-                    setDialogState(() => crewType = value ?? 'T'),
+              Text(
+                'Tipo equipaggio',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ['T', 'TOB', 'MDB']
+                    .map(
+                      (value) => ChoiceChip(
+                        label: Text(value),
+                        selected: crewType == value,
+                        onSelected: (_) => setDialogState(() {
+                          crewType = value;
+                          if (crewType != 'TOB') {
+                            selectedCapabilityIds.clear();
+                          }
+                        }),
+                      ),
+                    )
+                    .toList(growable: false),
               ),
               if (crewType == 'TOB') ...[
                 const SizedBox(height: 16),
@@ -312,6 +327,40 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   items: fasciaItems,
                   onChanged: (value) =>
                       setDialogState(() => fascia = value ?? 'A'),
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Capacità TOB',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...tobCapabilities.map(
+                  (capability) => CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: selectedCapabilityIds.contains(capability.id),
+                    title: Text(capability.name, softWrap: true),
+                    onChanged: (_) => setDialogState(() {
+                      if (selectedCapabilityIds.contains(capability.id)) {
+                        selectedCapabilityIds.remove(capability.id);
+                      } else {
+                        selectedCapabilityIds.add(capability.id);
+                      }
+                    }),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 16),
+                Text(
+                  crewType == 'MDB'
+                      ? 'MDB richiede solo la selezione dell\'elicottero.'
+                      : 'T richiede solo la selezione dell\'elicottero.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ]),
@@ -330,9 +379,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     'helicopter_type_id': helicopterId,
                     'crew_type': crewType,
                     'tob_grade': crewType == 'TOB' ? fascia : null,
+                    'selected_capability_ids': selectedCapabilityIds.toList(),
                   });
                 },
-                child: const Text('Aggiungi'),
+                child: const Text('Conferma'),
               ),
             ],
           ),
@@ -356,7 +406,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    setState(() => _pendingCrew.add(result));
+    setState(() {
+      _pendingCrew.add({
+        'helicopter_type_id': result['helicopter_type_id'],
+        'crew_type': result['crew_type'],
+        'tob_grade': result['tob_grade'],
+      });
+      if (result['crew_type'] == 'TOB') {
+        _pendingTobCaps.removeWhere(
+          (item) => item['helicopter_type_id'] == result['helicopter_type_id'],
+        );
+        for (final capabilityId
+            in (result['selected_capability_ids'] as List<dynamic>)) {
+          _pendingTobCaps.add({
+            'helicopter_type_id': result['helicopter_type_id'],
+            'tob_capability_id': capabilityId as int,
+          });
+        }
+      }
+    });
   }
 
   Map<int, Set<int>> _pendingPrivilegesByHelicopter() {
@@ -685,7 +753,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         title: 'Equipaggi di Volo',
                         itemCount: _pendingCrew.length,
                         emptyText: 'Nessun equipaggio aggiunto.',
-                        onAdd: () => _addCrew(helicopterTypes),
+                        onAdd: () =>
+                            _addCrew(helicopterTypes, tobCapabilities),
                         addLabel: 'Aggiungi equipaggio',
                         children: _pendingCrew
                             .asMap()
@@ -696,12 +765,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   "${_helicopterLabel(helicopterTypes, entry.value['helicopter_type_id'] as int)} · ${entry.value['crew_type']}",
                                 ),
                                 subtitle: entry.value['crew_type'] == 'TOB'
-                                    ? Text('Fascia ${entry.value['tob_grade']}')
+                                    ? Text(
+                                        'Fascia ${entry.value['tob_grade']} · ${_pendingTobCaps.where((item) => item['helicopter_type_id'] == entry.value['helicopter_type_id']).length} capacità',
+                                      )
                                     : null,
                                 trailing: IconButton(
-                                  onPressed: () => setState(
-                                    () => _pendingCrew.removeAt(entry.key),
-                                  ),
+                                  onPressed: () => setState(() {
+                                    final removed = _pendingCrew.removeAt(
+                                      entry.key,
+                                    );
+                                    if (removed['crew_type'] == 'TOB') {
+                                      _pendingTobCaps.removeWhere(
+                                        (item) =>
+                                            item['helicopter_type_id'] ==
+                                            removed['helicopter_type_id'],
+                                      );
+                                    }
+                                  }),
                                   icon: const Icon(Icons.delete_outline),
                                 ),
                               ),

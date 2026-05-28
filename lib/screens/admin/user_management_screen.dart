@@ -791,7 +791,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Set<int> _mdbCrewHelicopters = <int>{};
   Set<String> _tobCapabilityKeys = <String>{};
   Map<int, String> _tobGrades = <int, String>{};
-  Map<int, String> _mdbGrades = <int, String>{};
 
   @override
   void initState() {
@@ -830,10 +829,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           .toSet();
       _tobGrades = {
         for (final i in crews.where((c) => c.crewType == 'TOB'))
-          i.helicopterTypeId: i.fascia ?? 'A',
-      };
-      _mdbGrades = {
-        for (final i in crews.where((c) => c.crewType == 'MDB'))
           i.helicopterTypeId: i.fascia ?? 'A',
       };
       _tobCapabilityKeys = tobCaps
@@ -931,10 +926,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     if (selected != null && mounted) {
       setState(() {
         _mdbCrewHelicopters = selected;
-        _mdbGrades.removeWhere((key, _) => !selected.contains(key));
-        for (final id in selected) {
-          _mdbGrades.putIfAbsent(id, () => 'A');
-        }
       });
     }
   }
@@ -1022,7 +1013,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           {
             'helicopter_type_id': id,
             'crew_type': 'MDB',
-            'tob_grade': _mdbGrades[id] ?? 'A',
+            'tob_grade': null,
           },
       ];
       await widget.service.setUserCrewAssignments(_user.id, assignments);
@@ -1819,81 +1810,33 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                             margin: const EdgeInsets.only(
                                               bottom: 8,
                                             ),
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(8),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          h.name,
-                                                          style:
-                                                              const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                      IconButton(
-                                                        icon: const Icon(
-                                                          Icons.close,
-                                                          size: 18,
-                                                        ),
-                                                        padding:
-                                                            EdgeInsets.zero,
-                                                        constraints:
-                                                            const BoxConstraints(),
-                                                        onPressed: () =>
-                                                            setState(() {
-                                                              _mdbCrewHelicopters
-                                                                  .remove(h.id);
-                                                              _mdbGrades.remove(
-                                                                h.id,
-                                                              );
-                                                            }),
-                                                      ),
-                                                    ],
+                                            child: ListTile(
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 4,
                                                   ),
-                                                  const SizedBox(height: 8),
-                                                  DropdownButtonFormField<
-                                                    String
-                                                  >(
-                                                    key: ValueKey(
-                                                      'mdb_${h.id}_${_mdbGrades[h.id]}',
-                                                    ),
-                                                    initialValue:
-                                                        _mdbGrades[h.id] ?? 'A',
-                                                    isExpanded: true,
-                                                    decoration:
-                                                        const InputDecoration(
-                                                          labelText:
-                                                              'Fascia MDB',
-                                                          isDense: true,
-                                                        ),
-                                                    items: const [
-                                                      DropdownMenuItem(
-                                                        value: 'A',
-                                                        child: Text('A'),
-                                                      ),
-                                                      DropdownMenuItem(
-                                                        value: 'B',
-                                                        child: Text('B'),
-                                                      ),
-                                                      DropdownMenuItem(
-                                                        value: 'C',
-                                                        child: Text('C'),
-                                                      ),
-                                                    ],
-                                                    onChanged: (v) => setState(
-                                                      () => _mdbGrades[h.id] =
-                                                          v ?? 'A',
-                                                    ),
-                                                  ),
-                                                ],
+                                              title: Text(
+                                                h.name,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              subtitle: const Text(
+                                                'MDB richiede solo il tipo equipaggio e l\'elicottero selezionato.',
+                                              ),
+                                              trailing: IconButton(
+                                                icon: const Icon(
+                                                  Icons.close,
+                                                  size: 18,
+                                                ),
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(),
+                                                onPressed: () => setState(
+                                                  () => _mdbCrewHelicopters
+                                                      .remove(h.id),
+                                                ),
                                               ),
                                             ),
                                           ),

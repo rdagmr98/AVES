@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../app.dart';
+import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
@@ -197,6 +198,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _showChangePasswordDialog() async {
+    final currentPasswordCtrl = TextEditingController();
     final newPasswordCtrl = TextEditingController();
     final confirmPasswordCtrl = TextEditingController();
 
@@ -207,6 +209,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextField(
+              controller: currentPasswordCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password attuale',
+              ),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: newPasswordCtrl,
               obscureText: true,
@@ -227,6 +237,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
+              if (currentPasswordCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Inserisci la password attuale.'),
+                  ),
+                );
+                return;
+              }
               if (newPasswordCtrl.text.length < 6 ||
                   newPasswordCtrl.text != confirmPasswordCtrl.text) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -239,7 +257,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               try {
                 await ref
                     .read(authProvider)
-                    .changePassword(newPasswordCtrl.text);
+                    .changePassword(
+                      currentPasswordCtrl.text,
+                      newPasswordCtrl.text,
+                    );
                 if (!mounted || !dialogContext.mounted) {
                   return;
                 }
@@ -262,6 +283,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
 
+    currentPasswordCtrl.dispose();
     newPasswordCtrl.dispose();
     confirmPasswordCtrl.dispose();
   }
@@ -424,6 +446,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<Map<String, dynamic>?> _showCrewDialog(
     List<HelicopterType> helicopterTypes,
+    List<TobCapability> tobCapabilities,
   ) async {
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -431,55 +454,107 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         int? helicopterId;
         String crewType = 'T';
         String fascia = 'A';
+        final selectedCapabilityIds = <int>{};
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: const Text('Aggiungi equipaggio'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<int>(
-                  initialValue: helicopterId,
-                  decoration: const InputDecoration(labelText: 'Elicottero'),
-                  items: helicopterTypes
-                      .map(
-                        (item) => DropdownMenuItem<int>(
-                          value: item.id,
-                          child: Text(item.name),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      initialValue: helicopterId,
+                      decoration: const InputDecoration(
+                        labelText: 'Elicottero',
+                      ),
+                      items: helicopterTypes
+                          .map(
+                            (item) => DropdownMenuItem<int>(
+                              value: item.id,
+                              child: Text(item.name),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setDialogState(() => helicopterId = value),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Tipo equipaggio',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: ['T', 'TOB', 'MDB']
+                          .map(
+                            (value) => ChoiceChip(
+                              label: Text(value),
+                              selected: crewType == value,
+                              onSelected: (_) => setDialogState(() {
+                                crewType = value;
+                                if (crewType != 'TOB') {
+                                  selectedCapabilityIds.clear();
+                                }
+                              }),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    if (crewType == 'TOB') ...[
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: fascia,
+                        decoration: const InputDecoration(
+                          labelText: 'Fascia TOB',
                         ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => helicopterId = value),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: crewType,
-                  decoration: const InputDecoration(
-                    labelText: 'Tipo equipaggio',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'T', child: Text('T')),
-                    DropdownMenuItem(value: 'TOB', child: Text('TOB')),
-                  ],
-                  onChanged: (value) => setDialogState(() {
-                    crewType = value ?? 'T';
-                  }),
-                ),
-                if (crewType == 'TOB') ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: fascia,
-                    decoration: const InputDecoration(labelText: 'Fascia TOB'),
-                    items: const [
-                      DropdownMenuItem(value: 'A', child: Text('A')),
-                      DropdownMenuItem(value: 'B', child: Text('B')),
-                      DropdownMenuItem(value: 'C', child: Text('C')),
+                        items: const [
+                          DropdownMenuItem(value: 'A', child: Text('A')),
+                          DropdownMenuItem(value: 'B', child: Text('B')),
+                          DropdownMenuItem(value: 'C', child: Text('C')),
+                        ],
+                        onChanged: (value) =>
+                            setDialogState(() => fascia = value ?? 'A'),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Capacità TOB',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      ...tobCapabilities.map(
+                        (item) => CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: selectedCapabilityIds.contains(item.id),
+                          title: Text(item.name, softWrap: true),
+                          onChanged: (_) => setDialogState(() {
+                            if (selectedCapabilityIds.contains(item.id)) {
+                              selectedCapabilityIds.remove(item.id);
+                            } else {
+                              selectedCapabilityIds.add(item.id);
+                            }
+                          }),
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        crewType == 'MDB'
+                            ? 'MDB richiede solo la selezione dell\'elicottero.'
+                            : 'T richiede solo la selezione dell\'elicottero.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
                     ],
-                    onChanged: (value) =>
-                        setDialogState(() => fascia = value ?? 'A'),
-                  ),
-                ],
-              ],
+                  ],
+                ),
+              ),
             ),
             actions: [
               TextButton(
@@ -495,9 +570,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     'helicopterTypeId': helicopterId,
                     'crewType': crewType,
                     'fascia': crewType == 'TOB' ? fascia : null,
+                    'capabilityIds': selectedCapabilityIds.toList(),
                   });
                 },
-                child: const Text('Aggiungi'),
+                child: const Text('Conferma'),
               ),
             ],
           ),
@@ -645,6 +721,48 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       () =>
           _userService.setUserTobCapabilities(profile.id, updatedCapabilities),
       successMessage: 'Capacità TOB aggiornate.',
+    );
+  }
+
+  Future<void> _removeCrewAssignment(
+    UserProfile profile,
+    UserCrewAssignment assignment,
+    List<UserCrewAssignment> assignments,
+    List<UserTobCapability> capabilities,
+  ) async {
+    await _runMutation(
+      () async {
+        if (assignment.id == null || assignment.crewType != 'TOB') {
+          if (assignment.id != null) {
+            await _userService.deleteUserCrewAssignment(assignment.id!);
+          }
+          return;
+        }
+
+        final updatedAssignments = assignments
+            .where((item) => item.id != assignment.id)
+            .map(
+              (item) => {
+                'helicopter_type_id': item.helicopterTypeId,
+                'crew_type': item.crewType,
+                'tob_grade': item.crewType == 'TOB' ? item.fascia : null,
+              },
+            )
+            .toList();
+        final updatedCapabilities = capabilities
+            .where((item) => item.helicopterTypeId != assignment.helicopterTypeId)
+            .map(
+              (item) => {
+                'helicopter_type_id': item.helicopterTypeId,
+                'tob_capability_id': item.tobCapabilityId,
+              },
+            )
+            .toList();
+
+        await _userService.setUserCrewAssignments(profile.id, updatedAssignments);
+        await _userService.setUserTobCapabilities(profile.id, updatedCapabilities);
+      },
+      successMessage: 'Equipaggio rimosso.',
     );
   }
 
@@ -942,19 +1060,50 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   title: 'Equipaggi di volo',
                   addLabel: 'Aggiungi',
                   onAdd: () async {
-                    final result = await _showCrewDialog(auth.helicopterTypes);
+                    final result = await _showCrewDialog(
+                      auth.helicopterTypes,
+                      auth.tobCapabilityTypes,
+                    );
                     if (result == null) {
                       return;
                     }
                     await _runMutation(
-                      () => _userService.addUserCrewAssignment(
-                        UserCrewAssignment(
-                          userId: profile.id,
-                          helicopterTypeId: result['helicopterTypeId'] as int,
-                          crewType: result['crewType'] as String,
-                          fascia: result['fascia'] as String?,
-                        ),
-                      ),
+                      () async {
+                        await _userService.addUserCrewAssignment(
+                          UserCrewAssignment(
+                            userId: profile.id,
+                            helicopterTypeId: result['helicopterTypeId'] as int,
+                            crewType: result['crewType'] as String,
+                            fascia: result['fascia'] as String?,
+                          ),
+                        );
+                        if (result['crewType'] == 'TOB') {
+                          final updatedCapabilities = auth.tobCapabilities
+                              .where(
+                                (item) =>
+                                    item.helicopterTypeId !=
+                                    result['helicopterTypeId'],
+                              )
+                              .map(
+                                (item) => {
+                                  'helicopter_type_id': item.helicopterTypeId,
+                                  'tob_capability_id': item.tobCapabilityId,
+                                },
+                              )
+                              .toList();
+                          for (final capabilityId
+                              in (result['capabilityIds'] as List<dynamic>)) {
+                            updatedCapabilities.add({
+                              'helicopter_type_id': result['helicopterTypeId'],
+                              'tob_capability_id': capabilityId as int,
+                            });
+                          }
+                          await _userService.setUserTobCapabilities(
+                            profile.id,
+                            updatedCapabilities,
+                          );
+                        }
+                      },
                       successMessage: 'Equipaggio aggiunto.',
                     );
                   },
@@ -978,13 +1127,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   trailing: IconButton(
                                     onPressed: item.id == null
                                         ? null
-                                        : () => _runMutation(
-                                            () => _userService
-                                                .deleteUserCrewAssignment(
-                                                  item.id!,
-                                                ),
-                                            successMessage:
-                                                'Equipaggio rimosso.',
+                                        : () => _removeCrewAssignment(
+                                            profile,
+                                            item,
+                                            auth.crewAssignments,
+                                            auth.tobCapabilities,
                                           ),
                                     icon: const Icon(Icons.delete_outline),
                                   ),
