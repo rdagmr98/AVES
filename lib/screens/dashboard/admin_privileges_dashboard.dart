@@ -350,110 +350,132 @@ class _AdminPrivilegesDashboardState
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Privilegi per elicottero',
+                  'Licenze e privilegi per elicottero',
                   style: Theme.of(context).textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                ...row.perPrivilegeCurrency.map((privStatus) {
-                  final isExpired = privStatus.status.isExpired;
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  '${privStatus.helicopterCode} · ${privStatus.privilegeName}',
-                                  textAlign: TextAlign.center,
-                                  softWrap: true,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                ...() {
+                  // Group privileges by helicopter
+                  final heliGroups = <int, List<PrivilegeCurrencyStatus>>{};
+                  for (final ps in row.perPrivilegeCurrency) {
+                    heliGroups.putIfAbsent(ps.helicopterTypeId, () => []).add(ps);
+                  }
+                  // Also include helicopters that only have licenses (no privileges)
+                  for (final lic in row.licenses) {
+                    heliGroups.putIfAbsent(lic.helicopterTypeId, () => []);
+                  }
+                  return heliGroups.entries.map((heliEntry) {
+                    final heliId = heliEntry.key;
+                    final privileges = heliEntry.value;
+                    final heliCode = privileges.isNotEmpty
+                        ? privileges.first.helicopterCode
+                        : row.licenses.where((l) => l.helicopterTypeId == heliId).first.helicopterCode;
+                    final heliLicenses = row.licenses.where((l) => l.helicopterTypeId == heliId).toList();
+                    final licenseLabel = heliLicenses.isNotEmpty ? '  ·  Cat. ${heliLicenses.first.licenseCode}' : '';
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Helicopter + license header
+                            Text(
+                              '$heliCode$licenseLabel',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
                               ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: privStatus.status.isExpired
-                                      ? const Color(0xFFC0392B)
-                                      : privStatus.status.isWarning
-                                      ? const Color(0xFFE67E22)
-                                      : const Color(0xFF27AE60),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  privStatus.status.statusText,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (isExpired) ...[
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: () async {
-                                final confirmed = await showDialog<bool>(
-                                  context: dialogContext,
-                                  builder: (confirmContext) => AlertDialog(
-                                    title: const Text(
-                                      'Conferma rimozione',
-                                      softWrap: true,
-                                    ),
-                                    content: Text(
-                                      'Vuoi rimuovere il privilegio ${privStatus.privilegeName} su ${privStatus.helicopterCode} dall\'utente ${row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
-                                      softWrap: true,
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.of(
-                                          confirmContext,
-                                        ).pop(false),
-                                        child: const Text('Annulla'),
+                              softWrap: true,
+                            ),
+                            if (privileges.isEmpty) ...[
+                              const SizedBox(height: 6),
+                              const Text('Nessun privilegio assegnato.', style: TextStyle(fontStyle: FontStyle.italic)),
+                            ] else ...[
+                              const SizedBox(height: 8),
+                              ...privileges.map((privStatus) {
+                                final isExpired = privStatus.status.isExpired;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              privStatus.privilegeName,
+                                              softWrap: true,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: privStatus.status.isExpired
+                                                  ? const Color(0xFFC0392B)
+                                                  : privStatus.status.isWarning
+                                                  ? const Color(0xFFE67E22)
+                                                  : const Color(0xFF27AE60),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              privStatus.status.statusText,
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      TextButton(
-                                        onPressed: () => Navigator.of(
-                                          confirmContext,
-                                        ).pop(true),
-                                        child: const Text('Rimuovi'),
-                                      ),
+                                      if (isExpired) ...[
+                                        const SizedBox(height: 4),
+                                        TextButton(
+                                          onPressed: () async {
+                                            final confirmed = await showDialog<bool>(
+                                              context: dialogContext,
+                                              builder: (confirmContext) => AlertDialog(
+                                                title: const Text('Conferma rimozione', softWrap: true),
+                                                content: Text(
+                                                  'Vuoi rimuovere il privilegio ${privStatus.privilegeName} su ${privStatus.helicopterCode} dall\'utente ${row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
+                                                  softWrap: true,
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(confirmContext).pop(false),
+                                                    child: const Text('Annulla'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(confirmContext).pop(true),
+                                                    child: const Text('Rimuovi'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirmed == true && context.mounted) {
+                                              await _userService.removePrivilege(
+                                                row.user.id,
+                                                privStatus.helicopterTypeId,
+                                                privStatus.privilegeTypeId,
+                                              );
+                                              if (dialogContext.mounted) {
+                                                Navigator.of(dialogContext).pop();
+                                              }
+                                              await _loadData();
+                                            }
+                                          },
+                                          child: const Text('Rimuovi privilegio scaduto'),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 );
-
-                                if (confirmed == true && context.mounted) {
-                                  await _userService.removePrivilege(
-                                    row.user.id,
-                                    privStatus.helicopterTypeId,
-                                    privStatus.privilegeTypeId,
-                                  );
-                                  if (dialogContext.mounted) {
-                                    Navigator.of(dialogContext).pop();
-                                  }
-                                  await _loadData();
-                                }
-                              },
-                              child: const Text('Rimuovi privilegio scaduto'),
-                            ),
+                              }),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                }),
+                    );
+                  }).toList();
+                }(),
               ],
             ),
           ),
