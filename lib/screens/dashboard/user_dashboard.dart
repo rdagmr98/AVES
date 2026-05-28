@@ -7,10 +7,8 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
-import '../../services/currency_service.dart';
 import '../../services/pta_service.dart';
 import '../../widgets/aves_logo_widget.dart';
-import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/privilege_grid_widget.dart';
 import '../../widgets/user_avatar.dart';
@@ -24,7 +22,6 @@ class UserDashboard extends ConsumerStatefulWidget {
 
 class _UserDashboardState extends ConsumerState<UserDashboard> {
   final _ptaService = PtaService();
-  final _currencyService = CurrencyService();
   bool _emailDialogOpen = false;
 
   void _promptInstitutionalEmail(UserProfile user) {
@@ -123,89 +120,6 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     return 'Nessun dato ore di volo';
   }
 
-  Future<void> _showMaintenanceBreakdown(UserProfile user) async {
-    final items = await _currencyService.getPerPrivilegeCurrency(user.id);
-    if (!mounted) {
-      return;
-    }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Dettaglio privilegi manutentivi',
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-                softWrap: true,
-              ),
-              const SizedBox(height: 12),
-              if (items.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'Nessun privilegio manutentivo attivo.',
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                  ),
-                )
-              else
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${item.helicopterCode} · ${item.privilegeName}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                      softWrap: true,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _formatLongDate(item.status.expiryDate),
-                                      softWrap: true,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              CurrencyBadgeWidget(status: item.status),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -257,7 +171,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           expiryText: _formatLongDate(
             _maintenanceExpiryDate(auth.currency['maintenance']),
           ),
-          onTap: () => _showMaintenanceBreakdown(user),
+          onTap: () => context.go('/activities/my?type=maintenance'),
         ),
       if (auth.hasTCrew)
         _CurrencyCard(

@@ -480,7 +480,7 @@ class _AdminPrivilegesDashboardState
       physics: const NeverScrollableScrollPhysics(),
       itemCount: filteredRows.length,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 110,
+        maxCrossAxisExtent: 120,
         childAspectRatio: 1.0,
         crossAxisSpacing: 4,
         mainAxisSpacing: 4,
@@ -523,7 +523,7 @@ class _AdminPrivilegesDashboardState
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 9),
+                    style: const TextStyle(fontSize: 11),
                   ),
                   Text(
                     row.user.cognome,
@@ -531,7 +531,7 @@ class _AdminPrivilegesDashboardState
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -652,28 +652,51 @@ class _AdminPrivilegesDashboardState
     List<_StatCardData> statCardData,
     bool isMobileLayout,
   ) {
-    final count = statCardData.length;
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: count,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isMobileLayout ? 2 : count,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: isMobileLayout ? 1.1 : 3.2,
+    if (isMobileLayout) {
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: statCardData.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.5,
+        ),
+        itemBuilder: (context, index) {
+          final data = statCardData[index];
+          return _StatCard(
+            title: data.title,
+            value: data.value,
+            icon: data.icon,
+            color: data.color,
+            onTap: data.onTap,
+          );
+        },
+      );
+    }
+    return SizedBox(
+      height: 76,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: statCardData.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final data = entry.value;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(left: idx == 0 ? 0 : 12),
+              child: _StatCard(
+                title: data.title,
+                value: data.value,
+                icon: data.icon,
+                color: data.color,
+                onTap: data.onTap,
+                compact: true,
+              ),
+            ),
+          );
+        }).toList(),
       ),
-      itemBuilder: (context, index) {
-        final data = statCardData[index];
-        return _StatCard(
-          title: data.title,
-          value: data.value,
-          icon: data.icon,
-          color: data.color,
-          onTap: data.onTap,
-          compact: true,
-        );
-      },
     );
   }
 
@@ -1507,6 +1530,8 @@ class _StatCard extends StatelessWidget {
                     context,
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                   softWrap: true,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
