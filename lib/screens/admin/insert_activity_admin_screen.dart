@@ -1508,7 +1508,7 @@ class _InsertActivityAdminScreenState
                                 ),
                                 const SizedBox(height: 16),
                                 DropdownButtonFormField<String>(
-                                  value: _seminarType,
+                                  initialValue: _seminarType,
                                   decoration: const InputDecoration(
                                     labelText: 'Tipo seminario',
                                   ),
