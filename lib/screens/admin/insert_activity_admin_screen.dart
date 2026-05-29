@@ -8,6 +8,7 @@ import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/gh_db_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 
@@ -54,12 +55,13 @@ class _InsertActivityAdminScreenState
   bool _saving = false;
   List<UserProfile> _users = [];
   UserProfile? _selectedUser;
-  List<UserPrivilege> _privileges = [];
   List<UserCrewAssignment> _crews = [];
   List<UserTobCapability> _tobCapabilities = [];
 
   int? _maintenanceHelicopterId;
-  int? _maintenancePrivilegeId;
+  final Set<int> _maintenancePrivilegeIds = {};
+  final Set<String> _maintenanceUserIds = {};
+  String _maintenanceUserSearch = '';
   DateTime _maintenanceDate = DateTime.now();
   String? _maintenanceActivityType;
 
@@ -71,6 +73,10 @@ class _InsertActivityAdminScreenState
   int? _tobCapabilityId;
   DateTime _tobDate = DateTime.now();
   DateTime _seminarDate = DateTime.now();
+  String _seminarType = 'NAM';
+  final Set<String> _seminarUserIds = {};
+  String _seminarUserSearch = '';
+  final _seminarSearchCtrl = TextEditingController();
 
   int? _workOrderHelicopterId;
   DateTime _workOrderDate = DateTime.now();
@@ -122,6 +128,7 @@ class _InsertActivityAdminScreenState
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
     _seminarDescCtrl.dispose();
+    _seminarSearchCtrl.dispose();
     _flightHoursCtrl.dispose();
     _crewFlightHoursCtrl.dispose();
     _crewFlightDescCtrl.dispose();
@@ -155,21 +162,18 @@ class _InsertActivityAdminScreenState
   Future<void> _selectUser(UserProfile? user) async {
     setState(() {
       _selectedUser = user;
-      _privileges = [];
       _crews = [];
       _tobCapabilities = [];
     });
     if (user == null) {
       return;
     }
-    final privileges = await _userService.getUserPrivileges(user.id);
     final crews = await _userService.getUserCrewAssignments(user.id);
     final tobCapabilities = await _userService.getUserTobCapabilities(user.id);
     if (!mounted) {
       return;
     }
     setState(() {
-      _privileges = privileges;
       _crews = crews;
       _tobCapabilities = tobCapabilities;
     });
@@ -188,39 +192,55 @@ class _InsertActivityAdminScreenState
   }
 
   Future<void> _submitMaintenance() async {
-    final user = _selectedUser;
     final adminId = ref.read(authProvider).userProfile?.id;
-    if (user == null ||
-        adminId == null ||
+    if (adminId == null ||
         _maintenanceHelicopterId == null ||
-        _maintenancePrivilegeId == null) {
+        _maintenancePrivilegeIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seleziona elicottero e almeno un privilegio.'),
+        ),
+      );
+      return;
+    }
+    final userIds = _maintenanceUserIds.isNotEmpty
+        ? _maintenanceUserIds
+        : (_selectedUser != null ? {_selectedUser!.id} : <String>{});
+    if (userIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona almeno un utente.')),
+      );
       return;
     }
     setState(() => _saving = true);
     try {
-      await _activityService.addMaintenanceActivityValidated(
-        MaintenanceActivity(
-          userId: user.id,
-          helicopterTypeId: _maintenanceHelicopterId!,
-          privilegeTypeId: _maintenancePrivilegeId!,
-          activityDate: _maintenanceDate,
-          description: _maintenanceDescCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceDescCtrl.text.trim(),
-          activityType: _maintenanceActivityType,
-          matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceMatricolaCtrl.text.trim(),
-          numeroCorrozzella: _maintenanceNumCarrCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceNumCarrCtrl.text.trim(),
-          ordineLavoro: _maintenanceOrdLavCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceOrdLavCtrl.text.trim(),
-          submittedBy: adminId,
-        ),
-        adminId,
-      );
+      for (final userId in userIds) {
+        for (final privilegeId in _maintenancePrivilegeIds) {
+          await _activityService.addMaintenanceActivityValidated(
+            MaintenanceActivity(
+              userId: userId,
+              helicopterTypeId: _maintenanceHelicopterId!,
+              privilegeTypeId: privilegeId,
+              activityDate: _maintenanceDate,
+              description: _maintenanceDescCtrl.text.trim().isEmpty
+                  ? null
+                  : _maintenanceDescCtrl.text.trim(),
+              activityType: _maintenanceActivityType,
+              matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
+                  ? null
+                  : _maintenanceMatricolaCtrl.text.trim(),
+              numeroCorrozzella: _maintenanceNumCarrCtrl.text.trim().isEmpty
+                  ? null
+                  : _maintenanceNumCarrCtrl.text.trim(),
+              ordineLavoro: _maintenanceOrdLavCtrl.text.trim().isEmpty
+                  ? null
+                  : _maintenanceOrdLavCtrl.text.trim(),
+              submittedBy: adminId,
+            ),
+            adminId,
+          );
+        }
+      }
       _finish();
     } catch (e) {
       if (mounted) {
@@ -306,26 +326,62 @@ class _InsertActivityAdminScreenState
   }
 
   Future<void> _submitSeminar() async {
-    final user = _selectedUser;
     final adminId = ref.read(authProvider).userProfile?.id;
-    if (user == null || adminId == null) {
+    if (adminId == null || _seminarUserIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona almeno un partecipante.')),
+      );
       return;
     }
     setState(() => _saving = true);
     try {
-      await _activityService.addSeminarActivityValidated(
-        SeminarActivity(
-          userId: user.id,
-          seminarType: 'NAM_MHF',
-          seminarDate: _seminarDate,
-          description: _seminarDescCtrl.text.trim().isEmpty
-              ? null
-              : _seminarDescCtrl.text.trim(),
-          submittedBy: adminId,
-        ),
-        adminId,
-      );
-      _finish();
+      final db = GhDbService();
+      final now = DateTime.now();
+      final rows = db.seminars.toList();
+      var nextId = rows
+          .map((item) => item['id'])
+          .whereType<int>()
+          .fold<int>(0, (maxId, id) => id > maxId ? id : maxId);
+
+      for (final userId in _seminarUserIds) {
+        for (final type
+            in _seminarType == 'NAM_MHF' ? ['NAM', 'MHF'] : [_seminarType]) {
+          nextId++;
+          rows.add({
+            'id': nextId,
+            'user_id': userId,
+            'seminar_type': type,
+            'seminar_date': _seminarDate.toIso8601String().split('T').first,
+            'description': _seminarDescCtrl.text.trim().isEmpty
+                ? null
+                : _seminarDescCtrl.text.trim(),
+            'is_validated': true,
+            'submitted_by': adminId,
+            'validated_by': adminId,
+            'validated_at': now.toIso8601String(),
+            'created_at': now.toIso8601String(),
+          });
+        }
+      }
+      await db.saveSeminars(rows);
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _seminarUserIds.clear();
+          _seminarDescCtrl.clear();
+          _seminarSearchCtrl.clear();
+          _seminarType = 'NAM';
+          _seminarDate = DateTime.now();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Seminario inserito per ${_seminarUserIds.isEmpty ? 'i partecipanti selezionati' : '${_seminarUserIds.length} partecipanti'} ($_seminarType).',
+            ),
+          ),
+        );
+        context.go('/admin/validate');
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
@@ -350,7 +406,7 @@ class _InsertActivityAdminScreenState
     final roleItems = <DropdownMenuItem<String>>[
       const DropdownMenuItem(value: 'T', child: Text('T')),
       const DropdownMenuItem(value: 'TOB', child: Text('TOB')),
-      const DropdownMenuItem(value: 'MDB', child: Text('MDB')),
+      const DropdownMenuItem(value: 'MTB', child: Text('MTB')),
     ];
     final capabilityItems = tobCapabilities
         .map(
@@ -429,9 +485,6 @@ class _InsertActivityAdminScreenState
                   if (userId == null) {
                     return;
                   }
-                  if (role == 'TOB' && capId == null) {
-                    return;
-                  }
                   final user = _users.firstWhere((u) => u.id == userId);
                   Navigator.pop(
                     ctx,
@@ -476,9 +529,8 @@ class _InsertActivityAdminScreenState
     }
 
     String? selectedUserId;
-    int? selectedPrivilegeId;
-    String? selectedPrivilegeName;
     List<UserPrivilege> userPrivileges = [];
+    final Set<int> selectedPrivilegeIds = {};
 
     final result = await showDialog<_TechEntry>(
       context: context,
@@ -506,8 +558,7 @@ class _InsertActivityAdminScreenState
                   onChanged: (value) async {
                     setD(() {
                       selectedUserId = value;
-                      selectedPrivilegeId = null;
-                      selectedPrivilegeName = null;
+                      selectedPrivilegeIds.clear();
                       userPrivileges = [];
                     });
                     if (value != null) {
@@ -524,31 +575,32 @@ class _InsertActivityAdminScreenState
                   },
                 ),
                 const SizedBox(height: 12),
-                if (userPrivileges.isNotEmpty)
-                  DropdownButtonFormField<int>(
-                    menuMaxHeight: 300,
-                    decoration: const InputDecoration(
-                      labelText: 'Privilegio esercitato',
+                if (userPrivileges.isNotEmpty) ...[
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Privilegi esercitati',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    items: userPrivileges
-                        .map(
-                          (p) => DropdownMenuItem<int>(
-                            value: p.privilegeTypeId,
-                            child: Text(p.privilegeName),
-                          ),
-                        )
-                        .toList(growable: false),
-                    onChanged: (value) {
-                      final privilege = userPrivileges.firstWhere(
-                        (p) => p.privilegeTypeId == value,
-                      );
-                      setD(() {
-                        selectedPrivilegeId = value;
-                        selectedPrivilegeName = privilege.privilegeName;
-                      });
-                    },
-                  )
-                else if (selectedUserId != null)
+                  ),
+                  ...userPrivileges.map((p) {
+                    final sel = selectedPrivilegeIds.contains(
+                      p.privilegeTypeId,
+                    );
+                    return CheckboxListTile(
+                      dense: true,
+                      value: sel,
+                      title: Text(p.privilegeName),
+                      onChanged: (v) => setD(() {
+                        if (v == true) {
+                          selectedPrivilegeIds.add(p.privilegeTypeId);
+                        } else {
+                          selectedPrivilegeIds.remove(p.privilegeTypeId);
+                        }
+                      }),
+                    );
+                  }),
+                ] else if (selectedUserId != null)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
                     child: Text(
@@ -565,16 +617,22 @@ class _InsertActivityAdminScreenState
               ),
               ElevatedButton(
                 onPressed: () {
-                  if (selectedUserId == null || selectedPrivilegeId == null) {
+                  if (selectedUserId == null || selectedPrivilegeIds.isEmpty) {
                     return;
                   }
                   final user = _users.firstWhere((u) => u.id == selectedUserId);
+                  final names = userPrivileges
+                      .where(
+                        (p) => selectedPrivilegeIds.contains(p.privilegeTypeId),
+                      )
+                      .map((p) => p.privilegeName)
+                      .toList();
                   Navigator.pop(
                     ctx,
                     _TechEntry(
                       user: user,
-                      privilegeTypeId: selectedPrivilegeId!,
-                      privilegeName: selectedPrivilegeName ?? '',
+                      privilegeTypeIds: selectedPrivilegeIds.toList(),
+                      privilegeNames: names,
                     ),
                   );
                 },
@@ -598,6 +656,12 @@ class _InsertActivityAdminScreenState
         const SnackBar(
           content: Text('Compila elicottero e aggiungi almeno un tecnico.'),
         ),
+      );
+      return;
+    }
+    if (_workOrderDateFrom == null || _workOrderDateTo == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Le date Dal e Al sono obbligatorie.')),
       );
       return;
     }
@@ -625,23 +689,25 @@ class _InsertActivityAdminScreenState
           : _workOrderOrdLavCtrl.text.trim();
       final effectiveDate = _workOrderDateTo ?? _workOrderDate;
       for (final entry in _techEntries) {
-        await _activityService.addMaintenanceActivityValidated(
-          MaintenanceActivity(
-            userId: entry.user.id,
-            helicopterTypeId: helicopterId,
-            privilegeTypeId: entry.privilegeTypeId,
-            activityDate: effectiveDate,
-            dateFrom: _workOrderDateFrom,
-            dateTo: _workOrderDateTo,
-            description: desc,
-            submittedBy: adminId,
-            activityType: _workOrderActivityType,
-            matricolaMilitare: matricola,
-            numeroCorrozzella: numCarr,
-            ordineLavoro: ordLav,
-          ),
-          adminId,
-        );
+        for (final privilegeId in entry.privilegeTypeIds) {
+          await _activityService.addMaintenanceActivityValidated(
+            MaintenanceActivity(
+              userId: entry.user.id,
+              helicopterTypeId: helicopterId,
+              privilegeTypeId: privilegeId,
+              activityDate: effectiveDate,
+              dateFrom: _workOrderDateFrom,
+              dateTo: _workOrderDateTo,
+              description: desc,
+              submittedBy: adminId,
+              activityType: _workOrderActivityType,
+              matricolaMilitare: matricola,
+              numeroCorrozzella: numCarr,
+              ordineLavoro: ordLav,
+            ),
+            adminId,
+          );
+        }
       }
       if (mounted) {
         setState(() {
@@ -688,11 +754,11 @@ class _InsertActivityAdminScreenState
       );
       return;
     }
-    if (_crewEntries.any((e) => e.role == 'T' || e.role == 'MDB') &&
+    if (_crewEntries.any((e) => e.role == 'T' || e.role == 'MTB') &&
         (hours == null || hours <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Inserisci le ore di volo per i membri T/MDB.'),
+          content: Text('Inserisci le ore di volo per i membri T/MTB.'),
         ),
       );
       return;
@@ -703,7 +769,7 @@ class _InsertActivityAdminScreenState
           ? null
           : _crewFlightDescCtrl.text.trim();
       for (final entry in _crewEntries) {
-        if (entry.role == 'T' || entry.role == 'MDB') {
+        if (entry.role == 'T' || entry.role == 'MTB') {
           await _activityService.addFlightActivityValidated(
             FlightActivity(
               userId: entry.user.id,
@@ -711,23 +777,39 @@ class _InsertActivityAdminScreenState
               activityDate: _crewFlightDate,
               flightHours: hours ?? 0,
               description: desc,
-              isPoligono: entry.role == 'MDB' ? _crewFlightIsPoligono : false,
+              isPoligono: entry.role == 'MTB' ? _crewFlightIsPoligono : false,
               submittedBy: adminId,
             ),
             adminId,
           );
-        } else if (entry.role == 'TOB' && entry.tobCapabilityId != null) {
-          await _activityService.addTobActivityValidated(
-            TobActivity(
-              userId: entry.user.id,
-              helicopterTypeId: helicopterId,
-              tobCapabilityId: entry.tobCapabilityId!,
-              activityDate: _crewFlightDate,
-              description: desc,
-              submittedBy: adminId,
-            ),
-            adminId,
-          );
+        } else if (entry.role == 'TOB') {
+          if (entry.tobCapabilityId != null) {
+            await _activityService.addTobActivityValidated(
+              TobActivity(
+                userId: entry.user.id,
+                helicopterTypeId: helicopterId,
+                tobCapabilityId: entry.tobCapabilityId!,
+                activityDate: _crewFlightDate,
+                description: desc,
+                submittedBy: adminId,
+              ),
+              adminId,
+            );
+          } else if (hours != null && hours > 0) {
+            // Base TOB (no capability): record as a flight activity
+            await _activityService.addFlightActivityValidated(
+              FlightActivity(
+                userId: entry.user.id,
+                helicopterTypeId: helicopterId,
+                activityDate: _crewFlightDate,
+                flightHours: hours,
+                description: desc,
+                isPoligono: false,
+                submittedBy: adminId,
+              ),
+              adminId,
+            );
+          }
         }
       }
       if (mounted) {
@@ -767,15 +849,9 @@ class _InsertActivityAdminScreenState
 
   @override
   Widget build(BuildContext context) {
-    final maintenanceHelicopters = _uniqueHelicoptersFromPrivileges(
-      _privileges,
-    );
-    final filteredPrivileges = _privileges
-        .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
-        .toList();
     final tAssignments = _crews.where((item) => item.crewType == 'T').toList();
     final mdbAssignments = _crews
-        .where((item) => item.crewType == 'MDB')
+        .where((item) => item.crewType == 'MTB')
         .toList();
     final tobAssignments = _crews
         .where((item) => item.crewType == 'TOB')
@@ -794,6 +870,16 @@ class _InsertActivityAdminScreenState
     final filteredCapabilities = _tobCapabilities
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
+
+    final auth = ref.read(authProvider);
+    final allHelicopterTypes = auth.helicopterTypes;
+    final allPrivilegeTypes = auth.privilegeTypes;
+    final maintUsers = _users.where((u) {
+      if (_maintenanceUserSearch.isEmpty) return true;
+      return u.fullName.toLowerCase().contains(
+        _maintenanceUserSearch.toLowerCase(),
+      );
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -828,7 +914,6 @@ class _InsertActivityAdminScreenState
                     final currentTab = _tabs[_tabController.index];
                     final needsUserSelector =
                         currentTab == _AdminInsertTabType.maintenance ||
-                        currentTab == _AdminInsertTabType.seminar ||
                         currentTab == _AdminInsertTabType.flight ||
                         currentTab == _AdminInsertTabType.tob;
                     if (!needsUserSelector) {
@@ -914,7 +999,7 @@ class _InsertActivityAdminScreenState
                                   children: [
                                     Expanded(
                                       child: _AdminDateButton(
-                                        label: 'Dal (opzionale)',
+                                        label: 'Dal',
                                         date: _workOrderDateFrom,
                                         onPressed: () async {
                                           final picked = await showDatePicker(
@@ -936,7 +1021,7 @@ class _InsertActivityAdminScreenState
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: _AdminDateButton(
-                                        label: 'Al (opzionale)',
+                                        label: 'Al',
                                         date: _workOrderDateTo,
                                         onPressed: () async {
                                           final picked = await showDatePicker(
@@ -1065,7 +1150,7 @@ class _InsertActivityAdminScreenState
                                         ),
                                       ),
                                       title: Text(entry.user.fullName),
-                                      subtitle: Text(entry.privilegeName),
+                                      subtitle: Text(entry.privilegeSummary),
                                       trailing: IconButton(
                                         icon: const Icon(
                                           Icons.remove_circle_outline,
@@ -1132,7 +1217,7 @@ class _InsertActivityAdminScreenState
                                 TextField(
                                   controller: _crewFlightHoursCtrl,
                                   decoration: const InputDecoration(
-                                    labelText: 'Ore di volo (per membri T/MDB)',
+                                    labelText: 'Ore di volo (per membri T/MTB)',
                                     hintText: 'es. 1.5',
                                   ),
                                   keyboardType:
@@ -1141,13 +1226,13 @@ class _InsertActivityAdminScreenState
                                       ),
                                 ),
                                 if (_crewEntries.any(
-                                  (entry) => entry.role == 'MDB',
+                                  (entry) => entry.role == 'MTB',
                                 )) ...[
                                   const SizedBox(height: 8),
                                   CheckboxListTile(
                                     contentPadding: EdgeInsets.zero,
                                     title: const Text(
-                                      'Attività a fuoco (solo membri MDB)',
+                                      'Attività a fuoco (solo membri MTB)',
                                     ),
                                     value: _crewFlightIsPoligono,
                                     onChanged: (value) => setState(
@@ -1205,9 +1290,11 @@ class _InsertActivityAdminScreenState
                                       title: Text(entry.user.fullName),
                                       subtitle: Text(
                                         entry.role == 'TOB'
-                                            ? 'TOB · ${entry.tobCapabilityName ?? ''}'
-                                            : entry.role == 'MDB'
-                                            ? 'MDB · Mitragliere di Bordo'
+                                            ? entry.tobCapabilityName != null
+                                                  ? 'TOB · ${entry.tobCapabilityName}'
+                                                  : 'TOB (base)'
+                                            : entry.role == 'MTB'
+                                            ? 'MTB · Mitragliere di Bordo'
                                             : 'T · Pilota/Equipaggio',
                                       ),
                                       trailing: IconButton(
@@ -1234,60 +1321,54 @@ class _InsertActivityAdminScreenState
                           );
                         case _AdminInsertTabType.maintenance:
                           return _AdminActivityTab(
-                            enabled:
-                                _selectedUser != null &&
-                                maintenanceHelicopters.isNotEmpty,
+                            enabled: true,
                             child: _AdminActivityCard(
                               children: [
                                 DropdownButtonFormField<int>(
-                                  initialValue:
-                                      maintenanceHelicopters.any(
-                                        (item) =>
-                                            item.id == _maintenanceHelicopterId,
-                                      )
-                                      ? _maintenanceHelicopterId
-                                      : null,
+                                  initialValue: _maintenanceHelicopterId,
+                                  menuMaxHeight: 300,
                                   decoration: const InputDecoration(
                                     labelText: 'Elicottero',
                                   ),
-                                  items: maintenanceHelicopters
+                                  items: allHelicopterTypes
                                       .map(
-                                        (item) => DropdownMenuItem<int>(
-                                          value: item.id,
-                                          child: Text(item.name),
+                                        (h) => DropdownMenuItem<int>(
+                                          value: h.id,
+                                          child: Text(h.name),
                                         ),
                                       )
                                       .toList(),
-                                  onChanged: (value) => setState(
-                                    () => _maintenanceHelicopterId = value,
-                                  ),
+                                  onChanged: (value) => setState(() {
+                                    _maintenanceHelicopterId = value;
+                                    _maintenancePrivilegeIds.clear();
+                                  }),
                                 ),
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<int>(
-                                  initialValue:
-                                      filteredPrivileges.any(
-                                        (item) =>
-                                            item.privilegeTypeId ==
-                                            _maintenancePrivilegeId,
-                                      )
-                                      ? _maintenancePrivilegeId
-                                      : null,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Privilegio',
+                                if (_maintenanceHelicopterId != null) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Privilegi esercitati',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelLarge,
                                   ),
-                                  items: filteredPrivileges
-                                      .map(
-                                        (item) => DropdownMenuItem<int>(
-                                          value: item.privilegeTypeId,
-                                          child: Text(item.privilegeName),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) => setState(
-                                    () => _maintenancePrivilegeId = value,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
+                                  ...allPrivilegeTypes.map((p) {
+                                    final sel = _maintenancePrivilegeIds
+                                        .contains(p.id);
+                                    return CheckboxListTile(
+                                      dense: true,
+                                      value: sel,
+                                      title: Text('${p.code} · ${p.name}'),
+                                      onChanged: (v) => setState(() {
+                                        if (v == true) {
+                                          _maintenancePrivilegeIds.add(p.id);
+                                        } else {
+                                          _maintenancePrivilegeIds.remove(p.id);
+                                        }
+                                      }),
+                                    );
+                                  }),
+                                ],
+                                const SizedBox(height: 12),
                                 _AdminDateButton(
                                   label: 'Data attività',
                                   date: _maintenanceDate,
@@ -1296,39 +1377,15 @@ class _InsertActivityAdminScreenState
                                     _maintenanceDate,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 12),
                                 TextField(
                                   controller: _maintenanceDescCtrl,
-                                  maxLines: 3,
+                                  maxLines: 2,
                                   decoration: const InputDecoration(
                                     labelText: 'Descrizione',
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<String>(
-                                  initialValue: _maintenanceActivityType,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tipo attività (opzionale)',
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'Linea',
-                                      child: Text('Linea'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'Motori',
-                                      child: Text('Motori'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'Altri',
-                                      child: Text('Altri'),
-                                    ),
-                                  ],
-                                  onChanged: (value) => setState(
-                                    () => _maintenanceActivityType = value,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 12),
                                 TextField(
                                   controller: _maintenanceMatricolaCtrl,
                                   decoration: const InputDecoration(
@@ -1336,18 +1393,90 @@ class _InsertActivityAdminScreenState
                                     hintText: 'es. MM1234',
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 12),
                                 TextField(
                                   controller: _maintenanceNumCarrCtrl,
                                   decoration: const InputDecoration(
                                     labelText: 'Num. carrozzella (opzionale)',
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 12),
                                 TextField(
                                   controller: _maintenanceOrdLavCtrl,
                                   decoration: const InputDecoration(
                                     labelText: 'Ordine di lavoro (opzionale)',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Tecnici (${_maintenanceUserIds.length})',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => setState(() {
+                                        if (_maintenanceUserIds.length ==
+                                            maintUsers.length) {
+                                          _maintenanceUserIds.clear();
+                                        } else {
+                                          _maintenanceUserIds.addAll(
+                                            maintUsers.map((u) => u.id),
+                                          );
+                                        }
+                                      }),
+                                      child: Text(
+                                        _maintenanceUserIds.length ==
+                                                maintUsers.length
+                                            ? 'Deseleziona tutti'
+                                            : 'Seleziona tutti',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                TextField(
+                                  decoration: const InputDecoration(
+                                    labelText: 'Cerca tecnico',
+                                    prefixIcon: Icon(Icons.search),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (v) => setState(
+                                    () => _maintenanceUserSearch = v,
+                                  ),
+                                ),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 200,
+                                  ),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: maintUsers.length,
+                                    itemBuilder: (context, idx) {
+                                      final u = maintUsers[idx];
+                                      final sel = _maintenanceUserIds.contains(
+                                        u.id,
+                                      );
+                                      return CheckboxListTile(
+                                        dense: true,
+                                        value: sel,
+                                        title: Text(u.fullName),
+                                        subtitle: Text(
+                                          u.orgUnitName,
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        onChanged: (v) => setState(() {
+                                          if (v == true) {
+                                            _maintenanceUserIds.add(u.id);
+                                          } else {
+                                            _maintenanceUserIds.remove(u.id);
+                                          }
+                                        }),
+                                      );
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
@@ -1361,21 +1490,44 @@ class _InsertActivityAdminScreenState
                             ),
                           );
                         case _AdminInsertTabType.seminar:
+                          final seminarUsers = _users.where((u) {
+                            if (_seminarUserSearch.isEmpty) return true;
+                            return u.fullName.toLowerCase().contains(
+                              _seminarUserSearch.toLowerCase(),
+                            );
+                          }).toList();
                           return _AdminActivityTab(
-                            enabled:
-                                _selectedUser != null && _privileges.isNotEmpty,
+                            enabled: true,
                             child: _AdminActivityCard(
                               children: [
                                 Text(
-                                  'Seminario NAM e MHF',
+                                  'Seminario NAM / MHF',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.titleMedium,
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Inserisci direttamente un seminario biennale NAM/MHF già validato per l\'utente selezionato.',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  value: _seminarType,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Tipo seminario',
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'NAM',
+                                      child: Text('NAM'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'MHF',
+                                      child: Text('MHF'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'NAM_MHF',
+                                      child: Text('NAM + MHF'),
+                                    ),
+                                  ],
+                                  onChanged: (v) =>
+                                      setState(() => _seminarType = v ?? 'NAM'),
                                 ),
                                 const SizedBox(height: 16),
                                 _AdminDateButton(
@@ -1389,17 +1541,88 @@ class _InsertActivityAdminScreenState
                                 const SizedBox(height: 16),
                                 TextField(
                                   controller: _seminarDescCtrl,
-                                  maxLines: 3,
+                                  maxLines: 2,
                                   decoration: const InputDecoration(
                                     labelText: 'Note (opzionale)',
-                                    hintText:
-                                        'es. Sede: CAAE Viterbo - Nr. ordine giornale ...',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Partecipanti (${_seminarUserIds.length}/${seminarUsers.length})',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => setState(() {
+                                        if (_seminarUserIds.length ==
+                                            seminarUsers.length) {
+                                          _seminarUserIds.clear();
+                                        } else {
+                                          _seminarUserIds.addAll(
+                                            seminarUsers.map((u) => u.id),
+                                          );
+                                        }
+                                      }),
+                                      child: Text(
+                                        _seminarUserIds.length ==
+                                                seminarUsers.length
+                                            ? 'Deseleziona tutti'
+                                            : 'Seleziona tutti',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                TextField(
+                                  controller: _seminarSearchCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Cerca partecipante',
+                                    prefixIcon: Icon(Icons.search),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (v) =>
+                                      setState(() => _seminarUserSearch = v),
+                                ),
+                                const SizedBox(height: 8),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 250,
+                                  ),
+                                  child: ListView.builder(
+                                    shrinkWrap: true,
+                                    itemCount: seminarUsers.length,
+                                    itemBuilder: (context, idx) {
+                                      final u = seminarUsers[idx];
+                                      final sel = _seminarUserIds.contains(
+                                        u.id,
+                                      );
+                                      return CheckboxListTile(
+                                        dense: true,
+                                        value: sel,
+                                        title: Text(u.fullName),
+                                        subtitle: Text(
+                                          u.orgUnitName,
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        onChanged: (v) => setState(() {
+                                          if (v == true) {
+                                            _seminarUserIds.add(u.id);
+                                          } else {
+                                            _seminarUserIds.remove(u.id);
+                                          }
+                                        }),
+                                      );
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
                                 ElevatedButton(
                                   onPressed: _saving ? null : _submitSeminar,
-                                  child: const Text('Inserisci come validato'),
+                                  child: const Text('Inserisci seminario'),
                                 ),
                               ],
                             ),
@@ -1573,20 +1796,6 @@ class _InsertActivityAdminScreenState
     );
   }
 
-  List<_ActivityHelicopterOption> _uniqueHelicoptersFromPrivileges(
-    List<UserPrivilege> privileges,
-  ) {
-    final map = <int, _ActivityHelicopterOption>{};
-    for (final privilege in privileges) {
-      map[privilege.helicopterTypeId] = _ActivityHelicopterOption(
-        id: privilege.helicopterTypeId,
-        code: privilege.helicopterCode,
-        name: privilege.helicopterName,
-      );
-    }
-    return map.values.toList();
-  }
-
   List<_ActivityHelicopterOption> _uniqueCrewHelicopters(
     List<UserCrewAssignment> assignments,
   ) {
@@ -1617,13 +1826,15 @@ class _ActivityHelicopterOption {
 class _TechEntry {
   const _TechEntry({
     required this.user,
-    required this.privilegeTypeId,
-    required this.privilegeName,
+    required this.privilegeTypeIds,
+    required this.privilegeNames,
   });
 
   final UserProfile user;
-  final int privilegeTypeId;
-  final String privilegeName;
+  final List<int> privilegeTypeIds;
+  final List<String> privilegeNames;
+
+  String get privilegeSummary => privilegeNames.join(', ');
 }
 
 class _CrewEntry {

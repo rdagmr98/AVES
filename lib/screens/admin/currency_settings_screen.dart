@@ -35,6 +35,7 @@ class _CurrencySettingsScreenState
             (criteria.criteriaType == 'FLIGHT_T' ||
                 criteria.criteriaType == 'TOB_BASE' ||
                 criteria.criteriaType == 'TOB_CAPABILITY' ||
+                criteria.criteriaType == 'MTB_POLIGONO' ||
                 criteria.criteriaType == 'MDB_FLIGHT' ||
                 criteria.criteriaType == 'MDB_POLIGONO'));
     if (!canEdit) {
@@ -228,6 +229,7 @@ class _CurrencySettingsScreenState
         return c.criteriaType == 'FLIGHT_T' ||
             c.criteriaType == 'TOB_BASE' ||
             c.criteriaType == 'TOB_CAPABILITY' ||
+            c.criteriaType == 'MTB_POLIGONO' ||
             c.criteriaType == 'MDB_FLIGHT' ||
             c.criteriaType == 'MDB_POLIGONO';
       }
@@ -278,6 +280,8 @@ class _CurrencySettingsScreenState
         return 'Currency base TOB (qualsiasi volo come equipaggio)';
       case 'TOB_CAPABILITY':
         return 'TOB · ${criteria.tobCapabilityName ?? 'Capacità'}';
+      case 'MTB_POLIGONO':
+        return 'Mitragliere di Bordo (MTB) · Attività a fuoco';
       case 'MDB_FLIGHT':
         return 'Mitragliere di Bordo · Ore di volo';
       case 'MDB_POLIGONO':
@@ -295,6 +299,9 @@ class _CurrencySettingsScreenState
     }
     if (c.criteriaType == 'FLIGHT_T' || c.criteriaType == 'MDB_FLIGHT') {
       return 'Periodo: ${c.periodDays} gg · Ore minime: ${c.minHours?.toStringAsFixed(1) ?? '-'}';
+    }
+    if (c.criteriaType == 'MTB_POLIGONO') {
+      return 'Periodo base: ${c.periodDays} gg · Poligoni minimi: ${c.minCount ?? 1} (TI: 730 gg)';
     }
     if (c.criteriaType == 'MDB_POLIGONO') {
       return 'Periodo: ${c.periodDays} gg · Poligoni minimi: ${c.minCount ?? '-'}';

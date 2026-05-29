@@ -824,7 +824,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           .map((i) => i.helicopterTypeId)
           .toSet();
       _mdbCrewHelicopters = crews
-          .where((i) => i.crewType == 'MDB')
+          .where((i) => i.crewType == 'MTB')
           .map((i) => i.helicopterTypeId)
           .toSet();
       _tobGrades = {
@@ -1010,11 +1010,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
             'tob_grade': _tobGrades[id] ?? 'A',
           },
         for (final id in _mdbCrewHelicopters)
-          {
-            'helicopter_type_id': id,
-            'crew_type': 'MDB',
-            'tob_grade': null,
-          },
+          {'helicopter_type_id': id, 'crew_type': 'MTB', 'tob_grade': null},
       ];
       await widget.service.setUserCrewAssignments(_user.id, assignments);
       await widget.service.setUserTobCapabilities(
@@ -1764,7 +1760,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          'Mitragliere di Bordo (MDB)',
+                                          'Mitragliere di Bordo (MTB)',
                                           style: Theme.of(
                                             context,
                                           ).textTheme.titleSmall,
@@ -1823,7 +1819,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                                 ),
                                               ),
                                               subtitle: const Text(
-                                                'MDB richiede solo il tipo equipaggio e l\'elicottero selezionato.',
+                                                'MTB richiede solo il tipo equipaggio e l\'elicottero selezionato.',
                                               ),
                                               trailing: IconButton(
                                                 icon: const Icon(

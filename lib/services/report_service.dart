@@ -308,7 +308,6 @@ class ReportService {
       'ISP',
     ];
     final matrixRows = <List<String>>[];
-    final detailRows = <List<String>>[];
 
     for (final user in users.where((item) => item.isApprovedMaint)) {
       if (orgUnitId != null && user.orgUnitId != orgUnitId) {
@@ -346,7 +345,7 @@ class ReportService {
           )
           .toList();
       final privilegeSet = privilegesForRow
-          .map((p) => p.privilegeName.toUpperCase())
+          .map((p) => p.privilegeCode.toUpperCase())
           .toSet();
 
       final matrixRow = [
@@ -356,19 +355,6 @@ class ReportService {
         ...privilegeTypes.map((type) => privilegeSet.contains(type) ? '■' : ''),
       ];
       matrixRows.add(matrixRow);
-
-      final detailPrivileges = privilegesForRow.isEmpty
-          ? '-'
-          : privilegesForRow
-                .map((p) => '${p.helicopterCode} ${p.privilegeName}')
-                .join(', ');
-      detailRows.add([
-        user.fullName,
-        licenseStr.isEmpty ? '-' : licenseStr,
-        numeroLicenza,
-        user.orgUnitName,
-        detailPrivileges,
-      ]);
     }
 
     final pdf = pw.Document();
@@ -406,34 +392,6 @@ class ReportService {
             cellStyle: const pw.TextStyle(fontSize: 8),
             cellAlignment: pw.Alignment.center,
             cellPadding: const pw.EdgeInsets.all(4),
-          ),
-          pw.SizedBox(height: 24),
-          pw.Text(
-            'Dettaglio Privilegi',
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 8),
-          pw.TableHelper.fromTextArray(
-            headers: [
-              'Nome',
-              'Tipo Licenza',
-              'N° Licenza',
-              'U.O.',
-              'Privilegi',
-            ],
-            data: detailRows.isEmpty
-                ? [List<String>.filled(5, '-')]
-                : detailRows,
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.white,
-            ),
-            headerDecoration: const pw.BoxDecoration(
-              color: PdfColors.blueGrey800,
-            ),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            cellAlignment: pw.Alignment.centerLeft,
-            cellPadding: const pw.EdgeInsets.all(6),
           ),
         ],
       ),

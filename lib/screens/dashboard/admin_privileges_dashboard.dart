@@ -359,7 +359,9 @@ class _AdminPrivilegesDashboardState
                   // Group privileges by helicopter
                   final heliGroups = <int, List<PrivilegeCurrencyStatus>>{};
                   for (final ps in row.perPrivilegeCurrency) {
-                    heliGroups.putIfAbsent(ps.helicopterTypeId, () => []).add(ps);
+                    heliGroups
+                        .putIfAbsent(ps.helicopterTypeId, () => [])
+                        .add(ps);
                   }
                   // Also include helicopters that only have licenses (no privileges)
                   for (final lic in row.licenses) {
@@ -370,9 +372,16 @@ class _AdminPrivilegesDashboardState
                     final privileges = heliEntry.value;
                     final heliCode = privileges.isNotEmpty
                         ? privileges.first.helicopterCode
-                        : row.licenses.where((l) => l.helicopterTypeId == heliId).first.helicopterCode;
-                    final heliLicenses = row.licenses.where((l) => l.helicopterTypeId == heliId).toList();
-                    final licenseLabel = heliLicenses.isNotEmpty ? '  ·  Cat. ${heliLicenses.first.licenseCode}' : '';
+                        : row.licenses
+                              .where((l) => l.helicopterTypeId == heliId)
+                              .first
+                              .helicopterCode;
+                    final heliLicenses = row.licenses
+                        .where((l) => l.helicopterTypeId == heliId)
+                        .toList();
+                    final licenseLabel = heliLicenses.isNotEmpty
+                        ? '  ·  Cat. ${heliLicenses.first.licenseCode}'
+                        : '';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       child: Padding(
@@ -383,14 +392,16 @@ class _AdminPrivilegesDashboardState
                             // Helicopter + license header
                             Text(
                               '$heliCode$licenseLabel',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                               softWrap: true,
                             ),
                             if (privileges.isEmpty) ...[
                               const SizedBox(height: 6),
-                              const Text('Nessun privilegio assegnato.', style: TextStyle(fontStyle: FontStyle.italic)),
+                              const Text(
+                                'Nessun privilegio assegnato.',
+                                style: TextStyle(fontStyle: FontStyle.italic),
+                              ),
                             ] else ...[
                               const SizedBox(height: 8),
                               ...privileges.map((privStatus) {
@@ -398,7 +409,8 @@ class _AdminPrivilegesDashboardState
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 6),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
@@ -410,18 +422,25 @@ class _AdminPrivilegesDashboardState
                                           ),
                                           const SizedBox(width: 8),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: privStatus.status.isExpired
                                                   ? const Color(0xFFC0392B)
                                                   : privStatus.status.isWarning
                                                   ? const Color(0xFFE67E22)
                                                   : const Color(0xFF27AE60),
-                                              borderRadius: BorderRadius.circular(10),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
                                             ),
                                             child: Text(
                                               privStatus.status.statusText,
-                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -432,37 +451,57 @@ class _AdminPrivilegesDashboardState
                                           onPressed: () async {
                                             final confirmed = await showDialog<bool>(
                                               context: dialogContext,
-                                              builder: (confirmContext) => AlertDialog(
-                                                title: const Text('Conferma rimozione', softWrap: true),
-                                                content: Text(
-                                                  'Vuoi rimuovere il privilegio ${privStatus.privilegeName} su ${privStatus.helicopterCode} dall\'utente ${row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
-                                                  softWrap: true,
-                                                ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () => Navigator.of(confirmContext).pop(false),
-                                                    child: const Text('Annulla'),
+                                              builder: (confirmContext) =>
+                                                  AlertDialog(
+                                                    title: const Text(
+                                                      'Conferma rimozione',
+                                                      softWrap: true,
+                                                    ),
+                                                    content: Text(
+                                                      'Vuoi rimuovere il privilegio ${privStatus.privilegeName} su ${privStatus.helicopterCode} dall\'utente ${row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
+                                                      softWrap: true,
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                              confirmContext,
+                                                            ).pop(false),
+                                                        child: const Text(
+                                                          'Annulla',
+                                                        ),
+                                                      ),
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                              confirmContext,
+                                                            ).pop(true),
+                                                        child: const Text(
+                                                          'Rimuovi',
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                  TextButton(
-                                                    onPressed: () => Navigator.of(confirmContext).pop(true),
-                                                    child: const Text('Rimuovi'),
-                                                  ),
-                                                ],
-                                              ),
                                             );
-                                            if (confirmed == true && context.mounted) {
-                                              await _userService.removePrivilege(
-                                                row.user.id,
-                                                privStatus.helicopterTypeId,
-                                                privStatus.privilegeTypeId,
-                                              );
+                                            if (confirmed == true &&
+                                                context.mounted) {
+                                              await _userService
+                                                  .removePrivilege(
+                                                    row.user.id,
+                                                    privStatus.helicopterTypeId,
+                                                    privStatus.privilegeTypeId,
+                                                  );
                                               if (dialogContext.mounted) {
-                                                Navigator.of(dialogContext).pop();
+                                                Navigator.of(
+                                                  dialogContext,
+                                                ).pop();
                                               }
                                               await _loadData();
                                             }
                                           },
-                                          child: const Text('Rimuovi privilegio scaduto'),
+                                          child: const Text(
+                                            'Rimuovi privilegio scaduto',
+                                          ),
                                         ),
                                       ],
                                     ],
@@ -502,7 +541,7 @@ class _AdminPrivilegesDashboardState
       physics: const NeverScrollableScrollPhysics(),
       itemCount: filteredRows.length,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 120,
+        maxCrossAxisExtent: 110,
         childAspectRatio: 1.0,
         crossAxisSpacing: 4,
         mainAxisSpacing: 4,
@@ -540,21 +579,29 @@ class _AdminPrivilegesDashboardState
                 children: [
                   UserAvatar(user: row.user, radius: 14),
                   const SizedBox(height: 4),
-                  Text(
-                    row.user.nome,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  Text(
-                    row.user.cognome,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              row.user.nome,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                            Text(
+                              row.user.cognome,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -946,17 +993,20 @@ class _AdminPrivilegesDashboardState
       return CurrencyStatus(status: CurrencyStatusEnum.noData, label: label);
     }
 
-    final activityDates = items
-        .map((item) => item.lastActivityDate)
-        .whereType<DateTime>()
-        .toList(growable: false)
-      ..sort();
-    final expiryDates = items
-        .map((item) => item.expiryDate)
-        .whereType<DateTime>()
-        .toList(growable: false)
-      ..sort();
-    final aggregatedStatus = items.any((item) => item.status == CurrencyStatusEnum.expired)
+    final activityDates =
+        items
+            .map((item) => item.lastActivityDate)
+            .whereType<DateTime>()
+            .toList(growable: false)
+          ..sort();
+    final expiryDates =
+        items
+            .map((item) => item.expiryDate)
+            .whereType<DateTime>()
+            .toList(growable: false)
+          ..sort();
+    final aggregatedStatus =
+        items.any((item) => item.status == CurrencyStatusEnum.expired)
         ? CurrencyStatusEnum.expired
         : items.any((item) => item.status == CurrencyStatusEnum.suspended)
         ? CurrencyStatusEnum.suspended
@@ -975,12 +1025,13 @@ class _AdminPrivilegesDashboardState
   }
 
   String _joinDistinctLabels(Iterable<String> values) {
-    final items = values
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList(growable: false)
-      ..sort();
+    final items =
+        values
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
     return items.isEmpty ? '-' : items.join(', ');
   }
 
@@ -996,29 +1047,34 @@ class _AdminPrivilegesDashboardState
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 780;
-                    final helicopterIds = {
-                      ...row.licenses.map((item) => item.helicopterTypeId),
-                      ...row.privileges.map((item) => item.helicopterTypeId),
-                      ...row.perPrivilegeCurrency.map(
-                        (item) => item.helicopterTypeId,
-                      ),
-                    }.toList(growable: false)
-                      ..sort((a, b) {
-                        String codeFor(int id) {
-                          for (final item in row.licenses) {
-                            if (item.helicopterTypeId == id) return item.helicopterCode;
+                    final helicopterIds =
+                        {
+                          ...row.licenses.map((item) => item.helicopterTypeId),
+                          ...row.privileges.map(
+                            (item) => item.helicopterTypeId,
+                          ),
+                          ...row.perPrivilegeCurrency.map(
+                            (item) => item.helicopterTypeId,
+                          ),
+                        }.toList(growable: false)..sort((a, b) {
+                          String codeFor(int id) {
+                            for (final item in row.licenses) {
+                              if (item.helicopterTypeId == id)
+                                return item.helicopterCode;
+                            }
+                            for (final item in row.privileges) {
+                              if (item.helicopterTypeId == id)
+                                return item.helicopterCode;
+                            }
+                            for (final item in row.perPrivilegeCurrency) {
+                              if (item.helicopterTypeId == id)
+                                return item.helicopterCode;
+                            }
+                            return '$id';
                           }
-                          for (final item in row.privileges) {
-                            if (item.helicopterTypeId == id) return item.helicopterCode;
-                          }
-                          for (final item in row.perPrivilegeCurrency) {
-                            if (item.helicopterTypeId == id) return item.helicopterCode;
-                          }
-                          return '$id';
-                        }
 
-                        return codeFor(a).compareTo(codeFor(b));
-                      });
+                          return codeFor(a).compareTo(codeFor(b));
+                        });
 
                     Widget buildInfoPill(IconData icon, String label) {
                       return Container(
@@ -1027,18 +1083,22 @@ class _AdminPrivilegesDashboardState
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant.withValues(alpha: 0.72),
+                          color: AppColors.surfaceVariant.withValues(
+                            alpha: 0.72,
+                          ),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: AppColors.border),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(icon, size: 16, color: AppColors.textSecondary),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(label, softWrap: true),
+                            Icon(
+                              icon,
+                              size: 16,
+                              color: AppColors.textSecondary,
                             ),
+                            const SizedBox(width: 8),
+                            Flexible(child: Text(label, softWrap: true)),
                           ],
                         ),
                       );
@@ -1080,7 +1140,9 @@ class _AdminPrivilegesDashboardState
                         width: compact ? double.infinity : 250,
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                          color: AppColors.surfaceVariant.withValues(
+                            alpha: 0.5,
+                          ),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: AppColors.border),
                         ),
@@ -1114,7 +1176,11 @@ class _AdminPrivilegesDashboardState
                                   ),
                                 ),
                                 const Spacer(),
-                                Icon(status.icon, color: status.color, size: 18),
+                                Icon(
+                                  status.icon,
+                                  color: status.color,
+                                  size: 18,
+                                ),
                                 const SizedBox(width: 6),
                                 Container(
                                   width: 10,
@@ -1164,27 +1230,31 @@ class _AdminPrivilegesDashboardState
                           const SizedBox(height: 14),
                           Text(
                             row.user.fullName,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                            textAlign: compact ? TextAlign.center : TextAlign.left,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                            textAlign: compact
+                                ? TextAlign.center
+                                : TextAlign.left,
                             softWrap: true,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             row.user.numeroLicenza ?? 'Licenza non indicata',
                             style: Theme.of(context).textTheme.bodyLarge,
-                            textAlign: compact ? TextAlign.center : TextAlign.left,
+                            textAlign: compact
+                                ? TextAlign.center
+                                : TextAlign.left,
                           ),
                           const SizedBox(height: 4),
                           Text(
                             row.user.orgUnitName.isEmpty
                                 ? 'Unità non indicata'
                                 : row.user.orgUnitName,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                            textAlign: compact ? TextAlign.center : TextAlign.left,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.textSecondary),
+                            textAlign: compact
+                                ? TextAlign.center
+                                : TextAlign.left,
                             softWrap: true,
                           ),
                         ],
@@ -1196,7 +1266,9 @@ class _AdminPrivilegesDashboardState
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: AppColors.surfaceVariant.withValues(alpha: 0.4),
+                              color: AppColors.surfaceVariant.withValues(
+                                alpha: 0.4,
+                              ),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(color: AppColors.border),
                             ),
@@ -1223,7 +1295,8 @@ class _AdminPrivilegesDashboardState
                           );
 
                     final emailAvailable =
-                        row.user.email != null && row.user.email!.trim().isNotEmpty;
+                        row.user.email != null &&
+                        row.user.email!.trim().isNotEmpty;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1269,7 +1342,10 @@ class _AdminPrivilegesDashboardState
                                     vertical: 10,
                                   ),
                                 ),
-                                icon: const Icon(Icons.email_outlined, size: 18),
+                                icon: const Icon(
+                                  Icons.email_outlined,
+                                  size: 18,
+                                ),
                                 label: const Text('Email'),
                               ),
                           ],

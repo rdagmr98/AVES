@@ -526,6 +526,90 @@ class CurrencyService {
     return null;
   }
 
+  Future<CurrencyCriteria?> getMtbPoligonoCriteria() async {
+    for (final item in _db.criteria) {
+      if (item['criteria_type'] == 'MTB_POLIGONO') {
+        return CurrencyCriteria.fromJson(item);
+      }
+    }
+    return null;
+  }
+
+  Future<CurrencyStatus> getMtbCurrency(
+    String userId,
+    List<UserCrewAssignment> crewAssignments,
+    bool isTi,
+  ) async {
+    if (!crewAssignments.any((item) => item.crewType == 'MTB')) {
+      return const CurrencyStatus(
+        status: CurrencyStatusEnum.noData,
+        label: 'Nessuna assegnazione Mitragliere di Bordo',
+      );
+    }
+
+    final poligonoCriteria = await getMtbPoligonoCriteria();
+    // MTB: 3 years for normal users, 2 years for TI instructors
+    final basePeriodDays =
+        poligonoCriteria?.periodDays ?? 1095; // 3 years default
+    final poligonoPeriodDays = isTi ? 730 : basePeriodDays; // 2 years for TI
+    final minPoligonoCount = poligonoCriteria?.minCount ?? 1;
+
+    final poligonoSince = DateTime.now().subtract(
+      Duration(days: poligonoPeriodDays),
+    );
+    final poligonoActs =
+        _db.flightActs
+            .where(
+              (item) =>
+                  item['user_id'] == userId &&
+                  item['is_validated'] == true &&
+                  item['is_poligono'] == true,
+            )
+            .toList()
+          ..sort(
+            (a, b) => DateTime.parse(
+              b['activity_date'] as String,
+            ).compareTo(DateTime.parse(a['activity_date'] as String)),
+          );
+    final recentPoligonoActs = poligonoActs.where(
+      (item) => !DateTime.parse(
+        item['activity_date'] as String,
+      ).isBefore(poligonoSince),
+    );
+    final poligonoCount = recentPoligonoActs.length;
+    final lastPoligonoDate = poligonoActs.isEmpty
+        ? null
+        : DateTime.parse(poligonoActs.first['activity_date'] as String);
+    final baseStatus = _computeStatus(
+      lastDate: lastPoligonoDate,
+      periodDays: poligonoPeriodDays,
+      label: 'Poligono MTB',
+    );
+
+    final periodLabel = isTi ? '2 anni (TI)' : '3 anni';
+    final label =
+        'Mitragliere di Bordo · Poligoni $poligonoCount/$minPoligonoCount · $periodLabel';
+
+    if (poligonoCount < minPoligonoCount) {
+      return CurrencyStatus(
+        status: lastPoligonoDate == null
+            ? CurrencyStatusEnum.expired
+            : baseStatus.status,
+        lastActivityDate: lastPoligonoDate,
+        expiryDate: baseStatus.expiryDate,
+        daysUntilExpiry: baseStatus.daysUntilExpiry,
+        label: '$label · Poligono mancante',
+      );
+    }
+    return CurrencyStatus(
+      status: baseStatus.status,
+      lastActivityDate: lastPoligonoDate,
+      expiryDate: baseStatus.expiryDate,
+      daysUntilExpiry: baseStatus.daysUntilExpiry,
+      label: label,
+    );
+  }
+
   Future<CurrencyStatus> getTobBaseCurrency(
     String userId,
     String? fascia,
@@ -801,16 +885,18 @@ class CurrencyService {
       }
     }
 
-    if (crewTypes.contains('MDB')) {
-      result['mdb'] = await getMdbCurrency(
-        userId,
-        _db.crew
-            .where(
-              (item) => item['user_id'] == userId && item['active'] == true,
-            )
-            .map(UserCrewAssignment.fromJson)
-            .toList(growable: false),
+    if (crewTypes.contains('MTB')) {
+      final userCrews = _db.crew
+          .where((item) => item['user_id'] == userId && item['active'] == true)
+          .map(UserCrewAssignment.fromJson)
+          .toList(growable: false);
+      // Get isTi from users list
+      final userJson = _db.users.firstWhere(
+        (u) => u['id'] == userId,
+        orElse: () => <String, dynamic>{},
       );
+      final isTi = userJson['is_ti'] as bool? ?? false;
+      result['mtb'] = await getMtbCurrency(userId, userCrews, isTi);
     }
 
     return result;

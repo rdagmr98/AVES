@@ -150,8 +150,12 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           fascia,
         );
       }
-      if (assignments.any((item) => item.crewType == 'MDB')) {
-        mdbStatus = await _currencyService.getMdbCurrency(user.id, assignments);
+      if (assignments.any((item) => item.crewType == 'MTB')) {
+        mdbStatus = await _currencyService.getMtbCurrency(
+          user.id,
+          assignments,
+          user.isTi,
+        );
       }
       final tobStatuses = <String, CurrencyStatus>{};
       for (final capability in tobCapabilities) {
@@ -405,8 +409,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                         label: Text(
                           item.crewType == 'TOB'
                               ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
-                              : item.crewType == 'MDB'
-                              ? '${item.helicopterCode} · MDB ${item.fascia ?? '-'}'
+                              : item.crewType == 'MTB'
+                              ? '${item.helicopterCode} · MTB ${item.fascia ?? '-'}'
                               : '${item.helicopterCode} · T',
                         ),
                       ),
@@ -446,7 +450,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: filteredRows.length,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 120,
+        maxCrossAxisExtent: 110,
         childAspectRatio: 1.0,
         crossAxisSpacing: 4,
         mainAxisSpacing: 4,
@@ -490,21 +494,29 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                 children: [
                   UserAvatar(user: row.user, radius: 14),
                   const SizedBox(height: 4),
-                  Text(
-                    row.user.nome,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  Text(
-                    row.user.cognome,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              row.user.nome,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                            Text(
+                              row.user.cognome,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -770,7 +782,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   DropdownMenuItem<String?>(value: null, child: Text('Tutti')),
                   DropdownMenuItem<String?>(value: 'T', child: Text('T')),
                   DropdownMenuItem<String?>(value: 'TOB', child: Text('TOB')),
-                  DropdownMenuItem<String?>(value: 'MDB', child: Text('MDB')),
+                  DropdownMenuItem<String?>(value: 'MTB', child: Text('MTB')),
                 ],
                 onChanged: (value) {
                   setState(() {
@@ -900,7 +912,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final crewType in const ['T', 'TOB', 'MDB'])
+                  for (final crewType in const ['T', 'TOB', 'MTB'])
                     FilterChip(
                       label: Text(crewType),
                       selected: _crewTypeIds.contains(crewType),
@@ -989,13 +1001,13 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         ),
       ),
       _CrewStatCardData(
-        title: 'Equipaggi MDB',
+        title: 'Equipaggi MTB',
         value: '$mdbCrewCount',
         icon: Icons.shield_outlined,
         onTap: () => setState(
           () => _crewTypeIds
             ..clear()
-            ..add('MDB'),
+            ..add('MTB'),
         ),
       ),
     ];
@@ -1055,17 +1067,20 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       return CurrencyStatus(status: CurrencyStatusEnum.noData, label: label);
     }
 
-    final activityDates = items
-        .map((item) => item.lastActivityDate)
-        .whereType<DateTime>()
-        .toList(growable: false)
-      ..sort();
-    final expiryDates = items
-        .map((item) => item.expiryDate)
-        .whereType<DateTime>()
-        .toList(growable: false)
-      ..sort();
-    final aggregatedStatus = items.any((item) => item.status == CurrencyStatusEnum.expired)
+    final activityDates =
+        items
+            .map((item) => item.lastActivityDate)
+            .whereType<DateTime>()
+            .toList(growable: false)
+          ..sort();
+    final expiryDates =
+        items
+            .map((item) => item.expiryDate)
+            .whereType<DateTime>()
+            .toList(growable: false)
+          ..sort();
+    final aggregatedStatus =
+        items.any((item) => item.status == CurrencyStatusEnum.expired)
         ? CurrencyStatusEnum.expired
         : items.any((item) => item.status == CurrencyStatusEnum.suspended)
         ? CurrencyStatusEnum.suspended
@@ -1089,12 +1104,13 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   }
 
   String _joinCrewLabels(Iterable<String> values) {
-    final items = values
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList(growable: false)
-      ..sort();
+    final items =
+        values
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
     return items.isEmpty ? '-' : items.join(', ');
   }
 
@@ -1127,25 +1143,29 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final compact = constraints.maxWidth < 780;
-                      final helicopterIds = {
-                        ...row.assignments.map((item) => item.helicopterTypeId),
-                        ...row.tobCapabilities.map(
-                          (item) => item.helicopterTypeId,
-                        ),
-                      }.toList(growable: false)
-                        ..sort((a, b) {
-                          String codeFor(int id) {
-                            for (final item in row.assignments) {
-                              if (item.helicopterTypeId == id) return item.helicopterCode;
+                      final helicopterIds =
+                          {
+                            ...row.assignments.map(
+                              (item) => item.helicopterTypeId,
+                            ),
+                            ...row.tobCapabilities.map(
+                              (item) => item.helicopterTypeId,
+                            ),
+                          }.toList(growable: false)..sort((a, b) {
+                            String codeFor(int id) {
+                              for (final item in row.assignments) {
+                                if (item.helicopterTypeId == id)
+                                  return item.helicopterCode;
+                              }
+                              for (final item in row.tobCapabilities) {
+                                if (item.helicopterTypeId == id)
+                                  return item.helicopterCode;
+                              }
+                              return '$id';
                             }
-                            for (final item in row.tobCapabilities) {
-                              if (item.helicopterTypeId == id) return item.helicopterCode;
-                            }
-                            return '$id';
-                          }
 
-                          return codeFor(a).compareTo(codeFor(b));
-                        });
+                            return codeFor(a).compareTo(codeFor(b));
+                          });
 
                       Widget buildInfoPill(IconData icon, String label) {
                         return Container(
@@ -1154,14 +1174,20 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceVariant.withValues(alpha: 0.72),
+                            color: AppColors.surfaceVariant.withValues(
+                              alpha: 0.72,
+                            ),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(color: AppColors.border),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(icon, size: 16, color: AppColors.textSecondary),
+                              Icon(
+                                icon,
+                                size: 16,
+                                color: AppColors.textSecondary,
+                              ),
                               const SizedBox(width: 8),
                               Flexible(child: Text(label, softWrap: true)),
                             ],
@@ -1172,12 +1198,14 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                       Widget buildHelicopterBlock(int helicopterTypeId) {
                         final assignments = row.assignments
                             .where(
-                              (item) => item.helicopterTypeId == helicopterTypeId,
+                              (item) =>
+                                  item.helicopterTypeId == helicopterTypeId,
                             )
                             .toList(growable: false);
                         final capabilities = row.tobCapabilities
                             .where(
-                              (item) => item.helicopterTypeId == helicopterTypeId,
+                              (item) =>
+                                  item.helicopterTypeId == helicopterTypeId,
                             )
                             .toList(growable: false);
                         String helicopterCode = '-';
@@ -1197,13 +1225,13 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                           statusItems.add(row.tobBaseStatus!);
                         }
                         for (final capability in capabilities) {
-                          final capabilityStatus = row.tobStatuses[
-                              '${capability.helicopterTypeId}:${capability.tobCapabilityId}'];
+                          final capabilityStatus = row
+                              .tobStatuses['${capability.helicopterTypeId}:${capability.tobCapabilityId}'];
                           if (capabilityStatus != null) {
                             statusItems.add(capabilityStatus);
                           }
                         }
-                        if (assignments.any((item) => item.crewType == 'MDB') &&
+                        if (assignments.any((item) => item.crewType == 'MTB') &&
                             row.mdbStatus != null) {
                           statusItems.add(row.mdbStatus!);
                         }
@@ -1216,7 +1244,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                           width: compact ? double.infinity : 250,
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                            color: AppColors.surfaceVariant.withValues(
+                              alpha: 0.5,
+                            ),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: AppColors.border),
                           ),
@@ -1250,7 +1280,11 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                                     ),
                                   ),
                                   const Spacer(),
-                                  Icon(status.icon, color: status.color, size: 18),
+                                  Icon(
+                                    status.icon,
+                                    color: status.color,
+                                    size: 18,
+                                  ),
                                   const SizedBox(width: 6),
                                   Container(
                                     width: 10,
@@ -1291,7 +1325,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                       final leftPanel = Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant.withValues(alpha: 0.42),
+                          color: AppColors.surfaceVariant.withValues(
+                            alpha: 0.42,
+                          ),
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(color: AppColors.border),
                         ),
@@ -1304,17 +1340,20 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                             const SizedBox(height: 14),
                             Text(
                               row.user.fullName,
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                              textAlign: compact ? TextAlign.center : TextAlign.left,
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                              textAlign: compact
+                                  ? TextAlign.center
+                                  : TextAlign.left,
                               softWrap: true,
                             ),
                             const SizedBox(height: 8),
                             Text(
                               row.user.numeroLicenza ?? 'Licenza non indicata',
                               style: Theme.of(context).textTheme.bodyLarge,
-                              textAlign: compact ? TextAlign.center : TextAlign.left,
+                              textAlign: compact
+                                  ? TextAlign.center
+                                  : TextAlign.left,
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -1323,7 +1362,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                                   : row.user.orgUnitName,
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: AppColors.textSecondary),
-                              textAlign: compact ? TextAlign.center : TextAlign.left,
+                              textAlign: compact
+                                  ? TextAlign.center
+                                  : TextAlign.left,
                               softWrap: true,
                             ),
                           ],
@@ -1335,7 +1376,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant.withValues(alpha: 0.4),
+                                color: AppColors.surfaceVariant.withValues(
+                                  alpha: 0.4,
+                                ),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(color: AppColors.border),
                               ),
@@ -1347,7 +1390,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                           : compact
                           ? Column(
                               children: [
-                                for (final helicopterTypeId in helicopterIds) ...[
+                                for (final helicopterTypeId
+                                    in helicopterIds) ...[
                                   buildHelicopterBlock(helicopterTypeId),
                                   const SizedBox(height: 12),
                                 ],
@@ -1361,7 +1405,8 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                                   .toList(growable: false),
                             );
 
-                      final emailAvailable = row.user.email != null &&
+                      final emailAvailable =
+                          row.user.email != null &&
                           row.user.email!.trim().isNotEmpty;
                       final overallStatus = _combineCrewStatuses(
                         row.relevantStatuses('all', null),
@@ -1408,7 +1453,10 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                                       vertical: 10,
                                     ),
                                   ),
-                                  icon: const Icon(Icons.email_outlined, size: 18),
+                                  icon: const Icon(
+                                    Icons.email_outlined,
+                                    size: 18,
+                                  ),
                                   label: const Text('Email'),
                                 ),
                             ],
@@ -1609,7 +1657,7 @@ class _CrewUserRow {
 
   bool get hasTCrew => assignments.any((item) => item.crewType == 'T');
   bool get hasTobCrew => assignments.any((item) => item.crewType == 'TOB');
-  bool get hasMdbCrew => assignments.any((item) => item.crewType == 'MDB');
+  bool get hasMdbCrew => assignments.any((item) => item.crewType == 'MTB');
   DateTime? get lastActivityDate {
     final dates = relevantStatuses('all', null)
         .map((status) => status.lastActivityDate)
@@ -1647,7 +1695,7 @@ class _CrewUserRow {
         }
       }
     }
-    if ((crewTypeFilter == 'all' || crewTypeFilter == 'MDB') &&
+    if ((crewTypeFilter == 'all' || crewTypeFilter == 'MTB') &&
         mdbStatus != null) {
       statuses.add(mdbStatus!);
     }

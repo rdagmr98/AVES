@@ -753,8 +753,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         title: 'Equipaggi di Volo',
                         itemCount: _pendingCrew.length,
                         emptyText: 'Nessun equipaggio aggiunto.',
-                        onAdd: () =>
-                            _addCrew(helicopterTypes, tobCapabilities),
+                        onAdd: () => _addCrew(helicopterTypes, tobCapabilities),
                         addLabel: 'Aggiungi equipaggio',
                         children: _pendingCrew
                             .asMap()
