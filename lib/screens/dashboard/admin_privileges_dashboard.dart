@@ -1059,16 +1059,19 @@ class _AdminPrivilegesDashboardState
                         }.toList(growable: false)..sort((a, b) {
                           String codeFor(int id) {
                             for (final item in row.licenses) {
-                              if (item.helicopterTypeId == id)
+                              if (item.helicopterTypeId == id) {
                                 return item.helicopterCode;
-                            }
-                            for (final item in row.privileges) {
-                              if (item.helicopterTypeId == id)
-                                return item.helicopterCode;
-                            }
-                            for (final item in row.perPrivilegeCurrency) {
-                              if (item.helicopterTypeId == id)
-                                return item.helicopterCode;
+                                }
+                              }
+                              for (final item in row.privileges) {
+                                if (item.helicopterTypeId == id) {
+                                  return item.helicopterCode;
+                                }
+                              }
+                              for (final item in row.perPrivilegeCurrency) {
+                                if (item.helicopterTypeId == id) {
+                                  return item.helicopterCode;
+                                }
                             }
                             return '$id';
                           }

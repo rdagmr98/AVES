@@ -1154,12 +1154,14 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                           }.toList(growable: false)..sort((a, b) {
                             String codeFor(int id) {
                               for (final item in row.assignments) {
-                                if (item.helicopterTypeId == id)
+                                if (item.helicopterTypeId == id) {
                                   return item.helicopterCode;
-                              }
-                              for (final item in row.tobCapabilities) {
-                                if (item.helicopterTypeId == id)
-                                  return item.helicopterCode;
+                                  }
+                                }
+                                for (final item in row.tobCapabilities) {
+                                  if (item.helicopterTypeId == id) {
+                                    return item.helicopterCode;
+                                  }
                               }
                               return '$id';
                             }
