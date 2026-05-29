@@ -555,7 +555,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: ['T', 'TOB', 'MDB']
+                      children: ['T', 'TOB', 'MTB']
                           .map(
                             (value) => ChoiceChip(
                               label: Text(value),
@@ -609,8 +609,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ] else ...[
                       const SizedBox(height: 16),
                       Text(
-                        crewType == 'MDB'
-                            ? 'MDB richiede solo la selezione dell\'elicottero.'
+                        crewType == 'MTB'
+                            ? 'MTB richiede solo la selezione dell\'elicottero.'
                             : 'T richiede solo la selezione dell\'elicottero.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.textSecondary,

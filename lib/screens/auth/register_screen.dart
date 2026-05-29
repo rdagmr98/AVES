@@ -7,7 +7,6 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../services/user_service.dart';
-import '../../widgets/privilege_selection_dialog.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -169,95 +168,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
 
-  Future<void> _addLicense(
-    List<HelicopterType> helicopterTypes,
-    List<LicenseType> licenseTypes,
-  ) async {
-    final helicopterItems = helicopterTypes
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-    final licenseItems = licenseTypes
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (dialogContext) {
-        int? helicopterId;
-        int? licenseTypeId;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Aggiungi licenza'),
-            scrollable: true,
-            content: _buildDialogContent([
-              DropdownButtonFormField<int>(
-                initialValue: helicopterId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Elicottero'),
-                items: helicopterItems,
-                onChanged: (value) =>
-                    setDialogState(() => helicopterId = value),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                isExpanded: true,
-                initialValue: licenseTypeId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Tipo licenza'),
-                items: licenseItems,
-                onChanged: (value) =>
-                    setDialogState(() => licenseTypeId = value),
-              ),
-            ]),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                style: _dialogActionStyle(),
-                onPressed: () {
-                  if (helicopterId == null || licenseTypeId == null) {
-                    return;
-                  }
-                  Navigator.of(dialogContext).pop({
-                    'helicopter_type_id': helicopterId,
-                    'license_type_id': licenseTypeId,
-                  });
-                },
-                child: const Text('Aggiungi'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (result == null || !mounted) {
-      return;
-    }
-
-    final exists = _pendingLicenses.any(
-      (item) =>
-          item['helicopter_type_id'] == result['helicopter_type_id'] &&
-          item['license_type_id'] == result['license_type_id'],
-    );
-    if (exists) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Licenza già presente.')));
-      return;
-    }
-
-    setState(() => _pendingLicenses.add(result));
-  }
-
   Future<void> _addCrew(
     List<HelicopterType> helicopterTypes,
     List<TobCapability> tobCapabilities,
@@ -303,7 +213,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: ['T', 'TOB', 'MDB']
+                children: ['T', 'TOB', 'MTB']
                     .map(
                       (value) => ChoiceChip(
                         label: Text(value),
@@ -355,8 +265,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ] else ...[
                 const SizedBox(height: 16),
                 Text(
-                  crewType == 'MDB'
-                      ? 'MDB richiede solo la selezione dell\'elicottero.'
+                  crewType == 'MTB'
+                      ? 'MTB richiede solo la selezione dell\'elicottero.'
                       : 'T richiede solo la selezione dell\'elicottero.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.textSecondary,
@@ -427,88 +337,93 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
   }
 
-  Map<int, Set<int>> _pendingPrivilegesByHelicopter() {
-    final map = <int, Set<int>>{};
-    for (final item in _pendingPrivileges) {
-      final helicopterId = item['helicopter_type_id'] as int;
-      final privilegeId = item['privilege_type_id'] as int;
-      map.putIfAbsent(helicopterId, () => <int>{}).add(privilegeId);
-    }
-    return map;
-  }
-
-  Future<void> _managePrivileges(
+  Future<void> _manageMaintenance(
     List<HelicopterType> helicopterTypes,
-    List<PrivilegeType> privilegeTypes,
-  ) async {
-    final result = await showPrivilegeSelectionDialog(
-      context: context,
-      helicopterTypes: helicopterTypes,
-      privilegeTypes: privilegeTypes,
-      selectionsByHelicopter: _pendingPrivilegesByHelicopter(),
-      title: 'Seleziona privilegi manutentivi',
-    );
+    List<LicenseType> licenseTypes,
+    List<PrivilegeType> privilegeTypes, {
+    int? forHelicopterId,
+  }) async {
+    final existingLicId = forHelicopterId == null
+        ? null
+        : _pendingLicenses
+              .where((l) => l['helicopter_type_id'] == forHelicopterId)
+              .map((l) => l['license_type_id'] as int)
+              .firstOrNull;
+    final existingPrivIds = forHelicopterId == null
+        ? <int>{}
+        : _pendingPrivileges
+              .where((p) => p['helicopter_type_id'] == forHelicopterId)
+              .map((p) => p['privilege_type_id'] as int)
+              .toSet();
 
-    if (result == null || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _pendingPrivileges.removeWhere(
-        (item) => item['helicopter_type_id'] == result.helicopterTypeId,
-      );
-      for (final privilegeTypeId in result.selectedPrivilegeTypeIds) {
-        _pendingPrivileges.add({
-          'helicopter_type_id': result.helicopterTypeId,
-          'privilege_type_id': privilegeTypeId,
-        });
-      }
-    });
-  }
-
-  Future<void> _addTobCapability(
-    List<HelicopterType> helicopterTypes,
-    List<TobCapability> tobCapabilities,
-  ) async {
-    final helicopterItems = helicopterTypes
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-    final capabilityItems = tobCapabilities
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showDialog<_MaintenanceDialogResult>(
       context: context,
       builder: (dialogContext) {
-        int? helicopterId;
-        int? capabilityId;
+        int? selectedHelicopter = forHelicopterId;
+        int? selectedLicenseId = existingLicId;
+        final selectedPrivilegeIds = Set<int>.from(existingPrivIds);
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Aggiungi capacità TOB'),
+            title: const Text('Configura manutenzione per elicottero'),
             scrollable: true,
             content: _buildDialogContent([
-              DropdownButtonFormField<int>(
-                initialValue: helicopterId,
+              if (forHelicopterId == null)
+                DropdownButtonFormField<int>(
+                  initialValue: selectedHelicopter,
+                  menuMaxHeight: 300,
+                  decoration: const InputDecoration(labelText: 'Elicottero'),
+                  items: helicopterTypes
+                      .map(
+                        (h) => DropdownMenuItem<int>(
+                          value: h.id,
+                          child: Text(h.name),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (v) =>
+                      setDialogState(() => selectedHelicopter = v),
+                ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int?>(
+                initialValue: selectedLicenseId,
                 menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Elicottero'),
-                items: helicopterItems,
-                onChanged: (value) =>
-                    setDialogState(() => helicopterId = value),
+                decoration: const InputDecoration(labelText: 'Tipo licenza'),
+                hint: const Text('Nessuna'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Nessuna'),
+                  ),
+                  ...licenseTypes.map(
+                    (lt) => DropdownMenuItem<int?>(
+                      value: lt.id,
+                      child: Text(lt.name),
+                    ),
+                  ),
+                ],
+                onChanged: (v) =>
+                    setDialogState(() => selectedLicenseId = v),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: capabilityId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Capacità TOB'),
-                items: capabilityItems,
-                onChanged: (value) =>
-                    setDialogState(() => capabilityId = value),
+              Text(
+                'Privilegi manutentivi',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              ...privilegeTypes.map(
+                (pt) => CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(pt.name),
+                  value: selectedPrivilegeIds.contains(pt.id),
+                  onChanged: (_) => setDialogState(() {
+                    if (selectedPrivilegeIds.contains(pt.id)) {
+                      selectedPrivilegeIds.remove(pt.id);
+                    } else {
+                      selectedPrivilegeIds.add(pt.id);
+                    }
+                  }),
+                ),
               ),
             ]),
             actions: [
@@ -519,15 +434,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ElevatedButton(
                 style: _dialogActionStyle(),
                 onPressed: () {
-                  if (helicopterId == null || capabilityId == null) {
-                    return;
-                  }
-                  Navigator.of(dialogContext).pop({
-                    'helicopter_type_id': helicopterId,
-                    'tob_capability_id': capabilityId,
-                  });
+                  if (selectedHelicopter == null) return;
+                  Navigator.of(dialogContext).pop(
+                    _MaintenanceDialogResult(
+                      helicopterId: selectedHelicopter!,
+                      licenseTypeId: selectedLicenseId,
+                      privilegeTypeIds: selectedPrivilegeIds.toList(),
+                    ),
+                  );
                 },
-                child: const Text('Aggiungi'),
+                child: const Text('Conferma'),
               ),
             ],
           ),
@@ -535,56 +451,80 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       },
     );
 
-    if (result == null || !mounted) {
-      return;
-    }
+    if (result == null || !mounted) return;
 
-    final exists = _pendingTobCaps.any(
-      (item) =>
-          item['helicopter_type_id'] == result['helicopter_type_id'] &&
-          item['tob_capability_id'] == result['tob_capability_id'],
-    );
-    if (exists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Capacità TOB già presente.')),
+    setState(() {
+      _pendingLicenses.removeWhere(
+        (l) => l['helicopter_type_id'] == result.helicopterId,
       );
-      return;
-    }
+      _pendingPrivileges.removeWhere(
+        (p) => p['helicopter_type_id'] == result.helicopterId,
+      );
+      if (result.licenseTypeId != null) {
+        _pendingLicenses.add({
+          'helicopter_type_id': result.helicopterId,
+          'license_type_id': result.licenseTypeId,
+        });
+      }
+      for (final privId in result.privilegeTypeIds) {
+        _pendingPrivileges.add({
+          'helicopter_type_id': result.helicopterId,
+          'privilege_type_id': privId,
+        });
+      }
+    });
+  }
 
-    setState(() => _pendingTobCaps.add(result));
+  List<_HeliMaintenanceItem> _maintenanceByHelicopterView(
+    List<HelicopterType> helicopterTypes,
+    List<LicenseType> licenseTypes,
+    List<PrivilegeType> privilegeTypes,
+  ) {
+    final helicIds = <int>{};
+    for (final l in _pendingLicenses) {
+      helicIds.add(l['helicopter_type_id'] as int);
+    }
+    for (final p in _pendingPrivileges) {
+      helicIds.add(p['helicopter_type_id'] as int);
+    }
+    return helicIds.map((heliId) {
+      final ht = helicopterTypes.firstWhere(
+        (h) => h.id == heliId,
+        orElse: () =>
+            HelicopterType(id: heliId, code: '$heliId', name: '$heliId'),
+      );
+      final licId = _pendingLicenses
+          .where((l) => l['helicopter_type_id'] == heliId)
+          .map((l) => l['license_type_id'] as int)
+          .firstOrNull;
+      final licLabel = licId == null
+          ? null
+          : licenseTypes
+                .firstWhere(
+                  (lt) => lt.id == licId,
+                  orElse: () => LicenseType(
+                    id: licId,
+                    code: '$licId',
+                    name: '$licId',
+                  ),
+                )
+                .name;
+      final privCount = _pendingPrivileges
+          .where((p) => p['helicopter_type_id'] == heliId)
+          .length;
+      return _HeliMaintenanceItem(
+        helicopterId: heliId,
+        helicopterCode: ht.code,
+        licenseLabel: licLabel,
+        privilegeCount: privCount,
+      );
+    }).toList();
   }
 
   String _helicopterLabel(List<HelicopterType> items, int helicopterId) {
     for (final item in items) {
       if (item.id == helicopterId) {
         return item.code;
-      }
-    }
-    return 'N/D';
-  }
-
-  String _licenseLabel(List<LicenseType> items, int licenseTypeId) {
-    for (final item in items) {
-      if (item.id == licenseTypeId) {
-        return item.name;
-      }
-    }
-    return 'N/D';
-  }
-
-  String _privilegeLabel(List<PrivilegeType> items, int privilegeTypeId) {
-    for (final item in items) {
-      if (item.id == privilegeTypeId) {
-        return item.name;
-      }
-    }
-    return 'N/D';
-  }
-
-  String _tobCapabilityLabel(List<TobCapability> items, int capabilityId) {
-    for (final item in items) {
-      if (item.id == capabilityId) {
-        return item.name;
       }
     }
     return 'N/D';
@@ -608,6 +548,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               DropdownMenuItem<int>(value: unit.id, child: Text(unit.name)),
         )
         .toList(growable: false);
+    final byHeli = _maintenanceByHelicopterView(
+        helicopterTypes,
+        licenseTypes,
+        privilegeTypes,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Registrazione')),
@@ -724,29 +669,123 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             value == null ? 'Campo obbligatorio' : null,
                       ),
                       const SizedBox(height: 24),
-                      _PendingSection(
-                        title: 'Tipo Licenza',
-                        itemCount: _pendingLicenses.length,
-                        emptyText: 'Nessuna licenza aggiunta.',
-                        onAdd: () => _addLicense(helicopterTypes, licenseTypes),
-                        addLabel: 'Aggiungi licenza',
-                        children: _pendingLicenses
-                            .asMap()
-                            .entries
-                            .map(
-                              (entry) => ListTile(
-                                title: Text(
-                                  "${_helicopterLabel(helicopterTypes, entry.value['helicopter_type_id'] as int)} · ${_licenseLabel(licenseTypes, entry.value['license_type_id'] as int)}",
-                                ),
-                                trailing: IconButton(
-                                  onPressed: () => setState(
-                                    () => _pendingLicenses.removeAt(entry.key),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Manutenzione (${byHeli.length} elicotteri)',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
                                   ),
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
+                                  const Spacer(),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _manageMaintenance(
+                                      helicopterTypes,
+                                      licenseTypes,
+                                      privilegeTypes,
+                                    ),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Aggiungi'),
+                                  ),
+                                ],
                               ),
-                            )
-                            .toList(),
+                              if (byHeli.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'Nessun elicottero configurato.',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                )
+                              else
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: byHeli.map((item) {
+                                      return InkWell(
+                                        onTap: () => _manageMaintenance(
+                                          helicopterTypes,
+                                          licenseTypes,
+                                          privilegeTypes,
+                                          forHelicopterId: item.helicopterId,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: AppColors.border,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            color: AppColors.primary
+                                                .withValues(alpha: 0.06),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    item.helicopterCode,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyLarge
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Icon(
+                                                    Icons.edit,
+                                                    size: 14,
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                  ),
+                                                ],
+                                              ),
+                                              if (item.licenseLabel != null)
+                                                Text(
+                                                  item.licenseLabel!,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall,
+                                                ),
+                                              Text(
+                                                '${item.privilegeCount} privilegi',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color:
+                                                          AppColors.textSecondary,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _PendingSection(
@@ -781,59 +820,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                       );
                                     }
                                   }),
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 12),
-                      _PendingSection(
-                        title: 'Privilegi Manutentivi',
-                        itemCount: _pendingPrivileges.length,
-                        emptyText: 'Nessun privilegio selezionato.',
-                        onAdd: () =>
-                            _managePrivileges(helicopterTypes, privilegeTypes),
-                        addLabel: 'Gestisci privilegi',
-                        children: _pendingPrivileges
-                            .asMap()
-                            .entries
-                            .map(
-                              (entry) => ListTile(
-                                title: Text(
-                                  "${_helicopterLabel(helicopterTypes, entry.value['helicopter_type_id'] as int)} · ${_privilegeLabel(privilegeTypes, entry.value['privilege_type_id'] as int)}",
-                                ),
-                                trailing: IconButton(
-                                  onPressed: () => setState(
-                                    () =>
-                                        _pendingPrivileges.removeAt(entry.key),
-                                  ),
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 12),
-                      _PendingSection(
-                        title: 'Capacità TOB',
-                        itemCount: _pendingTobCaps.length,
-                        emptyText: 'Nessuna capacità TOB aggiunta.',
-                        onAdd: () =>
-                            _addTobCapability(helicopterTypes, tobCapabilities),
-                        addLabel: 'Aggiungi capacità',
-                        children: _pendingTobCaps
-                            .asMap()
-                            .entries
-                            .map(
-                              (entry) => ListTile(
-                                title: Text(
-                                  "${_helicopterLabel(helicopterTypes, entry.value['helicopter_type_id'] as int)} · ${_tobCapabilityLabel(tobCapabilities, entry.value['tob_capability_id'] as int)}",
-                                ),
-                                trailing: IconButton(
-                                  onPressed: () => setState(
-                                    () => _pendingTobCaps.removeAt(entry.key),
-                                  ),
                                   icon: const Icon(Icons.delete_outline),
                                 ),
                               ),
@@ -920,4 +906,30 @@ class _PendingSection extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HeliMaintenanceItem {
+  const _HeliMaintenanceItem({
+    required this.helicopterId,
+    required this.helicopterCode,
+    this.licenseLabel,
+    required this.privilegeCount,
+  });
+
+  final int helicopterId;
+  final String helicopterCode;
+  final String? licenseLabel;
+  final int privilegeCount;
+}
+
+class _MaintenanceDialogResult {
+  const _MaintenanceDialogResult({
+    required this.helicopterId,
+    this.licenseTypeId,
+    required this.privilegeTypeIds,
+  });
+
+  final int helicopterId;
+  final int? licenseTypeId;
+  final List<int> privilegeTypeIds;
 }
