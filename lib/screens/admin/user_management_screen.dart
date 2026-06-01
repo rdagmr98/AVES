@@ -779,6 +779,7 @@ class _UserDetailPage extends ConsumerStatefulWidget {
 class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   late UserProfile _user;
   late String _selectedRole;
+  late final TextEditingController _licenseNumberCtrl;
   bool _loading = true;
   bool _saving = false;
 
@@ -796,7 +797,14 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     super.initState();
     _user = widget.initialUser;
     _selectedRole = _user.role;
+    _licenseNumberCtrl = TextEditingController(text: _user.numeroLicenza ?? '');
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _licenseNumberCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -994,6 +1002,28 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      final currentAdmin = ref.read(authProvider).userProfile;
+      if (currentAdmin == null) {
+        throw Exception('Admin non autenticato');
+      }
+      final canEditLicenseNumber = currentAdmin.isAdminPriv && _user.isUser;
+      if (canEditLicenseNumber) {
+        final requestedLicense = _licenseNumberCtrl.text.trim();
+        if (requestedLicense.isEmpty) {
+          throw Exception('Numero licenza obbligatorio');
+        }
+        final currentLicense = (_user.numeroLicenza ?? '').trim();
+        if (requestedLicense.toUpperCase() != currentLicense.toUpperCase()) {
+          final updatedUser = await widget.service.updateUserLicenseNumber(
+            userId: _user.id,
+            newLicenseNumber: requestedLicense,
+            adminId: currentAdmin.id,
+          );
+          _user = updatedUser;
+          _licenseNumberCtrl.text = updatedUser.numeroLicenza ?? '';
+        }
+      }
+
       await widget.service.updateProfile(
         _user.copyWith(
           role: _selectedRole,
@@ -1104,6 +1134,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final canEditInstructorQualifications = auth.isAdminPriv;
+    final canEditLicenseNumber = auth.isAdminPriv && _user.isUser;
     final today = DateTime.now();
     final isFlightFitnessExpired =
         _user.flightFitnessExpiry != null &&
@@ -1229,11 +1260,25 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          _user.numeroLicenza ?? 'Licenza non indicata',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          textAlign: TextAlign.center,
-                        ),
+                        if (canEditLicenseNumber)
+                          TextField(
+                            controller: _licenseNumberCtrl,
+                            textAlign: TextAlign.center,
+                            textCapitalization: TextCapitalization.characters,
+                            decoration: const InputDecoration(
+                              labelText: 'Numero licenza (login)',
+                              helperText:
+                                  'Admin CSL può aggiornarlo: la password resta invariata',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          )
+                        else
+                          Text(
+                            _user.numeroLicenza ?? 'Licenza non indicata',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            textAlign: TextAlign.center,
+                          ),
                         Text(
                           _user.orgUnitName,
                           style: Theme.of(context).textTheme.bodySmall
@@ -1530,12 +1575,20 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                             initialValue: selectedLicenseId,
                                             decoration: const InputDecoration(
                                               labelText: 'Tipo licenza',
-                                              labelStyle: TextStyle(color: Colors.white70),
+                                              labelStyle: TextStyle(
+                                                color: Colors.white70,
+                                              ),
                                               floatingLabelStyle: TextStyle(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
                                               ),
-                                              contentPadding: EdgeInsets.fromLTRB(12, 20, 12, 8),
+                                              contentPadding:
+                                                  EdgeInsets.fromLTRB(
+                                                    12,
+                                                    20,
+                                                    12,
+                                                    8,
+                                                  ),
                                             ),
                                             items: [
                                               const DropdownMenuItem<int?>(

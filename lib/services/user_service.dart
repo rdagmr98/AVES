@@ -165,6 +165,73 @@ class UserService {
     await _db.saveUsers(users);
   }
 
+  Future<UserProfile> updateUserLicenseNumber({
+    required String userId,
+    required String newLicenseNumber,
+    required String adminId,
+  }) async {
+    final users = _db.users;
+    final admin = users.firstWhere(
+      (item) => item['id'] == adminId,
+      orElse: () => <String, dynamic>{},
+    );
+    if (admin.isEmpty) {
+      throw Exception('Admin non trovato');
+    }
+    if ((admin['role'] as String? ?? '') != 'admin_priv') {
+      throw Exception('Solo admincsl può modificare il numero licenza');
+    }
+
+    final index = users.indexWhere((item) => item['id'] == userId);
+    if (index == -1) {
+      throw Exception('Utente non trovato');
+    }
+
+    final targetRole = users[index]['role'] as String? ?? 'user';
+    if (targetRole != 'user') {
+      throw Exception(
+        'Il numero licenza modificabile è solo per utenti standard',
+      );
+    }
+
+    final normalizedLicense = _normalizeMamlNumber(newLicenseNumber);
+    if (normalizedLicense == null) {
+      throw Exception('Numero licenza non valido');
+    }
+
+    final normalizedUsername = _normalizeUsername(normalizedLicense);
+    final duplicate = users.any(
+      (item) =>
+          (item['id'] as String?) != userId &&
+          _userUsername(item) == normalizedUsername,
+    );
+    if (duplicate) {
+      throw Exception('Numero licenza già in uso');
+    }
+
+    final previousLicense = users[index]['numero_licenza'] as String?;
+    users[index] = {
+      ...users[index],
+      'numero_licenza': normalizedLicense,
+      'username': normalizedLicense,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveUsers(users);
+
+    final previousLabel = (previousLicense ?? '').trim();
+    final previousText = previousLabel.isEmpty
+        ? 'non impostato'
+        : previousLabel;
+    await _notificationService.createNotification(
+      userId: userId,
+      type: 'PROFILE_LICENSE_UPDATED',
+      message:
+          'Numero licenza aggiornato da $previousText a $normalizedLicense. Da ora usa questo numero per il login. La password resta invariata.',
+    );
+
+    return UserProfile.fromJson(_withOrgUnit(users[index]));
+  }
+
   Future<void> approveUser(String userId, String adminId) async {
     final users = _db.users;
     final index = users.indexWhere((item) => item['id'] == userId);
