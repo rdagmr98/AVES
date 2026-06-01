@@ -203,30 +203,34 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  UserAvatar(user: row.user, radius: 16),
-                  const SizedBox(height: 4),
-                  Text(
-                    row.user.nome,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                Expanded(
+                  child: Center(
+                    child: UserAvatar(user: row.user, radius: 16),
                   ),
-                  Text(
-                    row.user.cognome,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
+                ),
+                Text(
+                  row.user.nome,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                ),
+                Text(
+                  row.user.cognome,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 4),
+              ],
+            ),
             ),
           ),
         );

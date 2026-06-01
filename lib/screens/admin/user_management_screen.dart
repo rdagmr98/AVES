@@ -1528,8 +1528,12 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                             ),
                                             initialValue: selectedLicenseId,
                                             decoration: const InputDecoration(
-                                              labelText:
-                                                  'Tipo licenza per elicottero',
+                                              labelText: 'Tipo licenza',
+                                              labelStyle: TextStyle(color: Colors.white70),
+                                              floatingLabelStyle: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                             items: [
                                               const DropdownMenuItem<int?>(
