@@ -1512,7 +1512,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                       childrenPadding:
                                           const EdgeInsets.fromLTRB(
                                             16,
-                                            0,
+                                            4,
                                             16,
                                             16,
                                           ),
@@ -1522,6 +1522,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                       ),
                                       children: [
                                         if (widget.showMaintenanceSections) ...[
+                                          const SizedBox(height: 8),
                                           DropdownButtonFormField<int?>(
                                             key: ValueKey(
                                               'license_${helicopter.id}_$selectedLicenseId',
@@ -1534,6 +1535,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
                                               ),
+                                              contentPadding: EdgeInsets.fromLTRB(12, 20, 12, 8),
                                             ),
                                             items: [
                                               const DropdownMenuItem<int?>(
