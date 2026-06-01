@@ -124,6 +124,13 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final user = auth.userProfile;
+    final today = DateTime.now();
+    final flightFitnessDate = user?.flightFitnessExpiry;
+    final flightFitnessBlocking =
+        flightFitnessDate != null &&
+        flightFitnessDate.isBefore(
+          DateTime(today.year, today.month, today.day),
+        );
 
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -176,30 +183,60 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
       if (auth.hasTCrew)
         _CurrencyCard(
           title: 'Volo T',
-          status: auth.currency['flight_t'],
-          subtitle: _flightSubtitle(auth.currency['flight_t']),
-          expiryText: _formatLongDate(auth.currency['flight_t']?.expiryDate),
+          status: flightFitnessBlocking
+              ? const CurrencyStatus(
+                  status: CurrencyStatusEnum.expired,
+                  label: 'Idoneità al volo scaduta',
+                )
+              : auth.currency['flight_t'],
+          subtitle: flightFitnessBlocking
+              ? 'Idoneità scaduta'
+              : _flightSubtitle(auth.currency['flight_t']),
+          expiryText: _formatLongDate(
+            flightFitnessBlocking
+                ? flightFitnessDate
+                : auth.currency['flight_t']?.expiryDate,
+          ),
           onTap: () => context.go('/activities/my?type=flight'),
         ),
       if (auth.hasTobCrew)
         _CurrencyCard(
           title: 'Base TOB',
-          status: auth.currency['tob_base'],
-          subtitle: 'Fascia ${tobFascia ?? '-'}',
-          expiryText: _formatLongDate(auth.currency['tob_base']?.expiryDate),
+          status: flightFitnessBlocking
+              ? const CurrencyStatus(
+                  status: CurrencyStatusEnum.expired,
+                  label: 'Idoneità al volo scaduta',
+                )
+              : auth.currency['tob_base'],
+          subtitle: flightFitnessBlocking
+              ? 'Idoneità scaduta'
+              : 'Fascia ${tobFascia ?? '-'}',
+          expiryText: _formatLongDate(
+            flightFitnessBlocking
+                ? flightFitnessDate
+                : auth.currency['tob_base']?.expiryDate,
+          ),
           onTap: () => context.go('/activities/my?type=tob'),
         ),
       if (auth.hasTobCrew)
         ...auth.tobCapabilities.map(
           (cap) => _CurrencyCard(
             title: cap.capabilityName,
-            status: auth
-                .currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}'],
-            subtitle: 'TOB · ${cap.helicopterCode}',
+            status: flightFitnessBlocking
+                ? const CurrencyStatus(
+                    status: CurrencyStatusEnum.expired,
+                    label: 'Idoneità al volo scaduta',
+                  )
+                : auth.currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}'],
+            subtitle: flightFitnessBlocking
+                ? 'Idoneità scaduta'
+                : 'TOB · ${cap.helicopterCode}',
             expiryText: _formatLongDate(
-              auth
-                  .currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}']
-                  ?.expiryDate,
+              flightFitnessBlocking
+                  ? flightFitnessDate
+                  : auth
+                        .currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}']
+                        ?.expiryDate,
             ),
             onTap: () => context.go('/activities/my?type=tob'),
           ),
@@ -207,9 +244,20 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
       if (auth.hasMdbCrew)
         _CurrencyCard(
           title: 'Mitragliere di Bordo',
-          status: auth.currency['mdb'],
-          subtitle: _flightSubtitle(auth.currency['mdb']),
-          expiryText: _formatLongDate(auth.currency['mdb']?.expiryDate),
+          status: flightFitnessBlocking
+              ? const CurrencyStatus(
+                  status: CurrencyStatusEnum.expired,
+                  label: 'Idoneità al volo scaduta',
+                )
+              : auth.currency['mdb'],
+          subtitle: flightFitnessBlocking
+              ? 'Idoneità scaduta'
+              : _flightSubtitle(auth.currency['mdb']),
+          expiryText: _formatLongDate(
+            flightFitnessBlocking
+                ? flightFitnessDate
+                : auth.currency['mdb']?.expiryDate,
+          ),
           onTap: () => context.go('/activities/my?type=flight'),
         ),
     ];
@@ -271,6 +319,57 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                       ? () => context.go('/helicopters/fleet')
                       : null,
                 ),
+                if (flightFitnessDate != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: flightFitnessBlocking
+                          ? Colors.red.shade700.withValues(alpha: 0.15)
+                          : Colors.green.shade800.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: flightFitnessBlocking
+                            ? Colors.red.shade400
+                            : Colors.green.shade600,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          flightFitnessBlocking
+                              ? Icons.warning_amber_rounded
+                              : Icons.verified_outlined,
+                          color: flightFitnessBlocking
+                              ? Colors.redAccent
+                              : Colors.green,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            flightFitnessBlocking
+                                ? 'Idoneità al volo scaduta il ${DateFormat('dd/MM/yyyy').format(flightFitnessDate)} — Volo SOSPESO'
+                                : 'Idoneità al volo: scadenza ${DateFormat('dd/MM/yyyy').format(flightFitnessDate)}',
+                            style: TextStyle(
+                              color: flightFitnessBlocking
+                                  ? Colors.redAccent
+                                  : Colors.green,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            softWrap: true,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => context.go('/profile'),
+                          child: const Text('Aggiorna'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (user.isTi || user.isEtp) ...[
                   const SizedBox(height: 16),
                   Wrap(

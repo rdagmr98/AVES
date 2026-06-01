@@ -966,11 +966,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
                       GestureDetector(
                         onTap: _saving ? null : _pickProfilePhoto,
                         child: Stack(
@@ -1085,39 +1085,93 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ],
                           ),
                         ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Idoneità al volo - Scadenza'),
-                        subtitle: Text(_formatDate(_flightFitnessExpiry)),
-                        trailing: Wrap(
-                          spacing: 4,
+                      Padding(
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (_flightFitnessExpiry != null)
-                              IconButton(
-                                tooltip: 'Rimuovi data',
-                                onPressed: () =>
-                                    setState(() => _flightFitnessExpiry = null),
-                                icon: const Icon(Icons.close),
-                              ),
-                            OutlinedButton.icon(
-                              onPressed: _pickFlightFitnessExpiry,
-                              icon: const Icon(Icons.calendar_month_outlined),
-                              label: const Text('Seleziona'),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.medical_services_outlined,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Idoneità al volo — Scadenza',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        softWrap: true,
+                                      ),
+                                      Text(
+                                        _formatDate(_flightFitnessExpiry),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                if (_flightFitnessExpiry != null)
+                                  OutlinedButton.icon(
+                                    onPressed: () => setState(
+                                      () => _flightFitnessExpiry = null,
+                                    ),
+                                    icon: const Icon(Icons.close, size: 16),
+                                    label: const Text('Rimuovi'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      textStyle: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                OutlinedButton.icon(
+                                  onPressed: _pickFlightFitnessExpiry,
+                                  icon: const Icon(
+                                    Icons.calendar_month_outlined,
+                                    size: 16,
+                                  ),
+                                  label: const Text('Seleziona data'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    textStyle: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                           ],
                         ),
                       ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Istruttore Tecnico-Aeronautico (TI)',
-                        ),
+                        title: const Text('Istruttore T.A. (TI)'),
+                        subtitle: const Text('Istruttore Tecnico-Aeronautico'),
                         value: _isTi,
                         onChanged: (value) => setState(() => _isTi = value),
                       ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Esaminatore Teorico-Pratico (ETP)'),
+                        title: const Text('Esaminatore T.P. (ETP)'),
+                        subtitle: const Text('Esaminatore Teorico-Pratico'),
                         value: _isEtp,
                         onChanged: (value) => setState(() => _isEtp = value),
                       ),

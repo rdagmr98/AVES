@@ -787,6 +787,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Set<int> _tCrewHelicopters = <int>{};
   Set<int> _tobCrewHelicopters = <int>{};
   Set<int> _mdbCrewHelicopters = <int>{};
+  final Set<int> _addedHelicopters = <int>{};
   Set<String> _tobCapabilityKeys = <String>{};
   Map<int, String> _tobGrades = <int, String>{};
 
@@ -832,6 +833,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       _tobCapabilityKeys = tobCaps
           .map((i) => '${i.helicopterTypeId}:${i.tobCapabilityId}')
           .toSet();
+      _addedHelicopters.clear();
       _loading = false;
     });
   }
@@ -921,6 +923,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     ids.addAll(_tCrewHelicopters);
     ids.addAll(_tobCrewHelicopters);
     ids.addAll(_mdbCrewHelicopters);
+    ids.addAll(_addedHelicopters);
     final sorted = ids.toList()..sort();
     return sorted;
   }
@@ -1563,24 +1566,28 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                             runSpacing: 8,
                                             children: widget.privilegeTypes
                                                 .map(
-                                                  (item) => FilterChip(
-                                                    selected:
-                                                        selectedPrivilegeIds
-                                                            .contains(item.id),
-                                                    label: Text(item.code),
-                                                    onSelected: (selected) =>
-                                                        setState(() {
-                                                          final key =
-                                                              '${helicopter.id}:${item.id}';
-                                                          if (selected) {
-                                                            _privilegeKeys.add(
-                                                              key,
-                                                            );
-                                                          } else {
-                                                            _privilegeKeys
-                                                                .remove(key);
-                                                          }
-                                                        }),
+                                                  (item) => Tooltip(
+                                                    message: item.name,
+                                                    child: FilterChip(
+                                                      selected:
+                                                          selectedPrivilegeIds
+                                                              .contains(
+                                                                item.id,
+                                                              ),
+                                                      label: Text(item.code),
+                                                      onSelected: (selected) =>
+                                                          setState(() {
+                                                            final key =
+                                                                '${helicopter.id}:${item.id}';
+                                                            if (selected) {
+                                                              _privilegeKeys
+                                                                  .add(key);
+                                                            } else {
+                                                              _privilegeKeys
+                                                                  .remove(key);
+                                                            }
+                                                          }),
+                                                    ),
                                                   ),
                                                 )
                                                 .toList(),
@@ -1701,6 +1708,73 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                     ),
                                   );
                                 }),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final assignedIds = _assignedHelicopterIds()
+                                      .toSet();
+                                  final available = widget.helicopterTypes
+                                      .where((h) => !assignedIds.contains(h.id))
+                                      .toList();
+                                  if (available.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Tutti gli elicotteri già assegnati.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  int? selectedId;
+                                  await showDialog<void>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Aggiungi Elicottero'),
+                                      content: StatefulBuilder(
+                                        builder: (ctx, setD) =>
+                                            DropdownButtonFormField<int>(
+                                              decoration: const InputDecoration(
+                                                labelText: 'Elicottero',
+                                              ),
+                                              items: available
+                                                  .map(
+                                                    (h) =>
+                                                        DropdownMenuItem<int>(
+                                                          value: h.id,
+                                                          child: Text(h.name),
+                                                        ),
+                                                  )
+                                                  .toList(),
+                                              onChanged: (v) =>
+                                                  setD(() => selectedId = v),
+                                            ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('Annulla'),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () {
+                                            if (selectedId != null) {
+                                              setState(
+                                                () => _addedHelicopters.add(
+                                                  selectedId!,
+                                                ),
+                                              );
+                                            }
+                                            Navigator.pop(ctx);
+                                          },
+                                          child: const Text('Aggiungi'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.add),
+                                label: const Text('Aggiungi Elicottero'),
+                              ),
                             ],
                           );
                         },
