@@ -31,6 +31,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   int? _orgUnitId;
   bool _obscure = true;
+  bool _isTi = false;
+  bool _isEtp = false;
 
   @override
   void dispose() {
@@ -72,6 +74,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       cognome: _cognomeCtrl.text.trim(),
       numeroLicenza: numeroLicenza,
       email: _emailCtrl.text.trim().toLowerCase(),
+      isTi: _isTi,
+      isEtp: _isEtp,
     );
 
     if (!mounted) {
@@ -401,8 +405,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                   ),
                 ],
-                onChanged: (v) =>
-                    setDialogState(() => selectedLicenseId = v),
+                onChanged: (v) => setDialogState(() => selectedLicenseId = v),
               ),
               const SizedBox(height: 16),
               Text(
@@ -502,11 +505,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           : licenseTypes
                 .firstWhere(
                   (lt) => lt.id == licId,
-                  orElse: () => LicenseType(
-                    id: licId,
-                    code: '$licId',
-                    name: '$licId',
-                  ),
+                  orElse: () =>
+                      LicenseType(id: licId, code: '$licId', name: '$licId'),
                 )
                 .name;
       final privCount = _pendingPrivileges
@@ -549,9 +549,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         )
         .toList(growable: false);
     final byHeli = _maintenanceByHelicopterView(
-        helicopterTypes,
-        licenseTypes,
-        privilegeTypes,
+      helicopterTypes,
+      licenseTypes,
+      privilegeTypes,
     );
 
     return Scaffold(
@@ -634,6 +634,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           hintText: 'nome.cognome@esercito.difesa.it',
                         ),
                         validator: _validateInstitutionalEmail,
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Istruttore Tecnico-Aeronautico (TI)',
+                        ),
+                        value: _isTi,
+                        onChanged: (v) => setState(() => _isTi = v),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Esaminatore Teorico-Pratico (ETP)'),
+                        value: _isEtp,
+                        onChanged: (v) => setState(() => _isEtp = v),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -727,10 +742,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                             border: Border.all(
                                               color: AppColors.border,
                                             ),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            color: AppColors.primary
-                                                .withValues(alpha: 0.06),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            color: AppColors.primary.withValues(
+                                              alpha: 0.06,
+                                            ),
                                           ),
                                           child: Column(
                                             crossAxisAlignment:
@@ -762,9 +779,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                               if (item.licenseLabel != null)
                                                 Text(
                                                   item.licenseLabel!,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall,
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.bodySmall,
                                                 ),
                                               Text(
                                                 '${item.privilegeCount} privilegi',
@@ -772,8 +789,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                                     .textTheme
                                                     .bodySmall
                                                     ?.copyWith(
-                                                      color:
-                                                          AppColors.textSecondary,
+                                                      color: AppColors
+                                                          .textSecondary,
                                                     ),
                                               ),
                                             ],

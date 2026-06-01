@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
@@ -30,6 +31,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _saving = false;
   String? _emailError;
   String? _profilePhotoBase64;
+  bool _isTi = false;
+  bool _isEtp = false;
+  DateTime? _flightFitnessExpiry;
+  String? _lastProfileSyncKey;
   AccountDeletionRequest? _pendingDeletionRequest;
 
   @override
@@ -42,6 +47,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _emailCtrl = TextEditingController(text: profile?.email ?? '');
     _profilePhotoBase64 = profile?.profilePhotoBase64;
     _orgUnitId = profile?.orgUnitId;
+    _isTi = profile?.isTi ?? false;
+    _isEtp = profile?.isEtp ?? false;
+    _flightFitnessExpiry = profile?.flightFitnessExpiry;
+    _lastProfileSyncKey = _profileSyncKey(profile);
     _loadDeletionRequest();
   }
 
@@ -122,6 +131,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               : _emailCtrl.text.trim().toLowerCase(),
           profilePhotoBase64: _profilePhotoBase64,
           orgUnitId: _orgUnitId,
+          isTi: _isTi,
+          isEtp: _isEtp,
+          flightFitnessExpiry: _flightFitnessExpiry,
         ),
       ),
       successMessage: 'Profilo aggiornato con successo.',
@@ -317,6 +329,62 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Errore foto profilo: $e')));
     }
+  }
+
+  String _profileSyncKey(UserProfile? profile) {
+    if (profile == null) {
+      return 'null';
+    }
+    return [
+      profile.updatedAt.toIso8601String(),
+      profile.nome,
+      profile.cognome,
+      profile.numeroLicenza ?? '',
+      profile.email ?? '',
+      profile.profilePhotoBase64 ?? '',
+      '${profile.orgUnitId ?? ''}',
+      '${profile.isTi}',
+      '${profile.isEtp}',
+      profile.flightFitnessExpiry?.toIso8601String() ?? '',
+    ].join('|');
+  }
+
+  void _syncProfileState(UserProfile profile) {
+    final syncKey = _profileSyncKey(profile);
+    if (_lastProfileSyncKey == syncKey) {
+      return;
+    }
+    _nomeCtrl.text = profile.nome;
+    _cognomeCtrl.text = profile.cognome;
+    _licenzaCtrl.text = profile.numeroLicenza ?? '';
+    _emailCtrl.text = profile.email ?? '';
+    _profilePhotoBase64 = profile.profilePhotoBase64;
+    _orgUnitId = profile.orgUnitId;
+    _isTi = profile.isTi;
+    _isEtp = profile.isEtp;
+    _flightFitnessExpiry = profile.flightFitnessExpiry;
+    _lastProfileSyncKey = syncKey;
+  }
+
+  String _formatDate(DateTime? value) {
+    if (value == null) {
+      return 'Non impostata';
+    }
+    return DateFormat('dd/MM/yyyy').format(value);
+  }
+
+  Future<void> _pickFlightFitnessExpiry() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _flightFitnessExpiry ?? now,
+      firstDate: DateTime(now.year - 10),
+      lastDate: DateTime(now.year + 20),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() => _flightFitnessExpiry = picked);
   }
 
   Future<_MaintenanceEntry?> _showMaintenanceDialog(
@@ -839,21 +907,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_nomeCtrl.text != profile.nome) {
-      _nomeCtrl.text = profile.nome;
-    }
-    if (_cognomeCtrl.text != profile.cognome) {
-      _cognomeCtrl.text = profile.cognome;
-    }
-    if (_licenzaCtrl.text != (profile.numeroLicenza ?? '')) {
-      _licenzaCtrl.text = profile.numeroLicenza ?? '';
-    }
-    if (_emailCtrl.text != (profile.email ?? '')) {
-      _emailCtrl.text = profile.email ?? '';
-    }
-    _profilePhotoBase64 ??= profile.profilePhotoBase64;
-    _orgUnitId ??= profile.orgUnitId;
+    _syncProfileState(profile);
     final isAdminProfile = profile.isAdmin;
+    final today = DateTime.now();
+    final isFlightFitnessExpired =
+        _flightFitnessExpiry != null &&
+        _flightFitnessExpiry!.isBefore(
+          DateTime(today.year, today.month, today.day),
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -905,10 +966,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      const SizedBox(height: 8),
                       GestureDetector(
                         onTap: _saving ? null : _pickProfilePhoto,
                         child: Stack(
@@ -998,35 +1060,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             setState(() => _orgUnitId = value),
                       ),
                       const SizedBox(height: 16),
+                      if (isFlightFitnessExpired)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade700.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.red.shade400),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                color: Colors.redAccent,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Idoneità al volo scaduta. Aggiorna la data di scadenza.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Idoneità al volo - Scadenza'),
+                        subtitle: Text(_formatDate(_flightFitnessExpiry)),
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            if (_flightFitnessExpiry != null)
+                              IconButton(
+                                tooltip: 'Rimuovi data',
+                                onPressed: () =>
+                                    setState(() => _flightFitnessExpiry = null),
+                                icon: const Icon(Icons.close),
+                              ),
+                            OutlinedButton.icon(
+                              onPressed: _pickFlightFitnessExpiry,
+                              icon: const Icon(Icons.calendar_month_outlined),
+                              label: const Text('Seleziona'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Istruttore Tecnico-Aeronautico (TI)',
+                        ),
+                        value: _isTi,
+                        onChanged: (value) => setState(() => _isTi = value),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Esaminatore Teorico-Pratico (ETP)'),
+                        value: _isEtp,
+                        onChanged: (value) => setState(() => _isEtp = value),
+                      ),
+                      const SizedBox(height: 16),
                       OutlinedButton.icon(
                         onPressed: _showChangePasswordDialog,
                         icon: const Icon(Icons.lock_reset_outlined),
                         label: const Text('Cambia password'),
                       ),
-                      if (profile.isTi || profile.isEtp) ...[
-                        const SizedBox(height: 16),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            if (profile.isTi)
-                              Chip(
-                                label: const Text(
-                                  'TI – Istruttore Tecnico-Aeronautico',
-                                ),
-                                backgroundColor: Colors.blue.shade700,
-                              ),
-                            if (profile.isEtp)
-                              Chip(
-                                label: const Text(
-                                  'ETP – Esaminatore Teorico-Pratico',
-                                ),
-                                backgroundColor: Colors.purple.shade700,
-                              ),
-                          ],
-                        ),
-                      ],
                       if (isAdminProfile) ...[
                         const SizedBox(height: 16),
                         Text(

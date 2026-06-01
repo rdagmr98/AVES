@@ -15,6 +15,7 @@ class UserProfile {
   final bool isActive;
   final bool isTi;
   final bool isEtp;
+  final DateTime? flightFitnessExpiry;
   final String? note;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -36,6 +37,7 @@ class UserProfile {
     this.isActive = true,
     this.isTi = false,
     this.isEtp = false,
+    this.flightFitnessExpiry,
     this.note,
     required this.createdAt,
     required this.updatedAt,
@@ -76,6 +78,9 @@ class UserProfile {
       isActive: j['is_active'] as bool? ?? true,
       isTi: j['is_ti'] as bool? ?? false,
       isEtp: j['is_etp'] as bool? ?? false,
+      flightFitnessExpiry: j['flight_fitness_expiry'] != null
+          ? DateTime.parse(j['flight_fitness_expiry'] as String)
+          : null,
       note: j['note'] as String?,
       createdAt: DateTime.parse(
         j['created_at'] as String? ?? DateTime.now().toIso8601String(),
@@ -101,8 +106,11 @@ class UserProfile {
     'is_active': isActive,
     'is_ti': isTi,
     'is_etp': isEtp,
+    'flight_fitness_expiry': flightFitnessExpiry?.toIso8601String(),
     'note': note,
   };
+
+  static const Object _sentinel = Object();
 
   UserProfile copyWith({
     String? nome,
@@ -120,6 +128,7 @@ class UserProfile {
     bool? isActive,
     bool? isTi,
     bool? isEtp,
+    Object? flightFitnessExpiry = _sentinel,
     String? note,
   }) => UserProfile(
     id: id,
@@ -138,6 +147,9 @@ class UserProfile {
     isActive: isActive ?? this.isActive,
     isTi: isTi ?? this.isTi,
     isEtp: isEtp ?? this.isEtp,
+    flightFitnessExpiry: identical(flightFitnessExpiry, _sentinel)
+        ? this.flightFitnessExpiry
+        : flightFitnessExpiry as DateTime?,
     note: note ?? this.note,
     createdAt: createdAt,
     updatedAt: DateTime.now(),

@@ -3,12 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../app.dart';
-import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
-import '../../widgets/privilege_selection_dialog.dart';
 import '../../widgets/user_avatar.dart';
 
 // ─────────────────────────────────────────────────────────────
@@ -838,9 +836,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     });
   }
 
-  void _toggle(Set<String> set, String k) =>
-      set.contains(k) ? set.remove(k) : set.add(k);
-
   Set<int> _selectedPrivilegeIdsFor(int helicopterTypeId) {
     return _privilegeKeys
         .where((key) => key.startsWith('$helicopterTypeId:'))
@@ -848,86 +843,109 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
         .toSet();
   }
 
-  Future<void> _editPrivilegesForHelicopter(HelicopterType helicopter) async {
-    final selectionsByHelicopter = <int, Set<int>>{
-      for (final item in widget.helicopterTypes)
-        item.id: _selectedPrivilegeIdsFor(item.id),
-    };
-    final result = await showPrivilegeSelectionDialog(
-      context: context,
-      helicopterTypes: widget.helicopterTypes,
-      privilegeTypes: widget.privilegeTypes,
-      selectionsByHelicopter: selectionsByHelicopter,
-      initialHelicopterTypeId: helicopter.id,
-      title: 'Seleziona privilegi manutentivi',
+  int? _selectedLicenseTypeIdFor(int helicopterTypeId) {
+    final key = _licenseKeys.firstWhere(
+      (item) => item.startsWith('$helicopterTypeId:'),
+      orElse: () => '',
     );
-    if (result == null || !mounted) {
-      return;
+    if (key.isEmpty) {
+      return null;
     }
+    return int.tryParse(key.split(':')[1]);
+  }
+
+  void _setLicenseForHelicopter(int helicopterTypeId, int? licenseTypeId) {
     setState(() {
-      _privilegeKeys.removeWhere(
-        (key) => key.startsWith('${result.helicopterTypeId}:'),
-      );
-      for (final privilegeTypeId in result.selectedPrivilegeTypeIds) {
-        _privilegeKeys.add('${result.helicopterTypeId}:$privilegeTypeId');
+      _licenseKeys.removeWhere((key) => key.startsWith('$helicopterTypeId:'));
+      if (licenseTypeId != null) {
+        _licenseKeys.add('$helicopterTypeId:$licenseTypeId');
       }
     });
   }
 
-  Future<void> _selectTCrewHelicopters() async {
-    final selected = await showDialog<Set<int>>(
-      context: context,
-      builder: (ctx) => _HelicopterMultiSelectDialog(
-        title: 'Seleziona elicotteri Equipaggio T',
-        helicopters: widget.helicopterTypes,
-        initialSelection: _tCrewHelicopters,
-      ),
-    );
-    if (selected != null && mounted) {
-      setState(() {
-        _tCrewHelicopters = selected;
-      });
+  String _crewTypeForHelicopter(int helicopterTypeId) {
+    if (_tobCrewHelicopters.contains(helicopterTypeId)) {
+      return 'TOB';
     }
+    if (_tCrewHelicopters.contains(helicopterTypeId)) {
+      return 'T';
+    }
+    if (_mdbCrewHelicopters.contains(helicopterTypeId)) {
+      return 'MTB';
+    }
+    return 'NONE';
   }
 
-  Future<void> _selectTobCrewHelicopters() async {
-    final selected = await showDialog<Set<int>>(
-      context: context,
-      builder: (ctx) => _HelicopterMultiSelectDialog(
-        title: 'Seleziona elicotteri Equipaggio TOB',
-        helicopters: widget.helicopterTypes,
-        initialSelection: _tobCrewHelicopters,
-      ),
-    );
-    if (selected != null && mounted) {
-      setState(() {
-        _tobCrewHelicopters = selected;
-        _tobGrades.removeWhere((key, _) => !selected.contains(key));
-        _tobCapabilityKeys.removeWhere((key) {
-          final helicopterId = int.tryParse(key.split(':').first);
-          return helicopterId == null || !selected.contains(helicopterId);
-        });
-        for (final id in selected) {
-          _tobGrades.putIfAbsent(id, () => 'A');
-        }
-      });
-    }
+  void _setCrewTypeForHelicopter(int helicopterTypeId, String crewType) {
+    setState(() {
+      _tCrewHelicopters.remove(helicopterTypeId);
+      _tobCrewHelicopters.remove(helicopterTypeId);
+      _mdbCrewHelicopters.remove(helicopterTypeId);
+      if (crewType == 'T') {
+        _tCrewHelicopters.add(helicopterTypeId);
+      } else if (crewType == 'TOB') {
+        _tobCrewHelicopters.add(helicopterTypeId);
+        _tobGrades.putIfAbsent(helicopterTypeId, () => 'A');
+      } else if (crewType == 'MTB') {
+        _mdbCrewHelicopters.add(helicopterTypeId);
+      } else {
+        _tobGrades.remove(helicopterTypeId);
+        _tobCapabilityKeys.removeWhere(
+          (key) => key.startsWith('$helicopterTypeId:'),
+        );
+      }
+      if (crewType != 'TOB') {
+        _tobGrades.remove(helicopterTypeId);
+        _tobCapabilityKeys.removeWhere(
+          (key) => key.startsWith('$helicopterTypeId:'),
+        );
+      }
+    });
   }
 
-  Future<void> _selectMdbCrewHelicopters() async {
-    final selected = await showDialog<Set<int>>(
-      context: context,
-      builder: (ctx) => _HelicopterMultiSelectDialog(
-        title: 'Seleziona elicotteri Mitragliere di Bordo',
-        helicopters: widget.helicopterTypes,
-        initialSelection: _mdbCrewHelicopters,
-      ),
-    );
-    if (selected != null && mounted) {
-      setState(() {
-        _mdbCrewHelicopters = selected;
-      });
+  Set<int> _selectedTobCapabilityIdsFor(int helicopterTypeId) {
+    return _tobCapabilityKeys
+        .where((key) => key.startsWith('$helicopterTypeId:'))
+        .map((key) => int.parse(key.split(':')[1]))
+        .toSet();
+  }
+
+  List<int> _assignedHelicopterIds() {
+    final ids = <int>{};
+    for (final key in _licenseKeys) {
+      ids.add(int.parse(key.split(':').first));
     }
+    for (final key in _privilegeKeys) {
+      ids.add(int.parse(key.split(':').first));
+    }
+    ids.addAll(_tCrewHelicopters);
+    ids.addAll(_tobCrewHelicopters);
+    ids.addAll(_mdbCrewHelicopters);
+    final sorted = ids.toList()..sort();
+    return sorted;
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) {
+      return 'Non impostata';
+    }
+    return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  Future<void> _pickFlightFitnessExpiry() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _user.flightFitnessExpiry ?? now,
+      firstDate: DateTime(now.year - 10),
+      lastDate: DateTime(now.year + 20),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _user = _user.copyWith(flightFitnessExpiry: picked);
+    });
   }
 
   Future<void> _approveMaint() async {
@@ -978,6 +996,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           role: _selectedRole,
           isTi: _user.isTi,
           isEtp: _user.isEtp,
+          flightFitnessExpiry: _user.flightFitnessExpiry,
         ),
       );
       await widget.service.setUserLicenses(
@@ -1082,6 +1101,12 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final canEditInstructorQualifications = auth.isAdminPriv;
+    final today = DateTime.now();
+    final isFlightFitnessExpired =
+        _user.flightFitnessExpiry != null &&
+        _user.flightFitnessExpiry!.isBefore(
+          DateTime(today.year, today.month, today.day),
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -1232,6 +1257,61 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                             textAlign: TextAlign.center,
                           ),
                         ],
+                        const SizedBox(height: 12),
+                        if (isFlightFitnessExpired)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade700.withValues(
+                                alpha: 0.18,
+                              ),
+                              border: Border.all(color: Colors.red.shade400),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.redAccent,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Idoneità al volo scaduta. Aggiorna la data di scadenza.',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Idoneità al volo - Scadenza'),
+                          subtitle: Text(
+                            _formatDate(_user.flightFitnessExpiry),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_user.flightFitnessExpiry != null)
+                                IconButton(
+                                  tooltip: 'Rimuovi data',
+                                  onPressed: () => setState(
+                                    () => _user = _user.copyWith(
+                                      flightFitnessExpiry: null,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              OutlinedButton.icon(
+                                onPressed: _pickFlightFitnessExpiry,
+                                icon: const Icon(Icons.calendar_month_outlined),
+                                label: const Text('Seleziona'),
+                              ),
+                            ],
+                          ),
+                        ),
                         if (_user.isTi || _user.isEtp) ...[
                           const SizedBox(height: 12),
                           Wrap(
@@ -1322,542 +1402,308 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                     ),
                   ),
                 ),
-                if (widget.showMaintenanceSections) ...[
-                  const SizedBox(height: 16),
-                  _Section(
-                    title: 'Licenze',
-                    children: widget.helicopterTypes.map((h) {
-                      return SizedBox(
-                        width: double.infinity,
-                        child: Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  h.name,
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                  textAlign: TextAlign.center,
-                                  softWrap: true,
-                                ),
-                                const SizedBox(height: 8),
-                                ...widget.licenseTypes.map((l) {
-                                  final key = '${h.id}:${l.id}';
-                                  final selected = _licenseKeys.contains(key);
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    decoration: BoxDecoration(
-                                      color: selected
-                                          ? AppColors.accent.withValues(
-                                              alpha: 0.12,
-                                            )
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: selected
-                                            ? AppColors.accent
-                                            : AppColors.border,
-                                      ),
-                                    ),
-                                    child: CheckboxListTile(
-                                      value: selected,
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                          ),
-                                      title: Text(l.name, softWrap: true),
-                                      subtitle: Text(
-                                        selected
-                                            ? 'Licenza assegnata'
-                                            : 'Tocca per assegnare',
-                                        softWrap: true,
-                                      ),
-                                      onChanged: (_) => setState(
-                                        () => _toggle(_licenseKeys, key),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  _Section(
-                    title: 'Privilegi manutentivi',
-                    children: widget.helicopterTypes.map((h) {
-                      final selectedPrivileges = widget.privilegeTypes
-                          .where(
-                            (p) => _privilegeKeys.contains('${h.id}:${p.id}'),
-                          )
-                          .toList();
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text(
-                                h.name,
-                                style: Theme.of(context).textTheme.titleSmall,
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              if (selectedPrivileges.isEmpty)
-                                const Text(
-                                  'Nessun privilegio selezionato.',
-                                  textAlign: TextAlign.center,
-                                )
-                              else
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: selectedPrivileges
-                                      .map(
-                                        (item) => Chip(
-                                          label: Text(
-                                            '${item.code} · ${item.name}',
-                                            softWrap: true,
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                ),
-                              const SizedBox(height: 8),
-                              OutlinedButton.icon(
-                                onPressed: () =>
-                                    _editPrivilegesForHelicopter(h),
-                                icon: const Icon(Icons.checklist_outlined),
-                                label: const Text('Modifica privilegi'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-                // ── Crew sections ─────────────────────────────────────────
-                if (widget.showCrewSections) ...[
+                if (widget.showMaintenanceSections ||
+                    widget.showCrewSections) ...[
                   const SizedBox(height: 16),
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Equipaggi di volo',
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 12),
-                          Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Equipaggio T',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleSmall,
-                                        ),
-                                      ),
-                                      if (_tCrewHelicopters.isNotEmpty)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primaryContainer,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '${_tCrewHelicopters.length}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onPrimaryContainer,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                      child: Builder(
+                        builder: (context) {
+                          final helicopterIds = _assignedHelicopterIds();
+                          final helicopters = helicopterIds
+                              .map(
+                                (id) => widget.helicopterTypes.firstWhere(
+                                  (item) => item.id == id,
+                                  orElse: () => HelicopterType(
+                                    id: id,
+                                    code: '$id',
+                                    name: 'Elicottero $id',
                                   ),
-                                  const SizedBox(height: 8),
-                                  if (_tCrewHelicopters.isNotEmpty)
-                                    Wrap(
-                                      spacing: 6,
-                                      runSpacing: 6,
-                                      children: widget.helicopterTypes
+                                ),
+                              )
+                              .toList();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Assegnazioni per elicottero',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 12),
+                              if (helicopters.isEmpty)
+                                const Text(
+                                  'Nessuna assegnazione configurata per questo utente.',
+                                )
+                              else
+                                ...helicopters.map((helicopter) {
+                                  final selectedLicenseId =
+                                      _selectedLicenseTypeIdFor(helicopter.id);
+                                  final selectedPrivilegeIds =
+                                      _selectedPrivilegeIdsFor(helicopter.id);
+                                  final selectedPrivileges =
+                                      widget.privilegeTypes
                                           .where(
-                                            (h) => _tCrewHelicopters.contains(
-                                              h.id,
-                                            ),
+                                            (item) => selectedPrivilegeIds
+                                                .contains(item.id),
                                           )
-                                          .map(
-                                            (h) => Chip(
-                                              label: Text(h.name),
-                                              onDeleted: () => setState(
-                                                () => _tCrewHelicopters.remove(
-                                                  h.id,
-                                                ),
+                                          .toList()
+                                        ..sort(
+                                          (a, b) => a.sortOrder.compareTo(
+                                            b.sortOrder,
+                                          ),
+                                        );
+                                  final crewType = _crewTypeForHelicopter(
+                                    helicopter.id,
+                                  );
+                                  final selectedCapabilityIds =
+                                      _selectedTobCapabilityIdsFor(
+                                        helicopter.id,
+                                      );
+                                  final selectedCapabilities = widget
+                                      .tobCapabilities
+                                      .where(
+                                        (item) => selectedCapabilityIds
+                                            .contains(item.id),
+                                      )
+                                      .toList();
+                                  final licenseLabel = selectedLicenseId == null
+                                      ? 'Nessuna'
+                                      : widget.licenseTypes
+                                            .firstWhere(
+                                              (item) =>
+                                                  item.id == selectedLicenseId,
+                                              orElse: () => LicenseType(
+                                                id: selectedLicenseId,
+                                                code: '$selectedLicenseId',
+                                                name: '$selectedLicenseId',
                                               ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    )
-                                  else
-                                    const Text(
-                                      'Nessun elicottero selezionato',
-                                      style: TextStyle(
-                                        fontStyle: FontStyle.italic,
+                                            )
+                                            .name;
+                                  final privilegeLabel =
+                                      selectedPrivileges.isEmpty
+                                      ? 'Nessuno'
+                                      : selectedPrivileges
+                                            .map((item) => item.code)
+                                            .join(', ');
+                                  final crewLabel = switch (crewType) {
+                                    'T' => 'T',
+                                    'MTB' => 'MTB',
+                                    'TOB' =>
+                                      selectedCapabilities.isEmpty
+                                          ? 'TOB - Fascia ${_tobGrades[helicopter.id] ?? 'A'}'
+                                          : 'TOB - Fascia ${_tobGrades[helicopter.id] ?? 'A'} [${selectedCapabilities.map((item) => item.code).join(', ')}]',
+                                    _ => 'Nessuno',
+                                  };
+
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    child: ExpansionTile(
+                                      initiallyExpanded: true,
+                                      tilePadding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 4,
                                       ),
-                                    ),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: _selectTCrewHelicopters,
-                                    icon: const Icon(Icons.flight, size: 16),
-                                    label: const Text('Scegli elicotteri'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Equipaggio TOB',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleSmall,
-                                        ),
+                                      childrenPadding:
+                                          const EdgeInsets.fromLTRB(
+                                            16,
+                                            0,
+                                            16,
+                                            16,
+                                          ),
+                                      title: Text(helicopter.name),
+                                      subtitle: Text(
+                                        'Licenza: $licenseLabel\nPrivilegi: $privilegeLabel\nCrew: $crewLabel',
                                       ),
-                                      if (_tobCrewHelicopters.isNotEmpty)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primaryContainer,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
+                                      children: [
+                                        if (widget.showMaintenanceSections) ...[
+                                          DropdownButtonFormField<int?>(
+                                            key: ValueKey(
+                                              'license_${helicopter.id}_$selectedLicenseId',
                                             ),
+                                            initialValue: selectedLicenseId,
+                                            decoration: const InputDecoration(
+                                              labelText:
+                                                  'Tipo licenza per elicottero',
+                                            ),
+                                            items: [
+                                              const DropdownMenuItem<int?>(
+                                                value: null,
+                                                child: Text('Nessuna'),
+                                              ),
+                                              ...widget.licenseTypes.map(
+                                                (item) =>
+                                                    DropdownMenuItem<int?>(
+                                                      value: item.id,
+                                                      child: Text(item.name),
+                                                    ),
+                                              ),
+                                            ],
+                                            onChanged: (value) =>
+                                                _setLicenseForHelicopter(
+                                                  helicopter.id,
+                                                  value,
+                                                ),
                                           ),
-                                          child: Text(
-                                            '${_tobCrewHelicopters.length}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: Theme.of(
+                                          const SizedBox(height: 12),
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              'Privilegi manutentivi',
+                                              style: Theme.of(
                                                 context,
-                                              ).colorScheme.onPrimaryContainer,
+                                              ).textTheme.titleSmall,
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (_tobCrewHelicopters.isNotEmpty)
-                                    ...widget.helicopterTypes
-                                        .where(
-                                          (h) => _tobCrewHelicopters.contains(
-                                            h.id,
-                                          ),
-                                        )
-                                        .map(
-                                          (h) => Card(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 8,
-                                            ),
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(8),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          h.name,
-                                                          style:
-                                                              const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                      IconButton(
-                                                        icon: const Icon(
-                                                          Icons.close,
-                                                          size: 18,
-                                                        ),
-                                                        padding:
-                                                            EdgeInsets.zero,
-                                                        constraints:
-                                                            const BoxConstraints(),
-                                                        onPressed: () => setState(
-                                                          () {
-                                                            _tobCrewHelicopters
-                                                                .remove(h.id);
-                                                            _tobGrades.remove(
-                                                              h.id,
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: widget.privilegeTypes
+                                                .map(
+                                                  (item) => FilterChip(
+                                                    selected:
+                                                        selectedPrivilegeIds
+                                                            .contains(item.id),
+                                                    label: Text(item.code),
+                                                    onSelected: (selected) =>
+                                                        setState(() {
+                                                          final key =
+                                                              '${helicopter.id}:${item.id}';
+                                                          if (selected) {
+                                                            _privilegeKeys.add(
+                                                              key,
                                                             );
-                                                            _tobCapabilityKeys
-                                                                .removeWhere(
-                                                                  (
-                                                                    k,
-                                                                  ) => k.startsWith(
-                                                                    '${h.id}:',
-                                                                  ),
-                                                                );
-                                                          },
-                                                        ),
-                                                      ),
-                                                    ],
+                                                          } else {
+                                                            _privilegeKeys
+                                                                .remove(key);
+                                                          }
+                                                        }),
                                                   ),
-                                                  const SizedBox(height: 8),
-                                                  DropdownButtonFormField<
-                                                    String
-                                                  >(
-                                                    key: ValueKey(
-                                                      '${h.id}_${_tobGrades[h.id]}',
-                                                    ),
-                                                    initialValue:
-                                                        _tobGrades[h.id] ?? 'A',
-                                                    isExpanded: true,
-                                                    decoration:
-                                                        const InputDecoration(
-                                                          labelText:
-                                                              'Fascia TOB',
-                                                          isDense: true,
-                                                        ),
-                                                    items: const [
-                                                      DropdownMenuItem(
-                                                        value: 'A',
-                                                        child: Text('A'),
-                                                      ),
-                                                      DropdownMenuItem(
-                                                        value: 'B',
-                                                        child: Text('B'),
-                                                      ),
-                                                      DropdownMenuItem(
-                                                        value: 'C',
-                                                        child: Text('C'),
-                                                      ),
-                                                    ],
-                                                    onChanged: (v) => setState(
-                                                      () => _tobGrades[h.id] =
-                                                          v ?? 'A',
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  const Text(
-                                                    'Capacità TOB:',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Wrap(
-                                                    spacing: 6,
-                                                    runSpacing: 6,
-                                                    children: widget
-                                                        .tobCapabilities
-                                                        .map(
-                                                          (c) => FilterChip(
-                                                            selected:
-                                                                _tobCapabilityKeys
-                                                                    .contains(
-                                                                      '${h.id}:${c.id}',
-                                                                    ),
-                                                            label: Text(c.name),
-                                                            onSelected: (_) => setState(
-                                                              () => _toggle(
-                                                                _tobCapabilityKeys,
-                                                                '${h.id}:${c.id}',
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        )
-                                                        .toList(),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
+                                                )
+                                                .toList(),
                                           ),
-                                        )
-                                  else
-                                    const Text(
-                                      'Nessun elicottero selezionato',
-                                      style: TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: _selectTobCrewHelicopters,
-                                    icon: const Icon(Icons.flight, size: 16),
-                                    label: const Text('Scegli elicotteri'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Mitragliere di Bordo (MTB)',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleSmall,
-                                        ),
-                                      ),
-                                      if (_mdbCrewHelicopters.isNotEmpty)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.primaryContainer,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '${_mdbCrewHelicopters.length}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: Theme.of(
+                                        ],
+                                        if (widget.showMaintenanceSections &&
+                                            widget.showCrewSections)
+                                          const Divider(height: 24),
+                                        if (widget.showCrewSections) ...[
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              'Tipo equipaggio',
+                                              style: Theme.of(
                                                 context,
-                                              ).colorScheme.onPrimaryContainer,
+                                              ).textTheme.titleSmall,
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (_mdbCrewHelicopters.isNotEmpty)
-                                    ...widget.helicopterTypes
-                                        .where(
-                                          (h) => _mdbCrewHelicopters.contains(
-                                            h.id,
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children:
+                                                [
+                                                      ('NONE', 'Nessuno'),
+                                                      ('T', 'T'),
+                                                      ('TOB', 'TOB'),
+                                                      ('MTB', 'MTB'),
+                                                    ]
+                                                    .map(
+                                                      (item) => ChoiceChip(
+                                                        label: Text(item.$2),
+                                                        selected:
+                                                            crewType == item.$1,
+                                                        onSelected: (_) =>
+                                                            _setCrewTypeForHelicopter(
+                                                              helicopter.id,
+                                                              item.$1,
+                                                            ),
+                                                      ),
+                                                    )
+                                                    .toList(),
                                           ),
-                                        )
-                                        .map(
-                                          (h) => Card(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 8,
-                                            ),
-                                            child: ListTile(
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 4,
-                                                  ),
-                                              title: Text(
-                                                h.name,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
+                                          if (crewType == 'TOB') ...[
+                                            const SizedBox(height: 12),
+                                            DropdownButtonFormField<String>(
+                                              key: ValueKey(
+                                                'tob_grade_${helicopter.id}_${_tobGrades[helicopter.id] ?? 'A'}',
                                               ),
-                                              subtitle: const Text(
-                                                'MTB richiede solo il tipo equipaggio e l\'elicottero selezionato.',
+                                              initialValue:
+                                                  _tobGrades[helicopter.id] ??
+                                                  'A',
+                                              decoration: const InputDecoration(
+                                                labelText: 'Fascia TOB',
                                               ),
-                                              trailing: IconButton(
-                                                icon: const Icon(
-                                                  Icons.close,
-                                                  size: 18,
+                                              items: const [
+                                                DropdownMenuItem(
+                                                  value: 'A',
+                                                  child: Text('A'),
                                                 ),
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(),
-                                                onPressed: () => setState(
-                                                  () => _mdbCrewHelicopters
-                                                      .remove(h.id),
+                                                DropdownMenuItem(
+                                                  value: 'B',
+                                                  child: Text('B'),
                                                 ),
+                                                DropdownMenuItem(
+                                                  value: 'C',
+                                                  child: Text('C'),
+                                                ),
+                                              ],
+                                              onChanged: (value) => setState(
+                                                () =>
+                                                    _tobGrades[helicopter.id] =
+                                                        value ?? 'A',
                                               ),
                                             ),
-                                          ),
-                                        )
-                                  else
-                                    const Text(
-                                      'Nessun elicottero selezionato',
-                                      style: TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                      ),
+                                            const SizedBox(height: 12),
+                                            Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Text(
+                                                'Capacità TOB',
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.titleSmall,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: widget.tobCapabilities
+                                                  .map(
+                                                    (item) => FilterChip(
+                                                      selected:
+                                                          selectedCapabilityIds
+                                                              .contains(
+                                                                item.id,
+                                                              ),
+                                                      label: Text(item.code),
+                                                      onSelected: (selected) =>
+                                                          setState(() {
+                                                            final key =
+                                                                '${helicopter.id}:${item.id}';
+                                                            if (selected) {
+                                                              _tobCapabilityKeys
+                                                                  .add(key);
+                                                            } else {
+                                                              _tobCapabilityKeys
+                                                                  .remove(key);
+                                                            }
+                                                          }),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                            ),
+                                          ],
+                                        ],
+                                      ],
                                     ),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: _selectMdbCrewHelicopters,
-                                    icon: const Icon(
-                                      Icons.shield_outlined,
-                                      size: 16,
-                                    ),
-                                    label: const Text('Scegli elicotteri'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                                  );
+                                }),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -1880,104 +1726,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                 const SizedBox(height: 32),
               ],
             ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
-
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.children});
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HelicopterMultiSelectDialog extends StatefulWidget {
-  const _HelicopterMultiSelectDialog({
-    required this.title,
-    required this.helicopters,
-    required this.initialSelection,
-  });
-
-  final String title;
-  final List<HelicopterType> helicopters;
-  final Set<int> initialSelection;
-
-  @override
-  State<_HelicopterMultiSelectDialog> createState() =>
-      _HelicopterMultiSelectDialogState();
-}
-
-class _HelicopterMultiSelectDialogState
-    extends State<_HelicopterMultiSelectDialog> {
-  late Set<int> _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = Set<int>.from(widget.initialSelection);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView(
-          shrinkWrap: true,
-          children: widget.helicopters.map((h) {
-            final isSelected = _selected.contains(h.id);
-            return CheckboxListTile(
-              value: isSelected,
-              title: Text(h.name),
-              onChanged: (val) {
-                setState(() {
-                  if (val == true) {
-                    _selected.add(h.id);
-                  } else {
-                    _selected.remove(h.id);
-                  }
-                });
-              },
-            );
-          }).toList(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annulla'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_selected),
-          child: const Text('Conferma'),
-        ),
-      ],
     );
   }
 }

@@ -703,14 +703,6 @@ class _AdminPrivilegesDashboardState
                 context.go('/admin/p66');
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.school_outlined),
-              title: const Text('Inserisci Seminario'),
-              onTap: () {
-                Navigator.of(context).pop();
-                context.go('/admin/seminars/add');
-              },
-            ),
           ],
         ),
       ),
@@ -1061,17 +1053,17 @@ class _AdminPrivilegesDashboardState
                             for (final item in row.licenses) {
                               if (item.helicopterTypeId == id) {
                                 return item.helicopterCode;
-                                }
                               }
-                              for (final item in row.privileges) {
-                                if (item.helicopterTypeId == id) {
-                                  return item.helicopterCode;
-                                }
+                            }
+                            for (final item in row.privileges) {
+                              if (item.helicopterTypeId == id) {
+                                return item.helicopterCode;
                               }
-                              for (final item in row.perPrivilegeCurrency) {
-                                if (item.helicopterTypeId == id) {
-                                  return item.helicopterCode;
-                                }
+                            }
+                            for (final item in row.perPrivilegeCurrency) {
+                              if (item.helicopterTypeId == id) {
+                                return item.helicopterCode;
+                              }
                             }
                             return '$id';
                           }
@@ -1743,12 +1735,6 @@ class _AdminPrivilegesDashboardState
               label: 'Inserisci Attività',
               icon: Icons.add_task_outlined,
               onTap: () => context.go('/admin/insert'),
-            ),
-            const SizedBox(height: 8),
-            _NavButton(
-              label: 'Inserisci Seminario',
-              icon: Icons.school_outlined,
-              onTap: () => context.go('/admin/seminars/add'),
             ),
             const SizedBox(height: 8),
             _NavButton(

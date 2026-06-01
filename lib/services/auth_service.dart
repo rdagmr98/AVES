@@ -115,6 +115,8 @@ class AuthService {
     required String cognome,
     required String numeroLicenza,
     required String email,
+    bool isTi = false,
+    bool isEtp = false,
   }) async {
     final users = _db.users;
     final licenseNumber = numeroLicenza.trim().toUpperCase();
@@ -145,8 +147,8 @@ class AuthService {
       'is_approved_maint': false,
       'is_approved_crew': false,
       'is_active': true,
-      'is_ti': false,
-      'is_etp': false,
+      'is_ti': isTi,
+      'is_etp': isEtp,
       'note': null,
       'created_at': now,
       'updated_at': now,

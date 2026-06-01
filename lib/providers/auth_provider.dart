@@ -167,6 +167,8 @@ class AuthProvider extends ChangeNotifier {
     required String cognome,
     required String numeroLicenza,
     required String email,
+    bool isTi = false,
+    bool isEtp = false,
   }) async {
     _isLoading = true;
     _error = null;
@@ -179,6 +181,8 @@ class AuthProvider extends ChangeNotifier {
         cognome: cognome,
         numeroLicenza: numeroLicenza,
         email: email,
+        isTi: isTi,
+        isEtp: isEtp,
       );
       await _loadReferenceData();
       await _authService.saveSession(_userProfile!.id, _userProfile!.role);

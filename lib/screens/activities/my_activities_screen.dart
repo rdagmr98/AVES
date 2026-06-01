@@ -19,6 +19,7 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late Future<_MyActivitiesData> _future;
+  final _service = ActivityService();
 
   @override
   void initState() {
@@ -52,6 +53,51 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
       default:
         return 0;
     }
+  }
+
+  void _reload(String userId) {
+    setState(() => _future = _load(userId));
+  }
+
+  Future<bool> _confirmDelete(String title) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Conferma eliminazione'),
+        content: Text('Eliminare l\'attività "$title"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _deleteActivity({
+    required String title,
+    required Future<void> Function() delete,
+    required String userId,
+  }) async {
+    final confirmed = await _confirmDelete(title);
+    if (!confirmed) {
+      return;
+    }
+    await delete();
+    if (!mounted) {
+      return;
+    }
+    _reload(userId);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Attività eliminata.')));
   }
 
   @override
@@ -95,6 +141,17 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
+                        onDelete: item.id != null && !item.isValidated
+                            ? () {
+                                _deleteActivity(
+                                  title:
+                                      '${item.helicopterCode} · ${item.privilegeName}',
+                                  delete: () => _service
+                                      .deleteMaintenanceActivity(item.id!),
+                                  userId: user.id,
+                                );
+                              }
+                            : null,
                       ),
                     )
                     .toList(),
@@ -109,6 +166,17 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
+                        onDelete: item.id != null && !item.isValidated
+                            ? () {
+                                _deleteActivity(
+                                  title:
+                                      '${item.helicopterCode} · ${item.flightHours.toStringAsFixed(1)}h',
+                                  delete: () =>
+                                      _service.deleteFlightActivity(item.id!),
+                                  userId: user.id,
+                                );
+                              }
+                            : null,
                       ),
                     )
                     .toList(),
@@ -123,6 +191,17 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
+                        onDelete: item.id != null && !item.isValidated
+                            ? () {
+                                _deleteActivity(
+                                  title:
+                                      '${item.helicopterCode} · ${item.capabilityName}',
+                                  delete: () =>
+                                      _service.deleteTobActivity(item.id!),
+                                  userId: user.id,
+                                );
+                              }
+                            : null,
                       ),
                     )
                     .toList(),
@@ -138,6 +217,16 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                             'Aggiornamento biennale NAM e MHF',
                         date: item.seminarDate,
                         isValidated: item.isValidated,
+                        onDelete: item.id != null && !item.isValidated
+                            ? () {
+                                _deleteActivity(
+                                  title: 'Seminario NAM/MHF',
+                                  delete: () =>
+                                      _service.deleteSeminarActivity(item.id!),
+                                  userId: user.id,
+                                );
+                              }
+                            : null,
                       ),
                     )
                     .toList(),
@@ -150,11 +239,10 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
   }
 
   Future<_MyActivitiesData> _load(String userId) async {
-    final service = ActivityService();
-    final maintenance = await service.getUserMaintenanceActivities(userId);
-    final flight = await service.getUserFlightActivities(userId);
-    final tob = await service.getUserTobActivities(userId);
-    final seminars = await service.getUserSeminarActivities(userId);
+    final maintenance = await _service.getUserMaintenanceActivities(userId);
+    final flight = await _service.getUserFlightActivities(userId);
+    final tob = await _service.getUserTobActivities(userId);
+    final seminars = await _service.getUserSeminarActivities(userId);
     return _MyActivitiesData(
       maintenance: maintenance,
       flight: flight,
@@ -222,13 +310,14 @@ class _ActivityListTile extends StatelessWidget {
     required this.subtitle,
     required this.date,
     required this.isValidated,
+    this.onDelete,
   });
 
   final String title;
   final String subtitle;
   final DateTime date;
   final bool isValidated;
-
+  final VoidCallback? onDelete;
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -238,8 +327,21 @@ class _ActivityListTile extends StatelessWidget {
         '$subtitle\n${DateFormat('dd/MM/yyyy').format(date)}',
         softWrap: true,
       ),
-      trailing: Chip(
-        label: Text(isValidated ? 'Validata' : 'In attesa', softWrap: true),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Chip(
+            label: Text(isValidated ? 'Validata' : 'In attesa', softWrap: true),
+          ),
+          if (onDelete != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Elimina attività',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            ),
+          ],
+        ],
       ),
     );
   }

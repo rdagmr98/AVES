@@ -369,12 +369,6 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
             ),
             const SizedBox(height: 8),
             _NavButton(
-              label: 'Inserisci Seminario',
-              icon: Icons.school_outlined,
-              onTap: () => context.go('/admin/seminars/add'),
-            ),
-            const SizedBox(height: 8),
-            _NavButton(
               label: 'Report P-66',
               icon: Icons.picture_as_pdf_outlined,
               onTap: _reportService.downloadP66Report,

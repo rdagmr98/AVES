@@ -196,6 +196,11 @@ class ActivityService {
     }
   }
 
+  Future<void> deleteMaintenanceActivity(int id) async {
+    final rows = _db.maintenanceActs.where((item) => item['id'] != id).toList();
+    await _db.saveMaintenanceActs(rows);
+  }
+
   Future<List<MaintenanceActivity>> getUserMaintenanceActivities(
     String userId,
   ) async {
@@ -335,6 +340,11 @@ class ActivityService {
     }
   }
 
+  Future<void> deleteFlightActivity(int id) async {
+    final rows = _db.flightActs.where((item) => item['id'] != id).toList();
+    await _db.saveFlightActs(rows);
+  }
+
   Future<List<FlightActivity>> getUserFlightActivities(String userId) async {
     final items =
         _db.flightActs.where((item) => item['user_id'] == userId).toList()
@@ -455,6 +465,11 @@ class ActivityService {
             'Attività TOB non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_tobCapabilityLabel(activity.tobCapabilityId)} · ${_formatDate(activity.activityDate)}.',
       );
     }
+  }
+
+  Future<void> deleteTobActivity(int id) async {
+    final rows = _db.tobActs.where((item) => item['id'] != id).toList();
+    await _db.saveTobActs(rows);
   }
 
   Future<List<TobActivity>> getUserTobActivities(String userId) async {
@@ -590,6 +605,11 @@ class ActivityService {
             'Seminario ${activity.seminarType} non approvato: ${_formatDate(activity.seminarDate)}.',
       );
     }
+  }
+
+  Future<void> deleteSeminarActivity(int id) async {
+    final rows = _db.seminars.where((item) => item['id'] != id).toList();
+    await _db.saveSeminars(rows);
   }
 
   Future<List<SeminarActivity>> getUserSeminarActivities(String userId) async {

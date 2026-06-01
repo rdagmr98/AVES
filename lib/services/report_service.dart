@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
 
 import 'dart:html' as html;
+import 'dart:math' show pi;
 import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
@@ -13,6 +14,75 @@ import 'activity_service.dart';
 import 'currency_service.dart';
 import 'p66_service.dart';
 import 'user_service.dart';
+
+pw.Widget _matrixHeaderCell(
+  String text, {
+  required double height,
+  required bool rotate,
+}) {
+  return pw.Container(
+    height: height,
+    alignment: pw.Alignment.center,
+    padding: const pw.EdgeInsets.all(2),
+    child: rotate
+        ? pw.Transform.rotateBox(
+            angle: pi / 2,
+            child: pw.Text(
+              text,
+              style: pw.TextStyle(
+                fontSize: 7,
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              maxLines: 2,
+              overflow: pw.TextOverflow.clip,
+            ),
+          )
+        : pw.Text(
+            text,
+            style: pw.TextStyle(
+              fontSize: 7,
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+            ),
+            textAlign: pw.TextAlign.center,
+          ),
+  );
+}
+
+pw.Widget _matrixDataCell(
+  String text, {
+  pw.Alignment align = pw.Alignment.center,
+}) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+    alignment: align,
+    child: pw.Text(
+      text,
+      style: const pw.TextStyle(fontSize: 7),
+      maxLines: 2,
+      overflow: pw.TextOverflow.clip,
+    ),
+  );
+}
+
+pw.Widget _matrixFilledCell() {
+  return pw.Container(
+    decoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+    alignment: pw.Alignment.center,
+    child: pw.Text(
+      '■',
+      style: const pw.TextStyle(fontSize: 7, color: PdfColors.white),
+    ),
+  );
+}
+
+pw.Widget _matrixEmptyCell() {
+  return pw.Container(
+    decoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+    alignment: pw.Alignment.center,
+  );
+}
 
 class ReportService {
   final _activityService = ActivityService();
@@ -364,6 +434,25 @@ class ReportService {
       if (helicopterTypeId != null) 'Elicottero filtrato',
       if (licenseTypeId != null) 'Tipo licenza filtrato',
     ].join(', ');
+    const privilegeNames = {
+      'DLV': 'Delibera al Volo',
+      'CRA': 'C.R. Aeromobile',
+      'CDT': 'C.R. Documentazione',
+      'CRF': 'C.R. Firme',
+      'CRD': 'C.R. Demolizioni',
+      'MLN': 'Manutenzione Linea',
+      'MTM': 'Manutenzione Motori',
+      'MDN': 'Manutenzione Dinamica',
+      'IDR': 'Impianti Idraulici',
+      'STR': 'Sistemi Strutturali',
+      'EEA': 'Elettrico/Avionico',
+      'ISP': 'Ispezione/Collaudo',
+    };
+    const headerHeight = 90.0;
+    const nameColWidth = 110.0;
+    const licColWidth = 70.0;
+    const numColWidth = 60.0;
+    const privColWidth = 22.0;
 
     pdf.addPage(
       pw.MultiPage(
@@ -377,21 +466,77 @@ class ReportService {
           pw.Text('Generato il $generatedAt'),
           if (filterInfo.isNotEmpty) pw.Text('Filtri: $filterInfo'),
           pw.SizedBox(height: 16),
-          pw.TableHelper.fromTextArray(
-            headers: ['Nome', 'Tipo Licenza', 'N° Licenza', ...privilegeTypes],
-            data: matrixRows.isEmpty
-                ? [List<String>.filled(3 + privilegeTypes.length, '-')]
-                : matrixRows,
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.white,
-            ),
-            headerDecoration: const pw.BoxDecoration(
-              color: PdfColors.blueGrey800,
-            ),
-            cellStyle: const pw.TextStyle(fontSize: 8),
-            cellAlignment: pw.Alignment.center,
-            cellPadding: const pw.EdgeInsets.all(4),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(nameColWidth),
+              1: const pw.FixedColumnWidth(licColWidth),
+              2: const pw.FixedColumnWidth(numColWidth),
+              for (var i = 0; i < privilegeTypes.length; i++)
+                i + 3: const pw.FixedColumnWidth(privColWidth),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.blueGrey800,
+                ),
+                children: [
+                  _matrixHeaderCell(
+                    'Nome',
+                    height: headerHeight,
+                    rotate: false,
+                  ),
+                  _matrixHeaderCell(
+                    'Lic.',
+                    height: headerHeight,
+                    rotate: false,
+                  ),
+                  _matrixHeaderCell(
+                    'N° Lic.',
+                    height: headerHeight,
+                    rotate: false,
+                  ),
+                  ...privilegeTypes.map(
+                    (type) => _matrixHeaderCell(
+                      privilegeNames[type] ?? type,
+                      height: headerHeight,
+                      rotate: true,
+                    ),
+                  ),
+                ],
+              ),
+              if (matrixRows.isEmpty)
+                pw.TableRow(
+                  children: [
+                    _matrixDataCell(
+                      'Nessun dato',
+                      align: pw.Alignment.centerLeft,
+                    ),
+                    _matrixDataCell('-'),
+                    _matrixDataCell('-'),
+                    ...List.generate(
+                      privilegeTypes.length,
+                      (_) => _matrixEmptyCell(),
+                    ),
+                  ],
+                )
+              else
+                ...matrixRows.map(
+                  (row) => pw.TableRow(
+                    children: [
+                      _matrixDataCell(row[0], align: pw.Alignment.centerLeft),
+                      _matrixDataCell(row[1]),
+                      _matrixDataCell(row[2]),
+                      ...List.generate(privilegeTypes.length, (index) {
+                        final hasPrivilege = row[3 + index] == '■';
+                        return hasPrivilege
+                            ? _matrixFilledCell()
+                            : _matrixEmptyCell();
+                      }),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
       ),
