@@ -361,7 +361,7 @@ class ReportService {
     final allPrivilegeTypes = await _userService.getPrivilegeTypes();
     allPrivilegeTypes.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-    // Collect user data
+    // Collect user data: include all users with at least one license
     final userDataList = <_MatrixUserData>[];
     for (final user in users.where((u) => u.isApprovedMaint)) {
       if (orgUnitId != null && user.orgUnitId != orgUnitId) continue;
@@ -372,7 +372,9 @@ class ReportService {
         continue;
       }
       final privileges = await _userService.getUserPrivileges(user.id);
+      // Keep if user has a license OR privilege for the filtered helicopter
       if (helicopterTypeId != null &&
+          !licenses.any((l) => l.helicopterTypeId == helicopterTypeId) &&
           !privileges.any((p) => p.helicopterTypeId == helicopterTypeId)) {
         continue;
       }
@@ -381,9 +383,12 @@ class ReportService {
       );
     }
 
-    // Collect helicopters present in data
+    // Collect helicopters from licenses (not just privileges)
     final helicopterMap = <int, String>{};
     for (final data in userDataList) {
+      for (final l in data.licenses) {
+        helicopterMap[l.helicopterTypeId] = l.helicopterCode;
+      }
       for (final p in data.privileges) {
         helicopterMap[p.helicopterTypeId] = p.helicopterCode;
       }
@@ -396,8 +401,8 @@ class ReportService {
 
     const headerHeight = 90.0;
     const nameColWidth = 110.0;
-    const licColWidth = 70.0;
-    const numColWidth = 60.0;
+    const licColWidth = 45.0;
+    const numColWidth = 55.0;
     const privColWidth = 22.0;
 
     final pdf = pw.Document();
@@ -429,38 +434,21 @@ class ReportService {
           for (final heliId in sortedHelicopterIds) {
             final heliCode = helicopterMap[heliId]!;
 
-            // Privilege codes actually present for this helicopter
-            final privCodesForHeli = <String>{};
-            for (final data in userDataList) {
-              for (final p
-                  in data.privileges.where(
-                    (p) => p.helicopterTypeId == heliId,
-                  )) {
-                privCodesForHeli.add(p.privilegeCode.toUpperCase());
-              }
-            }
-
-            final privTypesForHeli = allPrivilegeTypes
-                .where((pt) => privCodesForHeli.contains(pt.code.toUpperCase()))
-                .toList();
-
-            if (privTypesForHeli.isEmpty) continue;
-
-            // Build table rows for this helicopter
+            // Build table rows: all users with a license or privilege for this heli
             final tableRows = <_MatrixRow>[];
             for (final data in userDataList) {
-              final privs = data.privileges
-                  .where((p) => p.helicopterTypeId == heliId)
-                  .toList();
-              if (privs.isEmpty) continue;
               final licForHeli = data.licenses
                   .where((l) => l.helicopterTypeId == heliId)
                   .toList();
+              final privsForHeli = data.privileges
+                  .where((p) => p.helicopterTypeId == heliId)
+                  .toList();
+              if (licForHeli.isEmpty && privsForHeli.isEmpty) continue;
               final licStr = licForHeli
                   .map((l) => l.licenseCode)
                   .toSet()
                   .join(', ');
-              final privSet = privs
+              final privSet = privsForHeli
                   .map((p) => p.privilegeCode.toUpperCase())
                   .toSet();
               tableRows.add(
@@ -505,7 +493,7 @@ class ReportService {
                   0: const pw.FixedColumnWidth(nameColWidth),
                   1: const pw.FixedColumnWidth(licColWidth),
                   2: const pw.FixedColumnWidth(numColWidth),
-                  for (var i = 0; i < privTypesForHeli.length; i++)
+                  for (var i = 0; i < allPrivilegeTypes.length; i++)
                     i + 3: const pw.FixedColumnWidth(privColWidth),
                 },
                 children: [
@@ -529,7 +517,7 @@ class ReportService {
                         height: headerHeight,
                         rotate: false,
                       ),
-                      ...privTypesForHeli.map(
+                      ...allPrivilegeTypes.map(
                         (pt) => _matrixHeaderCell(
                           pt.name,
                           height: headerHeight,
@@ -547,7 +535,7 @@ class ReportService {
                         ),
                         _matrixDataCell(row.license),
                         _matrixDataCell(row.licenseNumber),
-                        ...privTypesForHeli.map(
+                        ...allPrivilegeTypes.map(
                           (pt) =>
                               row.privilegeSet.contains(pt.code.toUpperCase())
                               ? _matrixFilledCell()
