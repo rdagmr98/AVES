@@ -358,69 +358,47 @@ class ReportService {
     int? licenseTypeId,
   }) async {
     final users = await _userService.getAllUsers();
-    final privilegeTypes = [
-      'DLV',
-      'CRA',
-      'CDT',
-      'CRF',
-      'CRD',
-      'MLN',
-      'MTM',
-      'MDN',
-      'IDR',
-      'STR',
-      'EEA',
-      'ISP',
-    ];
-    final matrixRows = <List<String>>[];
+    final allPrivilegeTypes = await _userService.getPrivilegeTypes();
+    allPrivilegeTypes.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-    for (final user in users.where((item) => item.isApprovedMaint)) {
-      if (orgUnitId != null && user.orgUnitId != orgUnitId) {
-        continue;
-      }
-
+    // Collect user data
+    final userDataList = <_MatrixUserData>[];
+    for (final user in users.where((u) => u.isApprovedMaint)) {
+      if (orgUnitId != null && user.orgUnitId != orgUnitId) continue;
       final licenses = await _userService.getUserLicenses(user.id);
-      if (licenses.isEmpty) {
-        continue;
-      }
+      if (licenses.isEmpty) continue;
       if (licenseTypeId != null &&
           !licenses.any((l) => l.licenseTypeId == licenseTypeId)) {
         continue;
       }
-
       final privileges = await _userService.getUserPrivileges(user.id);
       if (helicopterTypeId != null &&
           !privileges.any((p) => p.helicopterTypeId == helicopterTypeId)) {
         continue;
       }
-
-      final licenseStr = licenses
-          .where(
-            (l) => licenseTypeId == null || l.licenseTypeId == licenseTypeId,
-          )
-          .map((l) => l.licenseName)
-          .join(', ');
-      final numeroLicenza = user.numeroLicenza ?? '-';
-
-      final privilegesForRow = privileges
-          .where(
-            (p) =>
-                helicopterTypeId == null ||
-                p.helicopterTypeId == helicopterTypeId,
-          )
-          .toList();
-      final privilegeSet = privilegesForRow
-          .map((p) => p.privilegeCode.toUpperCase())
-          .toSet();
-
-      final matrixRow = [
-        user.fullName,
-        licenseStr.isEmpty ? '-' : licenseStr,
-        numeroLicenza,
-        ...privilegeTypes.map((type) => privilegeSet.contains(type) ? '■' : ''),
-      ];
-      matrixRows.add(matrixRow);
+      userDataList.add(
+        _MatrixUserData(user: user, licenses: licenses, privileges: privileges),
+      );
     }
+
+    // Collect helicopters present in data
+    final helicopterMap = <int, String>{};
+    for (final data in userDataList) {
+      for (final p in data.privileges) {
+        helicopterMap[p.helicopterTypeId] = p.helicopterCode;
+      }
+    }
+    if (helicopterTypeId != null) {
+      helicopterMap.removeWhere((id, _) => id != helicopterTypeId);
+    }
+    final sortedHelicopterIds = helicopterMap.keys.toList()
+      ..sort((a, b) => helicopterMap[a]!.compareTo(helicopterMap[b]!));
+
+    const headerHeight = 90.0;
+    const nameColWidth = 110.0;
+    const licColWidth = 70.0;
+    const numColWidth = 60.0;
+    const privColWidth = 22.0;
 
     final pdf = pw.Document();
     final generatedAt = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
@@ -429,111 +407,171 @@ class ReportService {
       if (helicopterTypeId != null) 'Elicottero filtrato',
       if (licenseTypeId != null) 'Tipo licenza filtrato',
     ].join(', ');
-    const privilegeNames = {
-      'DLV': 'Delibera al Volo',
-      'CRA': 'C.R. Aeromobile',
-      'CDT': 'C.R. Documentazione',
-      'CRF': 'C.R. Firme',
-      'CRD': 'C.R. Demolizioni',
-      'MLN': 'Manutenzione Linea',
-      'MTM': 'Manutenzione Motori',
-      'MDN': 'Manutenzione Dinamica',
-      'IDR': 'Impianti Idraulici',
-      'STR': 'Sistemi Strutturali',
-      'EEA': 'Elettrico/Avionico',
-      'ISP': 'Ispezione/Collaudo',
-    };
-    const headerHeight = 90.0;
-    const nameColWidth = 110.0;
-    const licColWidth = 70.0;
-    const numColWidth = 60.0;
-    const privColWidth = 22.0;
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
-        build: (context) => [
-          pw.Text(
-            'Matrice Privilegi CSL',
-            style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 8),
-          pw.Text('Generato il $generatedAt'),
-          if (filterInfo.isNotEmpty) pw.Text('Filtri: $filterInfo'),
-          pw.SizedBox(height: 16),
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-            columnWidths: {
-              0: const pw.FixedColumnWidth(nameColWidth),
-              1: const pw.FixedColumnWidth(licColWidth),
-              2: const pw.FixedColumnWidth(numColWidth),
-              for (var i = 0; i < privilegeTypes.length; i++)
-                i + 3: const pw.FixedColumnWidth(privColWidth),
-            },
-            children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(
-                  color: PdfColors.blueGrey800,
+        build: (context) {
+          final widgets = <pw.Widget>[
+            pw.Text(
+              'Matrice Privilegi CSL',
+              style: pw.TextStyle(
+                fontSize: 18,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text('Generato il $generatedAt'),
+            if (filterInfo.isNotEmpty) pw.Text('Filtri: $filterInfo'),
+            pw.SizedBox(height: 16),
+          ];
+
+          for (final heliId in sortedHelicopterIds) {
+            final heliCode = helicopterMap[heliId]!;
+
+            // Privilege codes actually present for this helicopter
+            final privCodesForHeli = <String>{};
+            for (final data in userDataList) {
+              for (final p
+                  in data.privileges.where(
+                    (p) => p.helicopterTypeId == heliId,
+                  )) {
+                privCodesForHeli.add(p.privilegeCode.toUpperCase());
+              }
+            }
+
+            final privTypesForHeli = allPrivilegeTypes
+                .where((pt) => privCodesForHeli.contains(pt.code.toUpperCase()))
+                .toList();
+
+            if (privTypesForHeli.isEmpty) continue;
+
+            // Build table rows for this helicopter
+            final tableRows = <_MatrixRow>[];
+            for (final data in userDataList) {
+              final privs = data.privileges
+                  .where((p) => p.helicopterTypeId == heliId)
+                  .toList();
+              if (privs.isEmpty) continue;
+              final licForHeli = data.licenses
+                  .where((l) => l.helicopterTypeId == heliId)
+                  .toList();
+              final licStr = licForHeli
+                  .map((l) => l.licenseName)
+                  .toSet()
+                  .join(', ');
+              final privSet = privs
+                  .map((p) => p.privilegeCode.toUpperCase())
+                  .toSet();
+              tableRows.add(
+                _MatrixRow(
+                  name: data.user.fullName,
+                  license: licStr.isEmpty ? '-' : licStr,
+                  licenseNumber: data.user.numeroLicenza ?? '-',
+                  privilegeSet: privSet,
                 ),
+              );
+            }
+
+            if (tableRows.isEmpty) continue;
+
+            // Helicopter section header
+            widgets.add(
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 5,
+                ),
+                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey900),
+                child: pw.Text(
+                  'Elicottero: $heliCode',
+                  style: pw.TextStyle(
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ),
+            );
+            widgets.add(pw.SizedBox(height: 6));
+
+            widgets.add(
+              pw.Table(
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey400,
+                  width: 0.5,
+                ),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(nameColWidth),
+                  1: const pw.FixedColumnWidth(licColWidth),
+                  2: const pw.FixedColumnWidth(numColWidth),
+                  for (var i = 0; i < privTypesForHeli.length; i++)
+                    i + 3: const pw.FixedColumnWidth(privColWidth),
+                },
                 children: [
-                  _matrixHeaderCell(
-                    'Nome',
-                    height: headerHeight,
-                    rotate: false,
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.blueGrey800,
+                    ),
+                    children: [
+                      _matrixHeaderCell(
+                        'Nome',
+                        height: headerHeight,
+                        rotate: false,
+                      ),
+                      _matrixHeaderCell(
+                        'Lic.',
+                        height: headerHeight,
+                        rotate: false,
+                      ),
+                      _matrixHeaderCell(
+                        'N° Lic.',
+                        height: headerHeight,
+                        rotate: false,
+                      ),
+                      ...privTypesForHeli.map(
+                        (pt) => _matrixHeaderCell(
+                          pt.name,
+                          height: headerHeight,
+                          rotate: true,
+                        ),
+                      ),
+                    ],
                   ),
-                  _matrixHeaderCell(
-                    'Lic.',
-                    height: headerHeight,
-                    rotate: false,
-                  ),
-                  _matrixHeaderCell(
-                    'N° Lic.',
-                    height: headerHeight,
-                    rotate: false,
-                  ),
-                  ...privilegeTypes.map(
-                    (type) => _matrixHeaderCell(
-                      privilegeNames[type] ?? type,
-                      height: headerHeight,
-                      rotate: true,
+                  ...tableRows.map(
+                    (row) => pw.TableRow(
+                      children: [
+                        _matrixDataCell(
+                          row.name,
+                          align: pw.Alignment.centerLeft,
+                        ),
+                        _matrixDataCell(row.license),
+                        _matrixDataCell(row.licenseNumber),
+                        ...privTypesForHeli.map(
+                          (pt) =>
+                              row.privilegeSet.contains(pt.code.toUpperCase())
+                              ? _matrixFilledCell()
+                              : _matrixEmptyCell(),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              if (matrixRows.isEmpty)
-                pw.TableRow(
-                  children: [
-                    _matrixDataCell(
-                      'Nessun dato',
-                      align: pw.Alignment.centerLeft,
-                    ),
-                    _matrixDataCell('-'),
-                    _matrixDataCell('-'),
-                    ...List.generate(
-                      privilegeTypes.length,
-                      (_) => _matrixEmptyCell(),
-                    ),
-                  ],
-                )
-              else
-                ...matrixRows.map(
-                  (row) => pw.TableRow(
-                    children: [
-                      _matrixDataCell(row[0], align: pw.Alignment.centerLeft),
-                      _matrixDataCell(row[1]),
-                      _matrixDataCell(row[2]),
-                      ...List.generate(privilegeTypes.length, (index) {
-                        final hasPrivilege = row[3 + index] == '■';
-                        return hasPrivilege
-                            ? _matrixFilledCell()
-                            : _matrixEmptyCell();
-                      }),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
+            );
+            widgets.add(pw.SizedBox(height: 24));
+          }
+
+          if (sortedHelicopterIds.isEmpty) {
+            widgets.add(
+              pw.Text(
+                'Nessun dato disponibile per i filtri selezionati.',
+              ),
+            );
+          }
+
+          return widgets;
+        },
       ),
     );
 
@@ -604,4 +642,30 @@ class ReportService {
     }
     return DateFormat('dd/MM/yyyy').format(date);
   }
+}
+
+class _MatrixUserData {
+  const _MatrixUserData({
+    required this.user,
+    required this.licenses,
+    required this.privileges,
+  });
+
+  final UserProfile user;
+  final List<UserLicense> licenses;
+  final List<UserPrivilege> privileges;
+}
+
+class _MatrixRow {
+  const _MatrixRow({
+    required this.name,
+    required this.license,
+    required this.licenseNumber,
+    required this.privilegeSet,
+  });
+
+  final String name;
+  final String license;
+  final String licenseNumber;
+  final Set<String> privilegeSet;
 }
