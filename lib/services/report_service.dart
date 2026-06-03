@@ -68,12 +68,7 @@ pw.Widget _matrixDataCell(
 
 pw.Widget _matrixFilledCell() {
   return pw.Container(
-    decoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
-    alignment: pw.Alignment.center,
-    child: pw.Text(
-      '■',
-      style: const pw.TextStyle(fontSize: 7, color: PdfColors.white),
-    ),
+    decoration: const pw.BoxDecoration(color: PdfColors.black),
   );
 }
 
