@@ -457,7 +457,7 @@ class ReportService {
                   .where((l) => l.helicopterTypeId == heliId)
                   .toList();
               final licStr = licForHeli
-                  .map((l) => l.licenseName)
+                  .map((l) => l.licenseCode)
                   .toSet()
                   .join(', ');
               final privSet = privs
