@@ -68,7 +68,16 @@ pw.Widget _matrixDataCell(
 
 pw.Widget _matrixFilledCell() {
   return pw.Container(
-    decoration: const pw.BoxDecoration(color: PdfColors.black),
+    color: PdfColors.black,
+    alignment: pw.Alignment.center,
+    child: pw.Text(
+      '●',
+      style: pw.TextStyle(
+        fontSize: 9,
+        color: PdfColors.white,
+        fontWeight: pw.FontWeight.bold,
+      ),
+    ),
   );
 }
 
@@ -360,6 +369,11 @@ class ReportService {
     final users = await _userService.getAllUsers();
     final allPrivilegeTypes = await _userService.getPrivilegeTypes();
     allPrivilegeTypes.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    // Map privilege_type_id → code using toString() to avoid int/double
+    // type confusion that occurs in dart2js JSON decoding
+    final privCodeById = {
+      for (final pt in allPrivilegeTypes) '${pt.id}': pt.code,
+    };
 
     // Collect user data: include all users with at least one license
     final userDataList = <_MatrixUserData>[];
@@ -448,15 +462,18 @@ class ReportService {
                   .map((l) => l.licenseCode)
                   .toSet()
                   .join(', ');
-              final privIdSet = privsForHeli
-                  .map((p) => p.privilegeTypeId)
+              // Resolve privilege codes via the pre-built string map to
+              // avoid int/double type mismatch in dart2js JSON decoding
+              final privCodes = privsForHeli
+                  .map((p) => privCodeById['${p.privilegeTypeId}'] ?? '')
+                  .where((code) => code.isNotEmpty)
                   .toSet();
               tableRows.add(
                 _MatrixRow(
                   name: data.user.fullName,
                   license: licStr.isEmpty ? '-' : licStr,
                   licenseNumber: data.user.numeroLicenza ?? '-',
-                  privilegeIdSet: privIdSet,
+                  privilegeCodes: privCodes,
                 ),
               );
             }
@@ -537,7 +554,7 @@ class ReportService {
                         _matrixDataCell(row.licenseNumber),
                         ...allPrivilegeTypes.map(
                           (pt) =>
-                              row.privilegeIdSet.contains(pt.id)
+                              row.privilegeCodes.contains(pt.code)
                               ? _matrixFilledCell()
                               : _matrixEmptyCell(),
                         ),
@@ -649,11 +666,11 @@ class _MatrixRow {
     required this.name,
     required this.license,
     required this.licenseNumber,
-    required this.privilegeIdSet,
+    required this.privilegeCodes,
   });
 
   final String name;
   final String license;
   final String licenseNumber;
-  final Set<int> privilegeIdSet;
+  final Set<String> privilegeCodes;
 }
