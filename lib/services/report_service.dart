@@ -448,15 +448,15 @@ class ReportService {
                   .map((l) => l.licenseCode)
                   .toSet()
                   .join(', ');
-              final privSet = privsForHeli
-                  .map((p) => p.privilegeCode.toUpperCase())
+              final privIdSet = privsForHeli
+                  .map((p) => p.privilegeTypeId)
                   .toSet();
               tableRows.add(
                 _MatrixRow(
                   name: data.user.fullName,
                   license: licStr.isEmpty ? '-' : licStr,
                   licenseNumber: data.user.numeroLicenza ?? '-',
-                  privilegeSet: privSet,
+                  privilegeIdSet: privIdSet,
                 ),
               );
             }
@@ -537,7 +537,7 @@ class ReportService {
                         _matrixDataCell(row.licenseNumber),
                         ...allPrivilegeTypes.map(
                           (pt) =>
-                              row.privilegeSet.contains(pt.code.toUpperCase())
+                              row.privilegeIdSet.contains(pt.id)
                               ? _matrixFilledCell()
                               : _matrixEmptyCell(),
                         ),
@@ -649,11 +649,11 @@ class _MatrixRow {
     required this.name,
     required this.license,
     required this.licenseNumber,
-    required this.privilegeSet,
+    required this.privilegeIdSet,
   });
 
   final String name;
   final String license;
   final String licenseNumber;
-  final Set<String> privilegeSet;
+  final Set<int> privilegeIdSet;
 }
