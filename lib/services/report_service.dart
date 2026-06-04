@@ -70,14 +70,6 @@ pw.Widget _matrixFilledCell() {
   return pw.Container(
     color: PdfColors.black,
     alignment: pw.Alignment.center,
-    child: pw.Text(
-      '●',
-      style: pw.TextStyle(
-        fontSize: 9,
-        color: PdfColors.white,
-        fontWeight: pw.FontWeight.bold,
-      ),
-    ),
   );
 }
 
