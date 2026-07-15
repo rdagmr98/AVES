@@ -361,7 +361,7 @@ class ReportService {
 
   Future<void> downloadPrivilegeMatrix({
     int? orgUnitId,
-    int? helicopterTypeId,
+    List<int>? helicopterTypeIds,
     int? licenseTypeId,
   }) async {
     final users = await _userService.getAllUsers();
@@ -381,10 +381,11 @@ class ReportService {
           !licenses.any((l) => l.licenseTypeId == licenseTypeId)) {
         continue;
       }
-      // Keep if user has a license OR privilege for the filtered helicopter
-      if (helicopterTypeId != null &&
-          !licenses.any((l) => l.helicopterTypeId == helicopterTypeId) &&
-          !privileges.any((p) => p.helicopterTypeId == helicopterTypeId)) {
+      // Keep if user has a license OR privilege for one of the filtered helicopters
+      if (helicopterTypeIds != null &&
+          helicopterTypeIds.isNotEmpty &&
+          !licenses.any((l) => helicopterTypeIds.contains(l.helicopterTypeId)) &&
+          !privileges.any((p) => helicopterTypeIds.contains(p.helicopterTypeId))) {
         continue;
       }
       // GO status per (helicopter, privilege) — the matrix cell must reflect
@@ -415,8 +416,8 @@ class ReportService {
         helicopterMap[p.helicopterTypeId] = p.helicopterCode;
       }
     }
-    if (helicopterTypeId != null) {
-      helicopterMap.removeWhere((id, _) => id != helicopterTypeId);
+    if (helicopterTypeIds != null && helicopterTypeIds.isNotEmpty) {
+      helicopterMap.removeWhere((id, _) => !helicopterTypeIds.contains(id));
     }
     final sortedHelicopterIds = helicopterMap.keys.toList()
       ..sort((a, b) => helicopterMap[a]!.compareTo(helicopterMap[b]!));
@@ -431,7 +432,8 @@ class ReportService {
     final generatedAt = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final filterInfo = [
       if (orgUnitId != null) 'U.O. filtrato',
-      if (helicopterTypeId != null) 'Elicottero filtrato',
+      if (helicopterTypeIds != null && helicopterTypeIds.isNotEmpty)
+        'Elicottero filtrato',
       if (licenseTypeId != null) 'Tipo licenza filtrato',
     ].join(', ');
 

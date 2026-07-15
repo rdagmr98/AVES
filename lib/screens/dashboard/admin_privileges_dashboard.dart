@@ -103,29 +103,64 @@ class _AdminPrivilegesDashboardState
 
   Future<void> _printPrivilegeMatrix() async {
     final helicopterTypes = ref.read(authProvider).helicopterTypes;
-    int? selectedHeliId = _helicopterTypeIds.isNotEmpty
-        ? _helicopterTypeIds.first
-        : null;
+    // Default: elicotteri già selezionati nei filtri della dashboard, oppure
+    // tutti se nessun filtro elicottero è attivo a schermo.
+    final selectedHeliIds = _helicopterTypeIds.isNotEmpty
+        ? _helicopterTypeIds.toSet()
+        : helicopterTypes.map((h) => h.id).toSet();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Matrice Privilegi'),
-          content: DropdownButtonFormField<int?>(
-            isExpanded: true,
-            initialValue: selectedHeliId,
-            decoration: const InputDecoration(labelText: 'Elicottero'),
-            items: [
-              const DropdownMenuItem<int?>(value: null, child: Text('Tutti')),
-              ...helicopterTypes.map(
-                (heli) => DropdownMenuItem<int?>(
-                  value: heli.id,
-                  child: Text(heli.code, softWrap: true),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text('Elicotteri'),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => setDialogState(
+                        () => selectedHeliIds.length == helicopterTypes.length
+                            ? selectedHeliIds.clear()
+                            : selectedHeliIds.addAll(
+                                helicopterTypes.map((h) => h.id),
+                              ),
+                      ),
+                      child: Text(
+                        selectedHeliIds.length == helicopterTypes.length
+                            ? 'Deseleziona tutti'
+                            : 'Seleziona tutti',
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-            onChanged: (value) =>
-                setDialogState(() => selectedHeliId = value),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: helicopterTypes
+                        .map(
+                          (heli) => CheckboxListTile(
+                            dense: true,
+                            title: Text(heli.code),
+                            value: selectedHeliIds.contains(heli.id),
+                            onChanged: (checked) => setDialogState(() {
+                              if (checked == true) {
+                                selectedHeliIds.add(heli.id);
+                              } else {
+                                selectedHeliIds.remove(heli.id);
+                              }
+                            }),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -133,7 +168,9 @@ class _AdminPrivilegesDashboardState
               child: const Text('Annulla'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
+              onPressed: selectedHeliIds.isEmpty
+                  ? null
+                  : () => Navigator.of(ctx).pop(true),
               child: const Text('Stampa'),
             ),
           ],
@@ -144,7 +181,9 @@ class _AdminPrivilegesDashboardState
     await _reportService.downloadPrivilegeMatrix(
       orgUnitId:
           _orgUnitId ?? (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
-      helicopterTypeId: selectedHeliId,
+      helicopterTypeIds: selectedHeliIds.length == helicopterTypes.length
+          ? null
+          : selectedHeliIds.toList(),
       licenseTypeId:
           _licenseTypeId ??
           (_licenseTypeChipIds.isNotEmpty ? _licenseTypeChipIds.first : null),
