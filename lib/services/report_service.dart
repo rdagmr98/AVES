@@ -516,6 +516,11 @@ class ReportService {
                   color: PdfColors.grey400,
                   width: 0.5,
                 ),
+                // _matrixFilledCell/_matrixEmptyCell hanno altezza propria 0
+                // (Container senza child): senza "full" l'allineamento di
+                // default (top) le lascia a 0px e il nero della cella "GO"
+                // non si vede mai, per nessun utente/privilegio.
+                defaultVerticalAlignment: pw.TableCellVerticalAlignment.full,
                 columnWidths: {
                   0: const pw.FixedColumnWidth(nameColWidth),
                   1: const pw.FixedColumnWidth(licColWidth),
@@ -637,6 +642,11 @@ class ReportService {
             cellStyle: const pw.TextStyle(fontSize: 9),
             cellAlignment: pw.Alignment.centerLeft,
             cellPadding: const pw.EdgeInsets.all(6),
+            // Default IntrinsicColumnWidth misura ogni cella senza wrap: una
+            // colonna con testo lungo (es. lista "Privilegi") gonfia la somma
+            // e fa scalare proporzionalmente TUTTE le colonne, spezzando anche
+            // gli header brevi carattere per carattere. Flex uniforme evita lo shrink.
+            defaultColumnWidth: const pw.FlexColumnWidth(),
           ),
         ],
       ),
