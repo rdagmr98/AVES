@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
+import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/activity_service.dart';
@@ -101,13 +103,42 @@ class _AdminPrivilegesDashboardState
     return _andMode ? selected.every(predicate) : selected.any(predicate);
   }
 
+  static const _matrixDefaultHeliPrefsKey =
+      'privilege_matrix_default_helicopter_ids';
+
+  Future<Set<int>> _loadDefaultHeliIds(
+    List<HelicopterType> helicopterTypes,
+  ) async {
+    final allIds = helicopterTypes.map((h) => h.id).toSet();
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_matrixDefaultHeliPrefsKey);
+    if (saved == null) {
+      // Nessun predefinito salvato: fallback ai filtri già attivi in dashboard.
+      return _helicopterTypeIds.isNotEmpty
+          ? _helicopterTypeIds.toSet()
+          : allIds;
+    }
+    if (saved.length == 1 && saved.first == 'all') {
+      return allIds;
+    }
+    final restored = saved.map(int.parse).where(allIds.contains).toSet();
+    return restored.isEmpty ? allIds : restored;
+  }
+
+  Future<void> _saveDefaultHeliIds(Set<int> ids, int totalCount) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _matrixDefaultHeliPrefsKey,
+      ids.length == totalCount
+          ? ['all']
+          : ids.map((id) => id.toString()).toList(),
+    );
+  }
+
   Future<void> _printPrivilegeMatrix() async {
     final helicopterTypes = ref.read(authProvider).helicopterTypes;
-    // Default: elicotteri già selezionati nei filtri della dashboard, oppure
-    // tutti se nessun filtro elicottero è attivo a schermo.
-    final selectedHeliIds = _helicopterTypeIds.isNotEmpty
-        ? _helicopterTypeIds.toSet()
-        : helicopterTypes.map((h) => h.id).toSet();
+    final selectedHeliIds = await _loadDefaultHeliIds(helicopterTypes);
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -157,6 +188,29 @@ class _AdminPrivilegesDashboardState
                           ),
                         )
                         .toList(),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: selectedHeliIds.isEmpty
+                        ? null
+                        : () async {
+                            await _saveDefaultHeliIds(
+                              selectedHeliIds,
+                              helicopterTypes.length,
+                            );
+                            if (!ctx.mounted) return;
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Selezione salvata come predefinita',
+                                ),
+                              ),
+                            );
+                          },
+                    icon: const Icon(Icons.bookmark_outline, size: 18),
+                    label: const Text('Imposta predefiniti'),
                   ),
                 ),
               ],
