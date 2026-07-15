@@ -27,15 +27,21 @@ pw.Widget _matrixHeaderCell(
     child: rotate
         ? pw.Transform.rotateBox(
             angle: pi / 2,
-            child: pw.Text(
-              text,
-              style: pw.TextStyle(
-                fontSize: 7,
-                color: PdfColors.white,
-                fontWeight: pw.FontWeight.bold,
+            // Wrap width post-rotation is the cell height, not its (narrow)
+            // column width — without this the text wraps every 2-3 chars.
+            child: pw.SizedBox(
+              width: height - 4,
+              child: pw.Text(
+                text,
+                style: pw.TextStyle(
+                  fontSize: 7,
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+                textAlign: pw.TextAlign.center,
+                maxLines: 2,
+                overflow: pw.TextOverflow.clip,
               ),
-              maxLines: 2,
-              overflow: pw.TextOverflow.clip,
             ),
           )
         : pw.Text(
@@ -367,12 +373,14 @@ class ReportService {
     for (final user in users.where((u) => u.isApprovedMaint)) {
       if (orgUnitId != null && user.orgUnitId != orgUnitId) continue;
       final licenses = await _userService.getUserLicenses(user.id);
-      if (licenses.isEmpty) continue;
+      final privileges = await _userService.getUserPrivileges(user.id);
+      // Keep users with a license OR a privilege (matches dashboard logic) —
+      // a maintainer can hold GO privileges without a separate license record.
+      if (licenses.isEmpty && privileges.isEmpty) continue;
       if (licenseTypeId != null &&
           !licenses.any((l) => l.licenseTypeId == licenseTypeId)) {
         continue;
       }
-      final privileges = await _userService.getUserPrivileges(user.id);
       // Keep if user has a license OR privilege for the filtered helicopter
       if (helicopterTypeId != null &&
           !licenses.any((l) => l.helicopterTypeId == helicopterTypeId) &&
@@ -413,11 +421,11 @@ class ReportService {
     final sortedHelicopterIds = helicopterMap.keys.toList()
       ..sort((a, b) => helicopterMap[a]!.compareTo(helicopterMap[b]!));
 
-    const headerHeight = 90.0;
+    const headerHeight = 110.0;
     const nameColWidth = 110.0;
     const licColWidth = 45.0;
     const numColWidth = 55.0;
-    const privColWidth = 22.0;
+    const privColWidth = 24.0;
 
     final pdf = pw.Document();
     final generatedAt = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());

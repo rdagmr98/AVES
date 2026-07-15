@@ -101,6 +101,56 @@ class _AdminPrivilegesDashboardState
     return _andMode ? selected.every(predicate) : selected.any(predicate);
   }
 
+  Future<void> _printPrivilegeMatrix() async {
+    final helicopterTypes = ref.read(authProvider).helicopterTypes;
+    int? selectedHeliId = _helicopterTypeIds.isNotEmpty
+        ? _helicopterTypeIds.first
+        : null;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Matrice Privilegi'),
+          content: DropdownButtonFormField<int?>(
+            isExpanded: true,
+            initialValue: selectedHeliId,
+            decoration: const InputDecoration(labelText: 'Elicottero'),
+            items: [
+              const DropdownMenuItem<int?>(value: null, child: Text('Tutti')),
+              ...helicopterTypes.map(
+                (heli) => DropdownMenuItem<int?>(
+                  value: heli.id,
+                  child: Text(heli.code, softWrap: true),
+                ),
+              ),
+            ],
+            onChanged: (value) =>
+                setDialogState(() => selectedHeliId = value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annulla'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Stampa'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    await _reportService.downloadPrivilegeMatrix(
+      orgUnitId:
+          _orgUnitId ?? (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
+      helicopterTypeId: selectedHeliId,
+      licenseTypeId:
+          _licenseTypeId ??
+          (_licenseTypeChipIds.isNotEmpty ? _licenseTypeChipIds.first : null),
+    );
+  }
+
   Future<void> _loadData() async {
     setState(() => _loading = true);
     final users = await _userService.getAllUsers();
@@ -678,21 +728,7 @@ class _AdminPrivilegesDashboardState
               title: const Text('Matrice Privilegi'),
               onTap: () {
                 Navigator.of(context).pop();
-                _reportService.downloadPrivilegeMatrix(
-                  orgUnitId:
-                      _orgUnitId ??
-                      (_orgUnitChipIds.isNotEmpty
-                          ? _orgUnitChipIds.first
-                          : null),
-                  helicopterTypeId: _helicopterTypeIds.isNotEmpty
-                      ? _helicopterTypeIds.first
-                      : null,
-                  licenseTypeId:
-                      _licenseTypeId ??
-                      (_licenseTypeChipIds.isNotEmpty
-                          ? _licenseTypeChipIds.first
-                          : null),
-                );
+                _printPrivilegeMatrix();
               },
             ),
             ListTile(
@@ -1758,19 +1794,7 @@ class _AdminPrivilegesDashboardState
             _NavButton(
               label: 'Matrice Privilegi',
               icon: Icons.grid_on_outlined,
-              onTap: () => _reportService.downloadPrivilegeMatrix(
-                orgUnitId:
-                    _orgUnitId ??
-                    (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
-                helicopterTypeId: _helicopterTypeIds.isNotEmpty
-                    ? _helicopterTypeIds.first
-                    : null,
-                licenseTypeId:
-                    _licenseTypeId ??
-                    (_licenseTypeChipIds.isNotEmpty
-                        ? _licenseTypeChipIds.first
-                        : null),
-              ),
+              onTap: _printPrivilegeMatrix,
             ),
           ],
         ),
