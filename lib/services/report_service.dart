@@ -384,7 +384,7 @@ class ReportService {
       final perPrivilegeCurrency = await _currencyService
           .getPerPrivilegeCurrency(user.id);
       final goPairs = perPrivilegeCurrency
-          .where((p) => p.status.isValid)
+          .where((p) => !p.status.isExpired)
           .map((p) => '${p.helicopterTypeId}_${p.privilegeTypeId}')
           .toSet();
       userDataList.add(
