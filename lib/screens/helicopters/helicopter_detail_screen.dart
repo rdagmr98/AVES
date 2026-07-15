@@ -43,7 +43,9 @@ class HelicopterDetailScreen extends ConsumerWidget {
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: Text(helicopter.name)),
+      appBar: AppBar(
+        title: Text(helicopter.name, overflow: TextOverflow.ellipsis),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1000),

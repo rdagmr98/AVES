@@ -361,11 +361,6 @@ class ReportService {
     final users = await _userService.getAllUsers();
     final allPrivilegeTypes = await _userService.getPrivilegeTypes();
     allPrivilegeTypes.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    // Map privilege_type_id → code using toString() to avoid int/double
-    // type confusion that occurs in dart2js JSON decoding
-    final privCodeById = {
-      for (final pt in allPrivilegeTypes) '${pt.id}': pt.code,
-    };
 
     // Collect user data: include all users with at least one license
     final userDataList = <_MatrixUserData>[];
@@ -384,8 +379,21 @@ class ReportService {
           !privileges.any((p) => p.helicopterTypeId == helicopterTypeId)) {
         continue;
       }
+      // GO status per (helicopter, privilege) — the matrix cell must reflect
+      // currency, not just structural privilege assignment.
+      final perPrivilegeCurrency = await _currencyService
+          .getPerPrivilegeCurrency(user.id);
+      final goPairs = perPrivilegeCurrency
+          .where((p) => p.status.isValid)
+          .map((p) => '${p.helicopterTypeId}_${p.privilegeTypeId}')
+          .toSet();
       userDataList.add(
-        _MatrixUserData(user: user, licenses: licenses, privileges: privileges),
+        _MatrixUserData(
+          user: user,
+          licenses: licenses,
+          privileges: privileges,
+          goPairs: goPairs,
+        ),
       );
     }
 
@@ -454,18 +462,20 @@ class ReportService {
                   .map((l) => l.licenseCode)
                   .toSet()
                   .join(', ');
-              // Resolve privilege codes via the pre-built string map to
-              // avoid int/double type mismatch in dart2js JSON decoding
-              final privCodes = privsForHeli
-                  .map((p) => privCodeById['${p.privilegeTypeId}'] ?? '')
-                  .where((code) => code.isNotEmpty)
+              final goPrivilegeIds = privsForHeli
+                  .where(
+                    (p) => data.goPairs.contains(
+                      '${p.helicopterTypeId}_${p.privilegeTypeId}',
+                    ),
+                  )
+                  .map((p) => p.privilegeTypeId)
                   .toSet();
               tableRows.add(
                 _MatrixRow(
                   name: data.user.fullName,
                   license: licStr.isEmpty ? '-' : licStr,
                   licenseNumber: data.user.numeroLicenza ?? '-',
-                  privilegeCodes: privCodes,
+                  goPrivilegeIds: goPrivilegeIds,
                 ),
               );
             }
@@ -546,7 +556,7 @@ class ReportService {
                         _matrixDataCell(row.licenseNumber),
                         ...allPrivilegeTypes.map(
                           (pt) =>
-                              row.privilegeCodes.contains(pt.code)
+                              row.goPrivilegeIds.contains(pt.id)
                               ? _matrixFilledCell()
                               : _matrixEmptyCell(),
                         ),
@@ -646,11 +656,14 @@ class _MatrixUserData {
     required this.user,
     required this.licenses,
     required this.privileges,
+    required this.goPairs,
   });
 
   final UserProfile user;
   final List<UserLicense> licenses;
   final List<UserPrivilege> privileges;
+  // Set of 'helicopterTypeId_privilegeTypeId' pairs currently in currency (GO).
+  final Set<String> goPairs;
 }
 
 class _MatrixRow {
@@ -658,11 +671,11 @@ class _MatrixRow {
     required this.name,
     required this.license,
     required this.licenseNumber,
-    required this.privilegeCodes,
+    required this.goPrivilegeIds,
   });
 
   final String name;
   final String license;
   final String licenseNumber;
-  final Set<String> privilegeCodes;
+  final Set<int> goPrivilegeIds;
 }

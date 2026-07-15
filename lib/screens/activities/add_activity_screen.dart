@@ -88,6 +88,12 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
       return;
     }
     if (_maintenanceIsWorkOrder) {
+      if (_maintenancePrivilegeId == null) {
+        _showMessage(
+          'Seleziona il privilegio esercitato per l\'ordine di lavoro.',
+        );
+        return;
+      }
       if (_maintenanceDateFrom == null || _maintenanceDateTo == null) {
         _showMessage(
           'Inserisci entrambe le date (Dal / Al) per l\'ordine di lavoro.',
@@ -361,6 +367,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             child: _ActivityFormCard(
               children: [
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue:
                       maintenanceHelicopters.any(
                         (item) => item.id == _maintenanceHelicopterId,
@@ -384,6 +391,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int?>(
+                  isExpanded: true,
                   initialValue:
                       _maintenancePrivilegeId == null ||
                           filteredPrivileges.any(
@@ -393,10 +401,11 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       ? _maintenancePrivilegeId
                       : null,
                   menuMaxHeight: 300,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Tipo attività (privilegio)',
-                    helperText:
-                        'Opzionale per compatibilità con attività legacy',
+                    helperText: _maintenanceIsWorkOrder
+                        ? 'Obbligatorio per ordine di lavoro'
+                        : 'Opzionale per compatibilità con attività legacy',
                   ),
                   items: maintenancePrivilegeItems,
                   onChanged: (value) =>
@@ -503,6 +512,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             child: _ActivityFormCard(
               children: [
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue:
                       flightHelicopters.any(
                         (item) => item.id == _flightHelicopterId,
@@ -569,6 +579,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             child: _ActivityFormCard(
               children: [
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue:
                       tobHelicopters.any((item) => item.id == _tobHelicopterId)
                       ? _tobHelicopterId
@@ -589,6 +600,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue:
                       filteredCapabilities.any(
                         (item) => item.tobCapabilityId == _tobCapabilityId,

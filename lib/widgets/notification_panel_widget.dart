@@ -256,6 +256,8 @@ class _NotificationPanelWidgetState
                               ),
                               title: Text(
                                 item.message,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontWeight: item.isRead
                                       ? FontWeight.w400
