@@ -439,7 +439,7 @@ class ReportService {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
+        pageFormat: PdfPageFormat.a3.landscape,
         build: (context) {
           final widgets = <pw.Widget>[
             pw.Text(
@@ -455,6 +455,7 @@ class ReportService {
             pw.SizedBox(height: 16),
           ];
 
+          var isFirstHelicopter = true;
           for (final heliId in sortedHelicopterIds) {
             final heliCode = helicopterMap[heliId]!;
 
@@ -491,6 +492,12 @@ class ReportService {
             }
 
             if (tableRows.isEmpty) continue;
+
+            // Ogni elicottero inizia su una pagina nuova (tranne il primo).
+            if (!isFirstHelicopter) {
+              widgets.add(pw.NewPage());
+            }
+            isFirstHelicopter = false;
 
             // Helicopter section header
             widgets.add(
@@ -532,6 +539,7 @@ class ReportService {
                 },
                 children: [
                   pw.TableRow(
+                    repeat: true,
                     decoration: const pw.BoxDecoration(
                       color: PdfColors.blueGrey800,
                     ),

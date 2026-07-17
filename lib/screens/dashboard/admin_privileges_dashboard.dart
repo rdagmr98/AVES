@@ -110,13 +110,16 @@ class _AdminPrivilegesDashboardState
     List<HelicopterType> helicopterTypes,
   ) async {
     final allIds = helicopterTypes.map((h) => h.id).toSet();
+    // Filtro elicottero attivo in dashboard: ha sempre priorità sul
+    // predefinito salvato, altrimenti un elicottero escluso a schermo
+    // rischia di rientrare nel PDF tramite un vecchio "predefinito".
+    if (_helicopterTypeIds.isNotEmpty) {
+      return _helicopterTypeIds.toSet();
+    }
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getStringList(_matrixDefaultHeliPrefsKey);
     if (saved == null) {
-      // Nessun predefinito salvato: fallback ai filtri già attivi in dashboard.
-      return _helicopterTypeIds.isNotEmpty
-          ? _helicopterTypeIds.toSet()
-          : allIds;
+      return allIds;
     }
     if (saved.length == 1 && saved.first == 'all') {
       return allIds;
