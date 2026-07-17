@@ -1529,7 +1529,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                                 name: '$selectedLicenseId',
                                               ),
                                             )
-                                            .name;
+                                            .code;
                                   final privilegeLabel =
                                       selectedPrivileges.isEmpty
                                       ? 'Nessuno'
@@ -1599,7 +1599,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                                 (item) =>
                                                     DropdownMenuItem<int?>(
                                                       value: item.id,
-                                                      child: Text(item.name),
+                                                      child: Text(item.code),
                                                     ),
                                               ),
                                             ],

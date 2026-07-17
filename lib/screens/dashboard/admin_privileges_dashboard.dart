@@ -1575,7 +1575,7 @@ class _AdminPrivilegesDashboardState
                   ...auth.licenseTypes.map(
                     (item) => DropdownMenuItem<int?>(
                       value: item.id,
-                      child: Text(item.name, softWrap: true),
+                      child: Text(item.code, softWrap: true),
                     ),
                   ),
                 ],
@@ -1701,7 +1701,7 @@ class _AdminPrivilegesDashboardState
                 children: [
                   for (final licenseType in auth.licenseTypes)
                     FilterChip(
-                      label: Text(licenseType.name, softWrap: true),
+                      label: Text(licenseType.code, softWrap: true),
                       selected: _licenseTypeChipIds.contains(licenseType.id),
                       onSelected: (_) =>
                           _toggleFilterId(_licenseTypeChipIds, licenseType.id),

@@ -401,7 +401,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ...licenseTypes.map(
                     (lt) => DropdownMenuItem<int?>(
                       value: lt.id,
-                      child: Text(lt.name),
+                      child: Text(lt.code),
                     ),
                   ),
                 ],
@@ -666,8 +666,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                           ),
                         ),
-                        validator: (value) => value == null || value.length < 6
-                            ? 'Minimo 6 caratteri'
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Campo obbligatorio'
                             : null,
                       ),
                       const SizedBox(height: 16),

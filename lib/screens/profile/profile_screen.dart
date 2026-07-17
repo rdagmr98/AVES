@@ -254,7 +254,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 );
                 return;
               }
-              if (newPasswordCtrl.text.length < 6 ||
+              if (newPasswordCtrl.text.isEmpty ||
                   newPasswordCtrl.text != confirmPasswordCtrl.text) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -453,7 +453,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             .map(
                               (item) => DropdownMenuItem<int>(
                                 value: item.id,
-                                child: Text(item.name),
+                                child: Text(item.code),
                               ),
                             )
                             .toList(),

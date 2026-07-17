@@ -432,8 +432,6 @@ class ReportService {
     final generatedAt = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
     final filterInfo = [
       if (orgUnitId != null) 'U.O. filtrato',
-      if (helicopterTypeIds != null && helicopterTypeIds.isNotEmpty)
-        'Elicottero filtrato',
       if (licenseTypeId != null) 'Tipo licenza filtrato',
     ].join(', ');
 

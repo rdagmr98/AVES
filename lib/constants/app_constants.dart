@@ -232,6 +232,19 @@ class AppTheme {
         indicatorColor: AppColors.secondary,
         dividerColor: AppColors.divider,
       ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.accent
+              : AppColors.textPrimary,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.accent.withValues(alpha: 0.5)
+              : AppColors.textSecondary.withValues(alpha: 0.4),
+        ),
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+      ),
       textTheme: base.textTheme.copyWith(
         headlineLarge: const TextStyle(
           color: AppColors.textPrimary,
