@@ -260,8 +260,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                                 obscureText: _obscure,
                                 validator: (value) =>
-                                    value == null || value.length < 4
-                                    ? 'Password troppo corta'
+                                    value == null || value.isEmpty
+                                    ? 'Campo obbligatorio'
                                     : null,
                                 onFieldSubmitted: (_) => _login(),
                               ),
