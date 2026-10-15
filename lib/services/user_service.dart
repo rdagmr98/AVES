@@ -1,6 +1,7 @@
 import '../models/reference_models.dart';
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
+import 'name_format.dart';
 import 'notification_service.dart';
 
 class UserService {
@@ -33,6 +34,14 @@ class UserService {
     }
 
     return null;
+  }
+
+  /// Migrazione una-tantum: porta i nomi già presenti alla forma canonica.
+  /// `saveUsers` normalizza da sé, qui basta riscrivere se qualcosa differisce.
+  Future<void> normalizeAllNames() async {
+    final users = _db.users;
+    if (users.every((u) => identical(normalizeUserNames(u), u))) return;
+    await _db.saveUsers(users);
   }
 
   List<Map<String, dynamic>> _referenceList(String key) =>

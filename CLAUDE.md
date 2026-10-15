@@ -38,11 +38,15 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `notification_service.dart` | notifiche scadenze |
 | `gh_db_service.dart` | GitHub API, cache, SHA versioning |
 | `crypto_service.dart` | AES-CBC encrypt/decrypt PII |
+| `flight_semester.dart` | currency volo T a semestri di calendario (funzione pura, test in `test/flight_semester_test.dart`) |
+| `name_format.dart` | forma canonica nomi: Nome = iniziale maiuscola, COGNOME = maiuscolo (applicata in `GhDbService.saveUsers`) |
 
 ## Modelli
 - `user_models.dart`: utente + abilitazioni
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-06-13
-- App in sviluppo attivo.
+## STATO SESSIONE — aggiornato 2026-10-16
+- Currency volo T ora a semestri di calendario (gen-giu, lug-dic), >= ore minime per semestre; NO-GO se semestre precedente chiuso sotto minimo e corrente sotto minimo; primo semestre di attività = grazia. MDB_FLIGHT resta rolling 180 gg (da decidere se passare a semestri).
+- Nomi utenti (`role == 'user'`) normalizzati in `GhDbService.saveUsers` + `signUp`; migrazione dei dati esistenti al primo login admin (`UserService.normalizeAllNames`).
+- Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android).

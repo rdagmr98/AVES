@@ -111,6 +111,15 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
+    if (_userProfile!.isAdmin) {
+      // Allinea i nomi già registrati (maiuscole/minuscole); non blocca il login.
+      try {
+        await _userService.normalizeAllNames();
+      } catch (e) {
+        debugPrint('normalizeAllNames: $e');
+      }
+    }
+
     if (_userProfile!.isUser || _userProfile!.isApproved) {
       await Future.wait([
         _userService.getUserLicenses(userId).then((value) => _licenses = value),

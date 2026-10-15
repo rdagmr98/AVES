@@ -1,6 +1,7 @@
 import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'activity_service.dart';
+import 'flight_semester.dart';
 import 'gh_db_service.dart';
 import 'pta_service.dart';
 import 'web_notification_service.dart';
@@ -440,61 +441,50 @@ class CurrencyService {
 
   Future<CurrencyStatus> getFlightCurrency(String userId) async {
     final criteria = await getFlightTCriteria();
-    final periodDays = criteria?.periodDays ?? 180;
     final minHours = criteria?.minHours ?? 3.0;
 
-    final hours = await _activityService.getFlightHoursInPeriod(
-      userId,
-      periodDays,
-    );
-    final validatedFlightActs =
-        _db.flightActs
-            .where(
-              (item) =>
-                  item['user_id'] == userId && item['is_validated'] == true,
-            )
-            .toList()
-          ..sort(
-            (a, b) => DateTime.parse(
-              b['activity_date'] as String,
-            ).compareTo(DateTime.parse(a['activity_date'] as String)),
+    // T: >= minHours in ciascun semestre di calendario (non più rolling 180 gg);
+    // criteria.periodDays non è usato.
+    final acts = _db.flightActs
+        .where((i) => i['user_id'] == userId && i['is_validated'] == true)
+        .map<FlightAct>((i) {
+          final d = DateTime.parse(i['activity_date'] as String);
+          return (
+            date: DateTime(d.year, d.month, d.day),
+            hours: (i['flight_hours'] as num).toDouble(),
           );
-    final lastDate = validatedFlightActs.isEmpty
+        })
+        .toList();
+    final now = DateTime.now();
+    final sem = flightSemesterState(acts, minHours, now);
+    final lastDate = acts.isEmpty
         ? null
-        : DateTime.parse(validatedFlightActs.first['activity_date'] as String);
+        : acts.map((a) => a.date).reduce((a, b) => a.isAfter(b) ? a : b);
 
     final label =
-        'Currency Volo (${hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)';
+        'Currency Volo T sem. ${sem.label} (${sem.hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)';
 
-    final expiryDate = lastDate?.add(Duration(days: periodDays));
-    final daysLeft = expiryDate?.difference(DateTime.now()).inDays;
+    final deadline = sem.deadline;
+    final daysLeft = deadline == null
+        ? null
+        : DateTime(
+            deadline.year,
+            deadline.month,
+            deadline.day,
+          ).difference(DateTime(now.year, now.month, now.day)).inDays;
+    final status = deadline == null || daysLeft! < 0
+        ? CurrencyStatusEnum.expired
+        : daysLeft <= warningDays && sem.hours < minHours
+        ? CurrencyStatusEnum.warning
+        : CurrencyStatusEnum.valid;
 
-    if (hours < minHours) {
-      return CurrencyStatus(
-        status: lastDate == null
-            ? CurrencyStatusEnum.expired
-            : CurrencyStatusEnum.warning,
-        lastActivityDate: lastDate,
-        expiryDate: expiryDate,
-        daysUntilExpiry: daysLeft?.clamp(-9999, 9999),
-        label: label,
-        flightHours: hours,
-        minFlightHours: minHours,
-      );
-    }
-
-    final status = _computeStatus(
-      lastDate: lastDate,
-      periodDays: periodDays,
-      label: label,
-    );
     return CurrencyStatus(
-      status: status.status,
-      lastActivityDate: status.lastActivityDate,
-      expiryDate: status.expiryDate,
-      daysUntilExpiry: status.daysUntilExpiry,
-      label: status.label,
-      flightHours: hours,
+      status: status,
+      lastActivityDate: lastDate,
+      expiryDate: deadline,
+      daysUntilExpiry: daysLeft?.clamp(-9999, 9999),
+      label: label,
+      flightHours: sem.hours,
       minFlightHours: minHours,
     );
   }

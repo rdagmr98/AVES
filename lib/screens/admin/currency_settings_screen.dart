@@ -81,15 +81,18 @@ class _CurrencySettingsScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (!hasFascia) ...[
-                TextField(
-                  controller: periodCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Periodo (giorni)',
+                // Volo T è a semestri di calendario: il periodo in giorni non si usa.
+                if (criteria.criteriaType != 'FLIGHT_T')
+                  TextField(
+                    controller: periodCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Periodo (giorni)',
+                    ),
                   ),
-                ),
                 if (hasHoursField) ...[
-                  const SizedBox(height: 16),
+                  if (criteria.criteriaType != 'FLIGHT_T')
+                    const SizedBox(height: 16),
                   TextField(
                     controller: hoursCtrl,
                     keyboardType: const TextInputType.numberWithOptions(
@@ -297,7 +300,10 @@ class _CurrencySettingsScreenState
       final bc = c.periodDaysBC != null ? '${c.periodDaysBC} gg' : 'N/A';
       return 'Fascia A: $a gg · Fascia B/C: $bc';
     }
-    if (c.criteriaType == 'FLIGHT_T' || c.criteriaType == 'MDB_FLIGHT') {
+    if (c.criteriaType == 'FLIGHT_T') {
+      return 'Per semestre (gen-giu, lug-dic) · Ore minime: ${c.minHours?.toStringAsFixed(1) ?? '-'}';
+    }
+    if (c.criteriaType == 'MDB_FLIGHT') {
       return 'Periodo: ${c.periodDays} gg · Ore minime: ${c.minHours?.toStringAsFixed(1) ?? '-'}';
     }
     if (c.criteriaType == 'MTB_POLIGONO') {

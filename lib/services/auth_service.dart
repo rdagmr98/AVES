@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
+import 'name_format.dart';
 import 'notification_service.dart';
 import 'user_service.dart';
 
@@ -118,6 +119,8 @@ class AuthService {
     bool isTi = false,
     bool isEtp = false,
   }) async {
+    nome = formatNome(nome);
+    cognome = formatCognome(cognome);
     final users = _db.users;
     final licenseNumber = numeroLicenza.trim().toUpperCase();
     final mamlMatch = RegExp(r'[A-Z]{2}\d{6}').firstMatch(licenseNumber);

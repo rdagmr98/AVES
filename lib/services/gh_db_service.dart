@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/gh_config.dart';
 import 'crypto_service.dart';
+import 'name_format.dart';
 
 class GhDbService {
   static final GhDbService _instance = GhDbService._internal();
@@ -203,7 +204,9 @@ class GhDbService {
   List<Map<String, dynamic>> get users =>
       List<Map<String, dynamic>>.from(_getData('users.json') as List? ?? []);
 
-  Future<void> saveUsers(List<Map<String, dynamic>> data) async {
+  Future<void> saveUsers(List<Map<String, dynamic>> input) async {
+    // Punto unico di scrittura utenti: nomi sempre in forma canonica.
+    final data = input.map(normalizeUserNames).toList(growable: false);
     final encrypted = data.map(_encryptUser).toList(growable: false);
     await _writeFile('users.json', encrypted, 'aggiornamento profili utenti');
     _cache['users.json'] = {'data': data, 'sha': _getSha('users.json')};
