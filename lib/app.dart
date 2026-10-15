@@ -1,3 +1,8 @@
+// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
+
+import 'dart:async';
+import 'dart:html' as html;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +28,7 @@ import 'screens/dashboard/user_dashboard.dart';
 import 'screens/helicopters/helicopter_detail_screen.dart';
 import 'screens/helicopters/my_fleet_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'services/gh_db_service.dart';
 
 final authProvider = ChangeNotifierProvider<AuthProvider>(
   (ref) => AuthProvider(),
@@ -39,6 +45,9 @@ class AvesApp extends ConsumerStatefulWidget {
 }
 
 class _AvesAppState extends ConsumerState<AvesApp> {
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  late final StreamSubscription<html.Event> _unloadSub;
+
   late final GoRouter _router = GoRouter(
     initialLocation: '/',
     refreshListenable: ref.read(authProvider),
@@ -183,15 +192,41 @@ class _AvesAppState extends ConsumerState<AvesApp> {
   @override
   void initState() {
     super.initState();
+    GhDbService.saveError.addListener(_onSaveError);
+    // Salvataggi in coda non ancora su GitHub: il browser chiede conferma prima
+    // di chiudere/ricaricare, così una F5 subito dopo "Salva" non perde dati.
+    _unloadSub = html.window.onBeforeUnload.listen((e) {
+      if (GhDbService.pendingSaves.value > 0) {
+        (e as html.BeforeUnloadEvent).returnValue = 'Salvataggio in corso';
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authProvider).initialize();
     });
   }
 
   @override
+  void dispose() {
+    GhDbService.saveError.removeListener(_onSaveError);
+    _unloadSub.cancel();
+    super.dispose();
+  }
+
+  void _onSaveError() {
+    if (GhDbService.saveError.value == null) return;
+    _messengerKey.currentState?.showSnackBar(
+      const SnackBar(
+        content: Text('Salvataggio non riuscito. Controlla la connessione e riprova.'),
+        backgroundColor: AppColors.currencyExpired,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: AppStrings.appName,
+      scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       routerConfig: _router,

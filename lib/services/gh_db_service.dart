@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -30,26 +31,49 @@ class GhDbService {
     return sha256.convert(bytes).toString();
   }
 
+  static const _files = [
+    'reference.json',
+    'users.json',
+    'licenses.json',
+    'privileges.json',
+    'crew.json',
+    'tob_user_caps.json',
+    'maintenance.json',
+    'flight.json',
+    'tob_acts.json',
+    'criteria.json',
+    'notifications.json',
+    'pta.json',
+    'pta_acknowledgments.json',
+    'account_deletion_requests.json',
+    'seminars.json',
+  ];
+
   Future<void> init() async {
     _cache.clear();
+    await Future.wait(_files.map((f) async => _cache[f] = await _fetchFile(f)));
+  }
 
-    await Future.wait([
-      _loadFile('reference.json'),
-      _loadFile('users.json'),
-      _loadFile('licenses.json'),
-      _loadFile('privileges.json'),
-      _loadFile('crew.json'),
-      _loadFile('tob_user_caps.json'),
-      _loadFile('maintenance.json'),
-      _loadFile('flight.json'),
-      _loadFile('tob_acts.json'),
-      _loadFile('criteria.json'),
-      _loadFile('notifications.json'),
-      _loadFile('pta.json'),
-      _loadFile('pta_acknowledgments.json'),
-      _loadFile('account_deletion_requests.json'),
-      _loadFile('seminars.json'),
-    ]);
+  /// Riallinea la cache a GitHub senza svuotarla: un solo listing e poi si
+  /// scaricano solo i file il cui sha è cambiato. I file con scritture in
+  /// coda o in corso si saltano, così i dati ottimistici non vengono mai
+  /// sovrascritti con la versione vecchia.
+  Future<void> refresh() async {
+    // Ritenta in background i salvataggi falliti, senza bloccare il chiamante.
+    for (final f in _pending.keys.toList()) {
+      _startDrain(f);
+    }
+    final remote = await _remoteShas();
+    if (remote == null) return; // offline: si resta sulla cache
+    bool busy(String f) => _pending.containsKey(f) || _drains.containsKey(f);
+    await Future.wait(
+      _files.where((f) => !busy(f) && (remote[f] ?? '') != _getSha(f)).map((
+        f,
+      ) async {
+        final entry = await _fetchFile(f);
+        if (!busy(f)) _cache[f] = entry; // una scrittura può partire durante il fetch
+      }),
+    );
   }
 
   Future<void> setWritePat(String pat) async {}
@@ -98,15 +122,22 @@ class GhDbService {
     return data;
   }
 
-  Future<void> _loadFile(String fileName) async {
-    final response = await http.get(
-      Uri.parse('$_base/$fileName'),
-      headers: {
-        'Authorization': 'Bearer ${GhConfig.readPat}',
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    );
+  // L'API GitHub risponde con Cache-Control max-age=60: senza un parametro
+  // sempre diverso il browser serve la risposta vecchia di fino a un minuto.
+  Uri _fresh(String url) => Uri.parse(url).replace(
+    queryParameters: {'_': DateTime.now().microsecondsSinceEpoch.toString()},
+  );
+
+  Map<String, String> get _headers => {
+    'Authorization': 'Bearer ${GhConfig.readPat}',
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+
+  Future<Map<String, dynamic>> _fetchFile(String fileName) async {
+    final response = await http
+        .get(_fresh('$_base/$fileName'), headers: _headers)
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -115,16 +146,11 @@ class GhDbService {
         base64.decode((json['content'] as String).replaceAll('\n', '')),
       );
       final decoded = jsonDecode(content);
-      _cache[fileName] = {
-        'data': _normalizeLoadedData(fileName, decoded),
-        'sha': sha,
-      };
-      return;
+      return {'data': _normalizeLoadedData(fileName, decoded), 'sha': sha};
     }
 
     if (response.statusCode == 404) {
-      _cache[fileName] = {'data': _emptyDataFor(fileName), 'sha': ''};
-      return;
+      return {'data': _emptyDataFor(fileName), 'sha': ''};
     }
 
     throw Exception(
@@ -136,9 +162,6 @@ class GhDbService {
     if (fileName == 'reference.json') {
       return <String, dynamic>{};
     }
-    if (fileName == 'seminars.json') {
-      return <dynamic>[];
-    }
     return <dynamic>[];
   }
 
@@ -146,55 +169,159 @@ class GhDbService {
 
   String _getSha(String fileName) => _cache[fileName]?['sha'] as String? ?? '';
 
+  // ── Coda di scrittura ottimistica ──────────────────────────────────────────
+  // La cache viene aggiornata subito e la PUT su GitHub avviene in background;
+  // salvataggi ravvicinati sullo stesso file vengono fusi nell'ultimo payload,
+  // quindi N salvataggi consecutivi costano 1-2 PUT invece di N.
+
+  /// Numero di file con scritture in corso o in attesa (avviso alla chiusura).
+  static final ValueNotifier<int> pendingSaves = ValueNotifier<int>(0);
+
+  /// Ultimo errore di salvataggio in background (null = tutto ok).
+  static final ValueNotifier<String?> saveError = ValueNotifier<String?>(null);
+
+  final Map<String, ({dynamic data, dynamic wire, String msg})> _pending = {};
+  final Map<String, Future<void>> _drains = {};
+  final _rng = Random();
+
+  void _updatePendingCount() {
+    pendingSaves.value = {..._drains.keys, ..._pending.keys}.length;
+  }
+
+  /// [wire] è il payload effettivamente spedito a GitHub, se diverso da
+  /// [data] (users.json: cache in chiaro, scrittura cifrata).
   Future<void> _writeFile(
     String fileName,
     dynamic data,
-    String commitMsg,
-  ) async {
-    const maxAttempts = 3;
-    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-      final body = <String, dynamic>{
-        'message': commitMsg,
-        'content': base64.encode(utf8.encode(jsonEncode(data))),
-      };
-      final sha = _getSha(fileName);
-      if (sha.isNotEmpty) {
-        body['sha'] = sha;
-      }
+    String msg, {
+    dynamic wire,
+  }) async {
+    _cache[fileName] = {'data': data, 'sha': _getSha(fileName)};
+    _pending[fileName] = (data: data, wire: wire ?? data, msg: msg);
+    saveError.value = null;
+    _startDrain(fileName);
+  }
 
-      final response = await http.put(
-        Uri.parse('$_base/$fileName'),
-        headers: {
-          'Authorization': 'Bearer ${GhConfig.readPat}',
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        body: jsonEncode(body),
-      );
+  void _startDrain(String fileName) {
+    if (!_drains.containsKey(fileName) && _pending.containsKey(fileName)) {
+      _drains[fileName] = _drain(fileName).whenComplete(() {
+        _drains.remove(fileName);
+        _updatePendingCount();
+      });
+    }
+    _updatePendingCount();
+  }
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final respJson = jsonDecode(response.body) as Map<String, dynamic>;
-        final newSha =
-            (respJson['content'] as Map<String, dynamic>)['sha'] as String;
-        _cache[fileName] = {'data': data, 'sha': newSha};
+  Future<void> _drain(String fileName) async {
+    while (_pending.containsKey(fileName)) {
+      final job = _pending.remove(fileName)!;
+      try {
+        final newSha = await _putToGitHub(fileName, job.wire, job.msg);
+        // Aggiorna solo lo sha: la cache può già contenere dati più recenti
+        // in attesa di scrittura.
+        _cache[fileName] = {
+          'data': _cache[fileName]?['data'] ?? job.data,
+          'sha': newSha,
+        };
+      } catch (e) {
+        // Non perdere il payload: se nel frattempo non ne è arrivato uno più
+        // recente, rimettilo in coda; verrà ritentato al prossimo salvataggio
+        // o da refresh().
+        _pending.putIfAbsent(fileName, () => job);
+        saveError.value = 'Salvataggio $fileName non riuscito: $e';
         return;
       }
+    }
+  }
 
-      if (response.statusCode == 409) {
-        await _loadFile(fileName);
-        if (attempt < maxAttempts) {
-          await Future<void>.delayed(const Duration(seconds: 1));
-          continue;
+  static const int _maxWriteAttempts = 6;
+
+  /// PUT con retry ed exponential backoff: ritenta sui conflitti (409, solo
+  /// refresh dello sha) e sugli errori transitori (403/429/5xx, timeout, rete).
+  /// Ritorna lo sha aggiornato.
+  Future<String> _putToGitHub(String fileName, dynamic data, String msg) async {
+    for (var attempt = 1; attempt <= _maxWriteAttempts; attempt++) {
+      final sha = _getSha(fileName);
+      final body = <String, dynamic>{
+        'message': msg,
+        'content': base64.encode(utf8.encode(jsonEncode(data))),
+        if (sha.isNotEmpty) 'sha': sha,
+      };
+
+      final http.Response res;
+      try {
+        res = await http
+            .put(
+              Uri.parse('$_base/$fileName'),
+              headers: {..._headers, 'Content-Type': 'application/json'},
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 30));
+      } catch (e) {
+        if (attempt == _maxWriteAttempts) {
+          throw Exception('Rete non raggiungibile scrivendo $fileName: $e');
         }
-        throw ConflictException(
-          'Conflitto di scrittura dopo $maxAttempts tentativi. Riprova tra qualche secondo.',
-        );
+        await _backoff(attempt);
+        continue;
       }
 
-      throw Exception(
-        'Errore GitHub API ${response.statusCode}: ${response.body}',
-      );
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return ((jsonDecode(res.body) as Map)['content'] as Map)['sha']
+            as String;
+      }
+
+      final retryable =
+          res.statusCode == 409 ||
+          res.statusCode == 403 ||
+          res.statusCode == 429 ||
+          res.statusCode >= 500;
+      if (!retryable || attempt == _maxWriteAttempts) {
+        if (res.statusCode == 409) {
+          throw ConflictException(
+            'Conflitto di scrittura dopo $attempt tentativi.',
+          );
+        }
+        throw Exception('Errore GitHub API ${res.statusCode}: ${res.body}');
+      }
+
+      if (res.statusCode == 409) {
+        await _refreshSha(fileName);
+      }
+      await _backoff(attempt);
+    }
+    throw Exception(
+      'Salvataggio $fileName non riuscito dopo $_maxWriteAttempts tentativi.',
+    );
+  }
+
+  Future<void> _backoff(int attempt) async {
+    final ms = min(1000 * (1 << (attempt - 1)), 16000);
+    await Future<void>.delayed(Duration(milliseconds: ms + _rng.nextInt(400)));
+  }
+
+  /// Recupera solo lo sha corrente del file (listing della cartella, senza
+  /// scaricare il contenuto) mantenendo i dati ottimistici in cache.
+  Future<void> _refreshSha(String fileName) async {
+    final sha = (await _remoteShas())?[fileName];
+    if (sha == null) return;
+    _cache[fileName] = {'data': _cache[fileName]?['data'], 'sha': sha};
+  }
+
+  /// nome file → sha corrente, da un solo listing della cartella dati.
+  /// Null se la rete o l'API non rispondono.
+  Future<Map<String, String>?> _remoteShas() async {
+    try {
+      final res = await http
+          .get(_fresh(_base), headers: _headers)
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return null;
+      return {
+        for (final e
+            in (jsonDecode(res.body) as List).cast<Map<String, dynamic>>())
+          e['name'] as String: e['sha'] as String,
+      };
+    } catch (_) {
+      return null;
     }
   }
 
@@ -207,9 +334,12 @@ class GhDbService {
   Future<void> saveUsers(List<Map<String, dynamic>> input) async {
     // Punto unico di scrittura utenti: nomi sempre in forma canonica.
     final data = input.map(normalizeUserNames).toList(growable: false);
-    final encrypted = data.map(_encryptUser).toList(growable: false);
-    await _writeFile('users.json', encrypted, 'aggiornamento profili utenti');
-    _cache['users.json'] = {'data': data, 'sha': _getSha('users.json')};
+    await _writeFile(
+      'users.json',
+      data,
+      'aggiornamento profili utenti',
+      wire: data.map(_encryptUser).toList(growable: false),
+    );
   }
 
   List<Map<String, dynamic>> get licenses =>
@@ -311,8 +441,6 @@ class GhDbService {
         data,
         'aggiornamento richieste eliminazione account',
       );
-
-  Future<void> reloadAll() async => init();
 }
 
 class ConflictException implements Exception {
