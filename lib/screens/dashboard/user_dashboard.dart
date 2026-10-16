@@ -191,7 +191,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
               : auth.currency['flight_t'],
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'
-              : _flightSubtitle(auth.currency['flight_t']),
+              : '${_flightSubtitle(auth.currency['flight_t'])}  ·  semestre in corso',
           expiryText: _formatLongDate(
             flightFitnessBlocking
                 ? flightFitnessDate

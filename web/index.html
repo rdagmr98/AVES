@@ -61,6 +61,13 @@
         try { new Notification(title, opts); } catch(e) {}
       }
     };
+    // Nuova versione deployata: il service worker si aggiorna in background,
+    // ricarica una volta sola così non resta in uso la build vecchia dalla cache.
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        window.location.reload();
+      });
+    }
   </script>
 </head>
 <body>

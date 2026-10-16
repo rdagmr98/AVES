@@ -48,6 +48,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 
 ## STATO SESSIONE — aggiornato 2026-10-16
 - Latenze rimosse: `GhDbService._writeFile` ora accoda e ritorna subito (nessun `await` di PUT nei ~80 call site), `reloadAll` sostituito da `refresh()`, GET con `?_=` anti-cache e timeout 30 s, permesso notifiche non più atteso in `signIn`/`initialize`, avviso `beforeunload` se ci sono salvataggi in coda + snackbar su errore di salvataggio (`lib/app.dart`). Limite: F5 entro 1-3 s da un salvataggio protetta solo dall'avviso del browser.
+- `web/index.html`: ricarica automatica una volta quando il service worker installa una nuova build (prima l'utente vedeva la versione vecchia dalla cache fino al secondo reload). Card Volo T: sottotitolo "semestre in corso".
 - Currency volo T ora a semestri di calendario (gen-giu, lug-dic), >= ore minime per semestre; NO-GO se semestre precedente chiuso sotto minimo e corrente sotto minimo; primo semestre di attività = grazia. MDB_FLIGHT resta rolling 180 gg (da decidere se passare a semestri).
 - Nomi utenti (`role == 'user'`) normalizzati in `GhDbService.saveUsers` + `signUp`; migrazione dei dati esistenti al primo login admin (`UserService.normalizeAllNames`).
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android).
