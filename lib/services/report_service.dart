@@ -99,18 +99,35 @@ class ReportService {
     return quals.isEmpty ? '-' : quals.join(', ');
   }
 
-  Future<void> downloadMaintenanceReport() async {
+  /// [helicopterTypeIds] null = tutti; altrimenti solo quegli elicotteri
+  /// compaiono nel report e contano per lo stato GO / NO GO.
+  Future<void> downloadMaintenanceReport({Set<int>? helicopterTypeIds}) async {
     final users = await _userService.getAllUsers();
     final rows = <List<String>>[];
 
     for (final user in users.where((item) => item.isApprovedMaint)) {
-      final licenses = await _userService.getUserLicenses(user.id);
-      final privileges = await _userService.getUserPrivileges(user.id);
+      final licenses = (await _userService.getUserLicenses(user.id))
+          .where(
+            (l) =>
+                helicopterTypeIds == null ||
+                helicopterTypeIds.contains(l.helicopterTypeId),
+          )
+          .toList();
+      final privileges = (await _userService.getUserPrivileges(user.id))
+          .where(
+            (p) =>
+                helicopterTypeIds == null ||
+                helicopterTypeIds.contains(p.helicopterTypeId),
+          )
+          .toList();
       if (licenses.isEmpty && privileges.isEmpty) {
         continue;
       }
 
-      final status = await _currencyService.getMaintenanceCurrency(user.id);
+      final status = await _currencyService.getMaintenanceCurrency(
+        user.id,
+        helicopterTypeIds: helicopterTypeIds,
+      );
       final lastActivity = await _activityService.getLastValidatedMaintenance(
         user.id,
       );

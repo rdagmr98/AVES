@@ -60,11 +60,16 @@ class _AdminPrivilegesDashboardState
   bool _onlyTi = false;
   bool _onlyEtp = false;
   _MaintenanceSortMode _sortMode = _MaintenanceSortMode.status;
+  // Elicotteri su cui si calcola GO / NO GO; null = tutti.
+  Set<int>? _goHeliIds;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadGoHeliIds().then((ids) {
+      _goHeliIds = ids;
+      if (mounted) _loadData();
+    });
   }
 
   @override
@@ -136,6 +141,131 @@ class _AdminPrivilegesDashboardState
           ? ['all']
           : ids.map((id) => id.toString()).toList(),
     );
+  }
+
+  static const _goHeliPrefsKey = 'go_nogo_helicopter_ids';
+
+  Future<Set<int>?> _loadGoHeliIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_goHeliPrefsKey);
+    if (saved == null || saved.contains('all')) return null;
+    final ids = saved.map(int.tryParse).whereType<int>().toSet();
+    return ids.isEmpty ? null : ids;
+  }
+
+  Future<void> _saveGoHeliIds(Set<int>? ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _goHeliPrefsKey,
+      ids == null ? ['all'] : ids.map((id) => id.toString()).toList(),
+    );
+  }
+
+  String _goHeliSummary(List<HelicopterType> helicopterTypes) {
+    final ids = _goHeliIds;
+    if (ids == null) return 'Tutti';
+    return helicopterTypes
+        .where((h) => ids.contains(h.id))
+        .map((h) => h.code)
+        .join(', ');
+  }
+
+  Future<void> _chooseGoHelicopters() async {
+    final helicopterTypes = ref.read(authProvider).helicopterTypes;
+    final selected = (_goHeliIds ?? helicopterTypes.map((h) => h.id)).toSet();
+    var saveAsDefault = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Elicotteri per GO / NO GO'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Privilegi e licenze degli altri elicotteri non incidono '
+                  'sullo stato GO / NO GO.',
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => setDialogState(
+                      () => selected.length == helicopterTypes.length
+                          ? selected.clear()
+                          : selected.addAll(helicopterTypes.map((h) => h.id)),
+                    ),
+                    child: Text(
+                      selected.length == helicopterTypes.length
+                          ? 'Deseleziona tutti'
+                          : 'Seleziona tutti',
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: helicopterTypes
+                        .map(
+                          (heli) => CheckboxListTile(
+                            dense: true,
+                            title: Text(
+                              heli.code,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            value: selected.contains(heli.id),
+                            onChanged: (checked) => setDialogState(() {
+                              if (checked == true) {
+                                selected.add(heli.id);
+                              } else {
+                                selected.remove(heli.id);
+                              }
+                            }),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annulla'),
+            ),
+            TextButton.icon(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () {
+                      saveAsDefault = true;
+                      Navigator.of(ctx).pop(true);
+                    },
+              icon: const Icon(Icons.bookmark_outline, size: 18),
+              label: const Text('Imposta predefiniti'),
+            ),
+            ElevatedButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.of(ctx).pop(true),
+              child: const Text('Applica'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ids = selected.length == helicopterTypes.length ? null : selected;
+    if (saveAsDefault) {
+      await _saveGoHeliIds(ids);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selezione salvata come predefinita')),
+      );
+    }
+    setState(() => _goHeliIds = ids);
+    await _loadData();
   }
 
   Future<void> _printPrivilegeMatrix() async {
@@ -253,20 +383,28 @@ class _AdminPrivilegesDashboardState
     final pendingActivities = await _activityService
         .getPendingMaintenanceActivities();
     final rows = <_MaintenanceUserRow>[];
+    final scope = _goHeliIds;
 
     for (final user in users.where((item) => item.isApprovedMaint)) {
-      final licenses = await _userService.getUserLicenses(user.id);
-      final privileges = await _userService.getUserPrivileges(user.id);
+      final licenses = (await _userService.getUserLicenses(user.id))
+          .where((l) => scope == null || scope.contains(l.helicopterTypeId))
+          .toList();
+      final privileges = (await _userService.getUserPrivileges(user.id))
+          .where((p) => scope == null || scope.contains(p.helicopterTypeId))
+          .toList();
       if (licenses.isEmpty && privileges.isEmpty) {
         continue;
       }
-      final status = await _currencyService.getMaintenanceCurrency(user.id);
+      final status = await _currencyService.getMaintenanceCurrency(
+        user.id,
+        helicopterTypeIds: scope,
+      );
       final lastActivity = await _activityService.getLastValidatedMaintenance(
         user.id,
       );
 
       final perPrivilegeCurrency = await _currencyService
-          .getPerPrivilegeCurrency(user.id);
+          .getPerPrivilegeCurrency(user.id, helicopterTypeIds: scope);
 
       rows.add(
         _MaintenanceUserRow(
@@ -816,7 +954,9 @@ class _AdminPrivilegesDashboardState
               title: const Text('Report PDF'),
               onTap: () {
                 Navigator.of(context).pop();
-                _reportService.downloadMaintenanceReport();
+                _reportService.downloadMaintenanceReport(
+                  helicopterTypeIds: _goHeliIds,
+                );
               },
             ),
             ListTile(
@@ -1507,7 +1647,22 @@ class _AdminPrivilegesDashboardState
               style: Theme.of(context).textTheme.titleLarge,
               softWrap: true,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.flight),
+              title: const Text(
+                'Elicotteri per GO / NO GO',
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                _goHeliSummary(auth.helicopterTypes),
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.tune),
+              onTap: _chooseGoHelicopters,
+            ),
+            const SizedBox(height: 8),
             // Filter mode toggle
             Wrap(
               alignment: WrapAlignment.center,
@@ -1884,7 +2039,9 @@ class _AdminPrivilegesDashboardState
             _NavButton(
               label: 'Report PDF',
               icon: Icons.picture_as_pdf_outlined,
-              onTap: _reportService.downloadMaintenanceReport,
+              onTap: () => _reportService.downloadMaintenanceReport(
+                helicopterTypeIds: _goHeliIds,
+              ),
             ),
             const SizedBox(height: 8),
             _NavButton(

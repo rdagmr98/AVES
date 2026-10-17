@@ -264,10 +264,18 @@ class CurrencyService {
     );
   }
 
-  Future<CurrencyStatus> getMaintenanceCurrency(String userId) async {
+  /// [helicopterTypeIds] null = tutti gli elicotteri; altrimenti solo licenze e
+  /// privilegi di quegli elicotteri entrano nel calcolo GO / NO GO.
+  Future<CurrencyStatus> getMaintenanceCurrency(
+    String userId, {
+    Set<int>? helicopterTypeIds,
+  }) async {
+    bool inScope(Map<String, dynamic> item) =>
+        item['user_id'] == userId &&
+        (helicopterTypeIds == null ||
+            helicopterTypeIds.contains(item['helicopter_type_id']));
     final hasMaintenanceQualification =
-        _db.licenses.any((item) => item['user_id'] == userId) ||
-        _db.privileges.any((item) => item['user_id'] == userId);
+        _db.licenses.any(inScope) || _db.privileges.any(inScope);
     if (!hasMaintenanceQualification) {
       return const CurrencyStatus(
         status: CurrencyStatusEnum.noData,
@@ -316,7 +324,10 @@ class CurrencyService {
       periodDays: periodDays,
       label: 'Currency Manutentiva',
     );
-    final perPrivilegeStatuses = await getPerPrivilegeCurrency(userId);
+    final perPrivilegeStatuses = await getPerPrivilegeCurrency(
+      userId,
+      helicopterTypeIds: helicopterTypeIds,
+    );
     final taskStatus = _summarizeMaintenanceStatus(
       perPrivilegeStatuses,
       fallbackStatus,
@@ -365,11 +376,18 @@ class CurrencyService {
   }
 
   Future<List<PrivilegeCurrencyStatus>> getPerPrivilegeCurrency(
-    String userId,
-  ) async {
+    String userId, {
+    Set<int>? helicopterTypeIds,
+  }) async {
     final result = <PrivilegeCurrencyStatus>[];
     final userPrivileges = _db.privileges
-        .where((p) => p['user_id'] == userId && p['active'] != false)
+        .where(
+          (p) =>
+              p['user_id'] == userId &&
+              p['active'] != false &&
+              (helicopterTypeIds == null ||
+                  helicopterTypeIds.contains(p['helicopter_type_id'])),
+        )
         .toList();
 
     final criteria = await getMaintenanceCriteria();
