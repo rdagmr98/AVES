@@ -145,12 +145,13 @@ class GhDbService {
       final content = utf8.decode(
         base64.decode((json['content'] as String).replaceAll('\n', '')),
       );
-      final decoded = jsonDecode(content);
-      return {'data': _normalizeLoadedData(fileName, decoded), 'sha': sha};
+      final data = _normalizeLoadedData(fileName, jsonDecode(content));
+      return {'data': data, 'sha': sha, 'base': _baseOf(data)};
     }
 
     if (response.statusCode == 404) {
-      return {'data': _emptyDataFor(fileName), 'sha': ''};
+      final data = _emptyDataFor(fileName);
+      return {'data': data, 'sha': '', 'base': _baseOf(data)};
     }
 
     throw Exception(
@@ -180,7 +181,10 @@ class GhDbService {
   /// Ultimo errore di salvataggio in background (null = tutto ok).
   static final ValueNotifier<String?> saveError = ValueNotifier<String?>(null);
 
-  final Map<String, ({dynamic data, dynamic wire, String msg})> _pending = {};
+  /// file → messaggio di commit della scrittura in attesa. Il payload è
+  /// sempre la cache corrente del file, quindi salvataggi ravvicinati si
+  /// fondono nell'ultimo.
+  final Map<String, String> _pending = {};
   final Map<String, Future<void>> _drains = {};
   final _rng = Random();
 
@@ -188,18 +192,64 @@ class GhDbService {
     pendingSaves.value = {..._drains.keys, ..._pending.keys}.length;
   }
 
-  /// [wire] è il payload effettivamente spedito a GitHub, se diverso da
-  /// [data] (users.json: cache in chiaro, scrittura cifrata).
-  Future<void> _writeFile(
-    String fileName,
-    dynamic data,
-    String msg, {
-    dynamic wire,
-  }) async {
-    _cache[fileName] = {'data': data, 'sha': _getSha(fileName)};
-    _pending[fileName] = (data: data, wire: wire ?? data, msg: msg);
+  Future<void> _writeFile(String fileName, dynamic data, String msg) async {
+    _cache[fileName] = {...?_cache[fileName], 'data': data};
+    _pending[fileName] = msg;
     saveError.value = null;
     _startDrain(fileName);
+  }
+
+  /// Payload spedito a GitHub (users.json: cache in chiaro, scrittura cifrata).
+  dynamic _wireFor(String fileName, dynamic data) => fileName == 'users.json'
+      ? [for (final u in data as List) _encryptUser(Map<String, dynamic>.from(u))]
+      : data;
+
+  /// Ultima versione nota del server, record per record (id → json): serve
+  /// alla fusione a tre vie sui conflitti. Null se il file non è una lista di
+  /// record con id (reference.json): lì si sovrascrive come prima.
+  static Map<Object?, String>? _baseOf(dynamic data) {
+    if (data is! List) return null;
+    final base = <Object?, String>{};
+    for (final r in data) {
+      if (r is! Map || r['id'] == null) return null;
+      base[r['id']] = jsonEncode(r);
+    }
+    return base;
+  }
+
+  /// Conflitto 409: un altro client ha scritto nel frattempo. Invece di
+  /// sovrascrivere con la cache locale, fonde per id:
+  /// - record nuovi altrui → aggiunti;
+  /// - record invariati qui → presi dal server (modificati o eliminati altrove);
+  /// - record modificati/aggiunti/eliminati qui → vince il locale.
+  Future<void> _mergeRemote(String fileName) async {
+    final remote = await _fetchFile(fileName);
+    final base = _cache[fileName]?['base'] as Map<Object?, String>?;
+    final local = _getData(fileName);
+    var data = local;
+    if (base != null &&
+        remote['base'] != null &&
+        local is List &&
+        _baseOf(local) != null) {
+      final remoteList = remote['data'] as List;
+      final remoteById = {for (final r in remoteList) (r as Map)['id']: r};
+      final localIds = {for (final r in local) (r as Map)['id']};
+      data = [
+        for (final r in local)
+          if (base[(r as Map)['id']] != jsonEncode(r))
+            r
+          else if (remoteById.containsKey(r['id']))
+            remoteById[r['id']],
+        for (final r in remoteList)
+          if (!base.containsKey((r as Map)['id']) && !localIds.contains(r['id']))
+            r,
+      ];
+    }
+    _cache[fileName] = {
+      'data': data,
+      'sha': remote['sha'],
+      'base': remote['base'],
+    };
   }
 
   void _startDrain(String fileName) {
@@ -214,20 +264,13 @@ class GhDbService {
 
   Future<void> _drain(String fileName) async {
     while (_pending.containsKey(fileName)) {
-      final job = _pending.remove(fileName)!;
+      final msg = _pending.remove(fileName)!;
       try {
-        final newSha = await _putToGitHub(fileName, job.wire, job.msg);
-        // Aggiorna solo lo sha: la cache può già contenere dati più recenti
-        // in attesa di scrittura.
-        _cache[fileName] = {
-          'data': _cache[fileName]?['data'] ?? job.data,
-          'sha': newSha,
-        };
+        await _putToGitHub(fileName, msg);
       } catch (e) {
-        // Non perdere il payload: se nel frattempo non ne è arrivato uno più
-        // recente, rimettilo in coda; verrà ritentato al prossimo salvataggio
-        // o da refresh().
-        _pending.putIfAbsent(fileName, () => job);
+        // Non perdere la scrittura: la cache resta quella locale e verrà
+        // ritentata al prossimo salvataggio o da refresh().
+        _pending.putIfAbsent(fileName, () => msg);
         saveError.value = 'Salvataggio $fileName non riuscito: $e';
         return;
       }
@@ -236,15 +279,19 @@ class GhDbService {
 
   static const int _maxWriteAttempts = 6;
 
-  /// PUT con retry ed exponential backoff: ritenta sui conflitti (409, solo
-  /// refresh dello sha) e sugli errori transitori (403/429/5xx, timeout, rete).
-  /// Ritorna lo sha aggiornato.
-  Future<String> _putToGitHub(String fileName, dynamic data, String msg) async {
+  /// PUT della cache corrente con retry ed exponential backoff: sui conflitti
+  /// (409) fonde le modifiche remote, sugli errori transitori (403/429/5xx,
+  /// timeout, rete) ritenta.
+  Future<void> _putToGitHub(String fileName, String msg) async {
     for (var attempt = 1; attempt <= _maxWriteAttempts; attempt++) {
       final sha = _getSha(fileName);
+      final data = _getData(fileName);
+      final sentBase = _baseOf(data); // istantanea prima dell'await
       final body = <String, dynamic>{
         'message': msg,
-        'content': base64.encode(utf8.encode(jsonEncode(data))),
+        'content': base64.encode(
+          utf8.encode(jsonEncode(_wireFor(fileName, data))),
+        ),
         if (sha.isNotEmpty) 'sha': sha,
       };
 
@@ -266,8 +313,16 @@ class GhDbService {
       }
 
       if (res.statusCode == 200 || res.statusCode == 201) {
-        return ((jsonDecode(res.body) as Map)['content'] as Map)['sha']
-            as String;
+        // Solo sha e base: la cache può già contenere dati più recenti in
+        // attesa di scrittura.
+        _cache[fileName] = {
+          ...?_cache[fileName],
+          'sha':
+              ((jsonDecode(res.body) as Map)['content'] as Map)['sha']
+                  as String,
+          'base': sentBase,
+        };
+        return;
       }
 
       final retryable =
@@ -285,9 +340,10 @@ class GhDbService {
       }
 
       if (res.statusCode == 409) {
-        await _refreshSha(fileName);
+        await _mergeRemote(fileName);
+      } else {
+        await _backoff(attempt);
       }
-      await _backoff(attempt);
     }
     throw Exception(
       'Salvataggio $fileName non riuscito dopo $_maxWriteAttempts tentativi.',
@@ -297,14 +353,6 @@ class GhDbService {
   Future<void> _backoff(int attempt) async {
     final ms = min(1000 * (1 << (attempt - 1)), 16000);
     await Future<void>.delayed(Duration(milliseconds: ms + _rng.nextInt(400)));
-  }
-
-  /// Recupera solo lo sha corrente del file (listing della cartella, senza
-  /// scaricare il contenuto) mantenendo i dati ottimistici in cache.
-  Future<void> _refreshSha(String fileName) async {
-    final sha = (await _remoteShas())?[fileName];
-    if (sha == null) return;
-    _cache[fileName] = {'data': _cache[fileName]?['data'], 'sha': sha};
   }
 
   /// nome file → sha corrente, da un solo listing della cartella dati.
@@ -334,13 +382,11 @@ class GhDbService {
   Future<void> saveUsers(List<Map<String, dynamic>> input) async {
     // Punto unico di scrittura utenti: nomi sempre in forma canonica.
     final data = input.map(normalizeUserNames).toList(growable: false);
-    await _writeFile(
-      'users.json',
-      data,
-      'aggiornamento profili utenti',
-      wire: data.map(_encryptUser).toList(growable: false),
-    );
+    await _writeFile('users.json', data, 'aggiornamento profili utenti');
   }
+
+  Future<void> saveReference(Map<String, dynamic> data) =>
+      _writeFile('reference.json', data, 'aggiornamento dati di riferimento');
 
   List<Map<String, dynamic>> get licenses =>
       List<Map<String, dynamic>>.from(_getData('licenses.json') as List? ?? []);

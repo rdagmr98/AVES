@@ -93,6 +93,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
 
     final userId = auth.userProfile!.id;
+    // Presa di possesso di un account creato dall'admin: già approvato.
+    final claimed = auth.userProfile!.isApproved;
 
     try {
       await auth.updateProfile(
@@ -104,17 +106,34 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
       );
 
+      // append: non cancella privilegi/attività già assegnati dall'admin.
       if (_pendingLicenses.isNotEmpty) {
-        await _userService.setUserLicenses(userId, _pendingLicenses);
+        await _userService.setUserLicenses(
+          userId,
+          _pendingLicenses,
+          append: true,
+        );
       }
       if (_pendingCrew.isNotEmpty) {
-        await _userService.setUserCrewAssignments(userId, _pendingCrew);
+        await _userService.setUserCrewAssignments(
+          userId,
+          _pendingCrew,
+          append: true,
+        );
       }
       if (_pendingPrivileges.isNotEmpty) {
-        await _userService.setUserPrivileges(userId, _pendingPrivileges);
+        await _userService.setUserPrivileges(
+          userId,
+          _pendingPrivileges,
+          append: true,
+        );
       }
       if (_pendingTobCaps.isNotEmpty) {
-        await _userService.setUserTobCapabilities(userId, _pendingTobCaps);
+        await _userService.setUserTobCapabilities(
+          userId,
+          _pendingTobCaps,
+          append: true,
+        );
       }
 
       await auth.signOut();
@@ -126,9 +145,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Registrazione inviata'),
-          content: const Text(
-            'Registrazione inviata - in attesa di approvazione',
+          title: Text(claimed ? 'Account attivato' : 'Registrazione inviata'),
+          content: Text(
+            claimed
+                ? 'Il tuo account era già stato creato dall\'amministratore '
+                      'con privilegi e attività: ora puoi accedere.'
+                : 'Registrazione inviata - in attesa di approvazione',
           ),
           actions: [
             ElevatedButton(

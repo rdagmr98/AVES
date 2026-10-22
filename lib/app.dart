@@ -159,7 +159,9 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         return publicRoutes.contains(location) ? null : '/login';
       }
 
-      if (location == '/' || location == '/login' || location == '/register') {
+      // /register resta: signUp autentica, ma la schermata deve completare
+      // licenze/privilegi, mostrare il dialog e fare logout.
+      if (location == '/' || location == '/login') {
         return defaultHome();
       }
 

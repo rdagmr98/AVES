@@ -577,16 +577,41 @@ class UserService {
     return rows;
   }
 
+  /// Righe di partenza per i setter: senza [append] quelle di [userId] vengono
+  /// sostituite; con [append] (registrazione o presa di possesso di un account
+  /// pre-registrato) restano e si aggiungono solo le righe nuove.
+  List<Map<String, dynamic>> _baseRows(
+    List<Map<String, dynamic>> all,
+    String userId,
+    bool append,
+  ) => all.where((r) => append || r['user_id'] != userId).toList();
+
+  bool _hasRow(
+    List<Map<String, dynamic>> rows,
+    String userId,
+    Map<String, dynamic> item,
+    List<String> keys,
+  ) => rows.any(
+    (r) =>
+        r['user_id'] == userId &&
+        r['active'] != false &&
+        keys.every((k) => r[k] == item[k]),
+  );
+
   Future<void> setUserLicenses(
     String userId,
-    List<Map<String, dynamic>> licenses,
-  ) async {
+    List<Map<String, dynamic>> licenses, {
+    bool append = false,
+  }) async {
     final now = DateTime.now().toIso8601String();
-    final existing = _db.licenses;
-    final updated = existing
-        .where((item) => item['user_id'] != userId)
-        .toList();
+    final updated = _baseRows(_db.licenses, userId, append);
     for (final item in licenses) {
+      if (_hasRow(updated, userId, item, const [
+        'helicopter_type_id',
+        'license_type_id',
+      ])) {
+        continue;
+      }
       updated.add({
         'id': _nextId(updated),
         'user_id': userId,
@@ -629,14 +654,18 @@ class UserService {
 
   Future<void> setUserPrivileges(
     String userId,
-    List<Map<String, dynamic>> privileges,
-  ) async {
+    List<Map<String, dynamic>> privileges, {
+    bool append = false,
+  }) async {
     final now = DateTime.now().toIso8601String();
-    final existing = _db.privileges;
-    final updated = existing
-        .where((item) => item['user_id'] != userId)
-        .toList();
+    final updated = _baseRows(_db.privileges, userId, append);
     for (final item in privileges) {
+      if (_hasRow(updated, userId, item, const [
+        'helicopter_type_id',
+        'privilege_type_id',
+      ])) {
+        continue;
+      }
       updated.add({
         'id': _nextId(updated),
         'user_id': userId,
@@ -674,14 +703,18 @@ class UserService {
 
   Future<void> setUserCrewAssignments(
     String userId,
-    List<Map<String, dynamic>> assignments,
-  ) async {
+    List<Map<String, dynamic>> assignments, {
+    bool append = false,
+  }) async {
     final now = DateTime.now().toIso8601String();
-    final existing = _db.crew;
-    final updated = existing
-        .where((item) => item['user_id'] != userId)
-        .toList();
+    final updated = _baseRows(_db.crew, userId, append);
     for (final item in assignments) {
+      if (_hasRow(updated, userId, item, const [
+        'helicopter_type_id',
+        'crew_type',
+      ])) {
+        continue;
+      }
       updated.add({
         'id': _nextId(updated),
         'user_id': userId,
@@ -723,14 +756,18 @@ class UserService {
 
   Future<void> setUserTobCapabilities(
     String userId,
-    List<Map<String, dynamic>> caps,
-  ) async {
+    List<Map<String, dynamic>> caps, {
+    bool append = false,
+  }) async {
     final now = DateTime.now().toIso8601String();
-    final existing = _db.tobUserCaps;
-    final updated = existing
-        .where((item) => item['user_id'] != userId)
-        .toList();
+    final updated = _baseRows(_db.tobUserCaps, userId, append);
     for (final item in caps) {
+      if (_hasRow(updated, userId, item, const [
+        'helicopter_type_id',
+        'tob_capability_id',
+      ])) {
+        continue;
+      }
       updated.add({
         'id': _nextId(updated),
         'user_id': userId,

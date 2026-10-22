@@ -121,6 +121,7 @@ class AuthService {
   }) async {
     nome = formatNome(nome);
     cognome = formatCognome(cognome);
+    await _db.refresh(); // il controllo duplicati va fatto sui dati aggiornati
     final users = _db.users;
     final licenseNumber = numeroLicenza.trim().toUpperCase();
     final mamlMatch = RegExp(r'[A-Z]{2}\d{6}').firstMatch(licenseNumber);
@@ -128,13 +129,44 @@ class AuthService {
         ? mamlMatch.group(0)!
         : licenseNumber;
     final normalizedUsername = _normalizeUsername(normalizedLicense);
+    final now = DateTime.now().toIso8601String();
 
-    if (users.any((user) => _userUsername(user) == normalizedUsername)) {
-      throw Exception('Username già registrato');
+    final existing = users.indexWhere(
+      (user) => _userUsername(user) == normalizedUsername,
+    );
+    if (existing >= 0) {
+      final preset = users[existing];
+      if (!UserProfile.preRegistered(preset)) {
+        throw Exception('Username già registrato');
+      }
+      // Account creato da un admin: chi si registra con la stessa licenza ne
+      // prende possesso, mantenendo approvazioni, privilegi e attività.
+      final claimed = <String, dynamic>{
+        ...preset,
+        'password_hash': GhDbService.hashPassword(password),
+        'nome': (preset['nome'] as String?)?.trim().isNotEmpty == true
+            ? preset['nome']
+            : nome,
+        'cognome': (preset['cognome'] as String?)?.trim().isNotEmpty == true
+            ? preset['cognome']
+            : cognome,
+        'email': email.trim().toLowerCase(),
+        'is_ti': isTi,
+        'is_etp': isEtp,
+        'claimed_at': now,
+        'updated_at': now,
+      };
+      users[existing] = claimed;
+      await _db.saveUsers(users);
+      await _notificationService.notifyAllAdmins(
+        type: 'PROFILE_CLAIMED',
+        message:
+            'Account pre-registrato attivato: ${claimed['nome']} ${claimed['cognome']} (${normalizedLicense.toUpperCase()}).',
+      );
+      return UserProfile.fromJson(_withOrgUnit(claimed));
     }
 
     final id = _generateId();
-    final now = DateTime.now().toIso8601String();
     final newUser = <String, dynamic>{
       'id': id,
       'username': normalizedLicense,

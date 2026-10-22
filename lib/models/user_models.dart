@@ -20,6 +20,13 @@ class UserProfile {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// Account creato da un admin e non ancora reclamato: nessuna password,
+  /// chi si registra con la stessa licenza ne prende possesso.
+  final bool isPreRegistered;
+
+  static bool preRegistered(Map<String, dynamic> j) =>
+      (j['password_hash'] as String? ?? '').isEmpty;
+
   const UserProfile({
     required this.id,
     required this.nome,
@@ -41,6 +48,7 @@ class UserProfile {
     this.note,
     required this.createdAt,
     required this.updatedAt,
+    this.isPreRegistered = false,
   });
 
   String get fullName => '$cognome $nome'.trim();
@@ -88,6 +96,7 @@ class UserProfile {
       updatedAt: DateTime.parse(
         j['updated_at'] as String? ?? DateTime.now().toIso8601String(),
       ),
+      isPreRegistered: preRegistered(j),
     );
   }
 
@@ -153,6 +162,7 @@ class UserProfile {
     note: note ?? this.note,
     createdAt: createdAt,
     updatedAt: DateTime.now(),
+    isPreRegistered: isPreRegistered,
   );
 }
 
