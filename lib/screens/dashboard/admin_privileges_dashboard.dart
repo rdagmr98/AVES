@@ -611,11 +611,8 @@ class _AdminPrivilegesDashboardState
           return _rows.where((r) => r.user.id == row.user.id).firstOrNull;
         },
         onEmail: (r) => _launchMaintenanceEmail([r]),
-        removePrivilege: (ps) => _userService.removePrivilege(
-          row.user.id,
-          ps.helicopterTypeId,
-          ps.privilegeTypeId,
-        ),
+        helicopterTypes: ref.read(authProvider).helicopterTypes,
+        privilegeTypes: ref.read(authProvider).privilegeTypes,
       ),
     );
   }
@@ -2155,13 +2152,15 @@ class _ServiceRecordDialog extends StatefulWidget {
     required this.initialRow,
     required this.reload,
     required this.onEmail,
-    required this.removePrivilege,
+    required this.helicopterTypes,
+    required this.privilegeTypes,
   });
 
   final _MaintenanceUserRow initialRow;
   final Future<_MaintenanceUserRow?> Function() reload;
   final void Function(_MaintenanceUserRow row) onEmail;
-  final Future<void> Function(PrivilegeCurrencyStatus status) removePrivilege;
+  final List<HelicopterType> helicopterTypes;
+  final List<PrivilegeType> privilegeTypes;
 
   @override
   State<_ServiceRecordDialog> createState() => _ServiceRecordDialogState();
@@ -2170,6 +2169,7 @@ class _ServiceRecordDialog extends StatefulWidget {
 class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
   static final _df = DateFormat('dd/MM/yyyy');
   final _activityService = ActivityService();
+  final _userService = UserService();
   final _searchCtrl = TextEditingController();
   late _MaintenanceUserRow _row = widget.initialRow;
   List<MaintenanceActivity> _acts = [];
@@ -2269,7 +2269,100 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
       'Rimuovi',
     );
     if (!ok) return;
-    await widget.removePrivilege(ps);
+    await _userService.removePrivilege(
+      _row.user.id,
+      ps.helicopterTypeId,
+      ps.privilegeTypeId,
+    );
+    await _afterChange();
+  }
+
+  /// Assegna/toglie privilegi su un elicottero (heliId null = da scegliere).
+  Future<void> _editPrivileges([int? heliId]) async {
+    final userId = _row.user.id;
+    final current = await _userService.getUserPrivileges(userId);
+    if (!mounted) return;
+    Set<int> assigned(int? h) => {
+      for (final p in current)
+        if (p.helicopterTypeId == h) p.privilegeTypeId,
+    };
+    var heli = heliId ?? widget.helicopterTypes.firstOrNull?.id;
+    var selected = assigned(heli);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text(
+            heliId == null ? 'Aggiungi privilegi' : 'Modifica privilegi',
+          ),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Elicottero', style: TextStyle(fontSize: 12)),
+                  DropdownButton<int>(
+                    value: heli,
+                    isExpanded: true,
+                    items: [
+                      for (final h in widget.helicopterTypes)
+                        DropdownMenuItem(
+                          value: h.id,
+                          child: Text(h.code, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: heliId != null
+                        ? null
+                        : (v) => setD(() {
+                            heli = v;
+                            selected = assigned(v);
+                          }),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final p in widget.privilegeTypes)
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: selected.contains(p.id),
+                      title: Text(p.name, overflow: TextOverflow.ellipsis),
+                      onChanged: (v) => setD(
+                        () => v == true
+                            ? selected.add(p.id)
+                            : selected.remove(p.id),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(c).pop(false),
+              child: const Text('Annulla'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(c).pop(true),
+              child: const Text('Salva'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final h = heli;
+    if (ok != true || h == null) return;
+    final before = assigned(h);
+    for (final id in before.difference(selected)) {
+      await _userService.removePrivilege(userId, h, id);
+    }
+    final added = selected.difference(before);
+    if (added.isNotEmpty) {
+      await _userService.setUserPrivileges(userId, [
+        for (final id in added)
+          {'helicopter_type_id': h, 'privilege_type_id': id},
+      ], append: true);
+    }
     await _afterChange();
   }
 
@@ -2593,11 +2686,27 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '$heliCode$cat',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$heliCode$cat',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Modifica privilegi',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  onPressed: () => _editPrivileges(heliId),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             if (privileges.isEmpty)
               const Text(
                 'Nessun privilegio assegnato.',
@@ -2652,7 +2761,16 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _sectionTitle('Licenze e privilegi'),
+        Row(
+          children: [
+            Expanded(child: _sectionTitle('Licenze e privilegi')),
+            TextButton.icon(
+              onPressed: _editPrivileges,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Aggiungi'),
+            ),
+          ],
+        ),
         if (groups.isEmpty)
           const Text('Nessuna licenza o privilegio assegnato.'),
         for (final e in groups.entries) _heliCard(e.key, e.value),
