@@ -201,6 +201,21 @@ class ActivityService {
     await _db.saveMaintenanceActs(rows);
   }
 
+  /// Aggiorna i campi modificabili (null = azzera il campo); id, utente e
+  /// stato di validazione restano invariati.
+  Future<void> updateMaintenanceActivity(
+    int id,
+    Map<String, dynamic> fields,
+  ) async {
+    final rows = _db.maintenanceActs;
+    final index = rows.indexWhere((item) => item['id'] == id);
+    if (index == -1) {
+      throw Exception('Attività manutentiva non trovata');
+    }
+    rows[index] = {...rows[index], ...fields};
+    await _db.saveMaintenanceActs(rows);
+  }
+
   Future<List<MaintenanceActivity>> getUserMaintenanceActivities(
     String userId,
   ) async {

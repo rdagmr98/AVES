@@ -604,217 +604,18 @@ class _AdminPrivilegesDashboardState
   Future<void> _showUserDetail(_MaintenanceUserRow row) async {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          row.user.fullName,
-          textAlign: TextAlign.center,
-          softWrap: true,
+      builder: (_) => _ServiceRecordDialog(
+        initialRow: row,
+        reload: () async {
+          await _loadData();
+          return _rows.where((r) => r.user.id == row.user.id).firstOrNull;
+        },
+        onEmail: (r) => _launchMaintenanceEmail([r]),
+        removePrivilege: (ps) => _userService.removePrivilege(
+          row.user.id,
+          ps.helicopterTypeId,
+          ps.privilegeTypeId,
         ),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                UserAvatar(user: row.user, radius: 30),
-                const SizedBox(height: 12),
-                CurrencyBadgeWidget(status: row.status),
-                const SizedBox(height: 12),
-                Text(
-                  row.status.label,
-                  textAlign: TextAlign.center,
-                  softWrap: true,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Ultima attività: ${_formatDate(row.lastActivityDate)}\nScadenza: ${_formatDate(row.status.expiryDate)}',
-                  textAlign: TextAlign.center,
-                  softWrap: true,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Licenze e privilegi per elicottero',
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                ...() {
-                  // Group privileges by helicopter
-                  final heliGroups = <int, List<PrivilegeCurrencyStatus>>{};
-                  for (final ps in row.perPrivilegeCurrency) {
-                    heliGroups
-                        .putIfAbsent(ps.helicopterTypeId, () => [])
-                        .add(ps);
-                  }
-                  // Also include helicopters that only have licenses (no privileges)
-                  for (final lic in row.licenses) {
-                    heliGroups.putIfAbsent(lic.helicopterTypeId, () => []);
-                  }
-                  return heliGroups.entries.map((heliEntry) {
-                    final heliId = heliEntry.key;
-                    final privileges = heliEntry.value;
-                    final heliCode = privileges.isNotEmpty
-                        ? privileges.first.helicopterCode
-                        : row.licenses
-                              .where((l) => l.helicopterTypeId == heliId)
-                              .first
-                              .helicopterCode;
-                    final heliLicenses = row.licenses
-                        .where((l) => l.helicopterTypeId == heliId)
-                        .toList();
-                    final licenseLabel = heliLicenses.isNotEmpty
-                        ? '  ·  Cat. ${heliLicenses.first.licenseCode}'
-                        : '';
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Helicopter + license header
-                            Text(
-                              '$heliCode$licenseLabel',
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                              softWrap: true,
-                            ),
-                            if (privileges.isEmpty) ...[
-                              const SizedBox(height: 6),
-                              const Text(
-                                'Nessun privilegio assegnato.',
-                                style: TextStyle(fontStyle: FontStyle.italic),
-                              ),
-                            ] else ...[
-                              const SizedBox(height: 8),
-                              ...privileges.map((privStatus) {
-                                final isExpired = privStatus.status.isExpired;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              privStatus.privilegeName,
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: privStatus.status.isExpired
-                                                  ? const Color(0xFFC0392B)
-                                                  : privStatus.status.isWarning
-                                                  ? const Color(0xFFE67E22)
-                                                  : const Color(0xFF27AE60),
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              privStatus.status.statusText,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      if (isExpired) ...[
-                                        const SizedBox(height: 4),
-                                        TextButton(
-                                          onPressed: () async {
-                                            final confirmed = await showDialog<bool>(
-                                              context: dialogContext,
-                                              builder: (confirmContext) =>
-                                                  AlertDialog(
-                                                    title: const Text(
-                                                      'Conferma rimozione',
-                                                      softWrap: true,
-                                                    ),
-                                                    content: Text(
-                                                      'Vuoi rimuovere il privilegio ${privStatus.privilegeName} su ${privStatus.helicopterCode} dall\'utente ${row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
-                                                      softWrap: true,
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.of(
-                                                              confirmContext,
-                                                            ).pop(false),
-                                                        child: const Text(
-                                                          'Annulla',
-                                                        ),
-                                                      ),
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.of(
-                                                              confirmContext,
-                                                            ).pop(true),
-                                                        child: const Text(
-                                                          'Rimuovi',
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                            );
-                                            if (confirmed == true &&
-                                                context.mounted) {
-                                              await _userService
-                                                  .removePrivilege(
-                                                    row.user.id,
-                                                    privStatus.helicopterTypeId,
-                                                    privStatus.privilegeTypeId,
-                                                  );
-                                              if (dialogContext.mounted) {
-                                                Navigator.of(
-                                                  dialogContext,
-                                                ).pop();
-                                              }
-                                              await _loadData();
-                                            }
-                                          },
-                                          child: const Text(
-                                            'Rimuovi privilegio scaduto',
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                );
-                              }),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList();
-                }(),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          if (row.user.email != null && row.user.email!.trim().isNotEmpty)
-            TextButton.icon(
-              onPressed: () => _launchMaintenanceEmail([row]),
-              icon: const Icon(Icons.email_outlined),
-              label: const Text('Invia Email'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Chiudi'),
-          ),
-        ],
       ),
     );
   }
@@ -2341,6 +2142,905 @@ class _NavButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+    );
+  }
+}
+
+/// Scheda "stato di servizio" dell'utente: privilegi con currency a sinistra,
+/// attività manutentive validate (ricerca, filtri, modifica, eliminazione)
+/// a destra. A tutto schermo su desktop, colonna unica su schermi stretti.
+class _ServiceRecordDialog extends StatefulWidget {
+  const _ServiceRecordDialog({
+    required this.initialRow,
+    required this.reload,
+    required this.onEmail,
+    required this.removePrivilege,
+  });
+
+  final _MaintenanceUserRow initialRow;
+  final Future<_MaintenanceUserRow?> Function() reload;
+  final void Function(_MaintenanceUserRow row) onEmail;
+  final Future<void> Function(PrivilegeCurrencyStatus status) removePrivilege;
+
+  @override
+  State<_ServiceRecordDialog> createState() => _ServiceRecordDialogState();
+}
+
+class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
+  static final _df = DateFormat('dd/MM/yyyy');
+  final _activityService = ActivityService();
+  final _searchCtrl = TextEditingController();
+  late _MaintenanceUserRow _row = widget.initialRow;
+  List<MaintenanceActivity> _acts = [];
+  List<SeminarActivity> _seminars = [];
+  bool _loading = true;
+  String _query = '';
+  int? _heliId;
+  int? _privId; // -1 = attività registrate su "Tutti i privilegi"
+  DateTimeRange? _period;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivities();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadActivities() async {
+    final userId = _row.user.id;
+    final acts = await _activityService.getUserMaintenanceActivities(userId);
+    final seminars = await _activityService.getUserSeminarActivities(userId);
+    if (!mounted) return;
+    setState(() {
+      _acts = acts.where((a) => a.isValidated).toList();
+      _seminars = seminars.where((s) => s.isValidated).toList();
+      _loading = false;
+    });
+  }
+
+  Future<void> _afterChange() async {
+    final row = await widget.reload();
+    if (!mounted) return;
+    if (row != null) setState(() => _row = row);
+    await _loadActivities();
+  }
+
+  String _fmt(DateTime? d) => d == null ? '-' : _df.format(d);
+
+  List<MaintenanceActivity> get _filtered {
+    final q = _query.trim().toLowerCase();
+    return _acts.where((a) {
+      if (_heliId != null && a.helicopterTypeId != _heliId) return false;
+      if (_privId != null && (a.privilegeTypeId ?? -1) != _privId) {
+        return false;
+      }
+      final period = _period;
+      if (period != null &&
+          (a.effectiveDate.isBefore(period.start) ||
+              (a.dateFrom ?? a.activityDate).isAfter(period.end))) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      return [
+        a.helicopterCode,
+        a.privilegeName,
+        a.description,
+        a.ordineLavoro,
+        a.matricolaMilitare,
+        a.numeroCorrozzella,
+        _fmt(a.activityDate),
+        _fmt(a.dateFrom),
+        _fmt(a.dateTo),
+      ].any((v) => (v ?? '').toLowerCase().contains(q));
+    }).toList();
+  }
+
+  Future<bool> _confirm(String title, String message, String action) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _removePrivilege(PrivilegeCurrencyStatus ps) async {
+    final ok = await _confirm(
+      'Conferma rimozione',
+      'Vuoi rimuovere il privilegio ${ps.privilegeName} su ${ps.helicopterCode} dall\'utente ${_row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
+      'Rimuovi',
+    );
+    if (!ok) return;
+    await widget.removePrivilege(ps);
+    await _afterChange();
+  }
+
+  Future<void> _deleteActivity(MaintenanceActivity a) async {
+    final ok = await _confirm(
+      'Elimina attività',
+      'Eliminare l\'attività del ${_fmt(a.effectiveDate)} su ${a.helicopterCode} (${a.privilegeName})? La currency verrà ricalcolata.',
+      'Elimina',
+    );
+    if (!ok) return;
+    await _activityService.deleteMaintenanceActivity(a.id!);
+    await _afterChange();
+  }
+
+  Future<void> _deleteSeminar(SeminarActivity s) async {
+    final ok = await _confirm(
+      'Elimina seminario',
+      'Eliminare il seminario ${s.seminarType.replaceAll('_', '/')} del ${_fmt(s.seminarDate)}? Senza seminario valido l\'utente risulta NO GO.',
+      'Elimina',
+    );
+    if (!ok) return;
+    await _activityService.deleteSeminarActivity(s.id!);
+    await _afterChange();
+  }
+
+  Future<void> _editActivity(MaintenanceActivity a) async {
+    final heliOptions = <int, String>{
+      for (final l in _row.licenses) l.helicopterTypeId: l.helicopterCode,
+      for (final p in _row.privileges) p.helicopterTypeId: p.helicopterCode,
+      a.helicopterTypeId: a.helicopterCode,
+    };
+    var heliId = a.helicopterTypeId;
+    var privId = a.privilegeTypeId;
+    var date = a.activityDate;
+    var from = a.dateFrom;
+    var to = a.dateTo;
+    // ponytail: controller non disposti, il dialog li usa ancora durante
+    // l'animazione di chiusura; il GC li raccoglie.
+    final desc = TextEditingController(text: a.description ?? '');
+    final odl = TextEditingController(text: a.ordineLavoro ?? '');
+    final mm = TextEditingController(text: a.matricolaMilitare ?? '');
+    final corr = TextEditingController(text: a.numeroCorrozzella ?? '');
+    String? error;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) {
+          final privOptions = <int?, String>{
+            null: 'Tutti i privilegi',
+            for (final p in _row.privileges.where(
+              (p) => p.helicopterTypeId == heliId,
+            ))
+              p.privilegeTypeId: p.privilegeName,
+            if (heliId == a.helicopterTypeId && a.privilegeTypeId != null)
+              a.privilegeTypeId: a.privilegeName,
+          };
+          if (!privOptions.containsKey(privId)) privId = null;
+
+          Widget label(String text) => Padding(
+            padding: const EdgeInsets.only(bottom: 4, top: 12),
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          );
+
+          Widget dateField(
+            String text,
+            DateTime? value,
+            void Function(DateTime? d) onChanged, {
+            bool clearable = true,
+          }) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              label(text),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.event, size: 18),
+                      label: Text(_fmt(value)),
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: c,
+                          initialDate: value ?? date,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (d != null) setD(() => onChanged(d));
+                      },
+                    ),
+                  ),
+                  if (clearable && value != null)
+                    IconButton(
+                      tooltip: 'Azzera',
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setD(() => onChanged(null)),
+                    ),
+                ],
+              ),
+            ],
+          );
+
+          Widget textField(String text, TextEditingController ctrl) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              label(text),
+              TextField(
+                controller: ctrl,
+                decoration: const InputDecoration(isDense: true),
+              ),
+            ],
+          );
+
+          return AlertDialog(
+            title: const Text('Modifica attività'),
+            content: SizedBox(
+              width: 600,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: dateField(
+                            'Data attività',
+                            date,
+                            (d) => date = d ?? date,
+                            clearable: false,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: dateField('Dal', from, (d) => from = d),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: dateField('Al', to, (d) => to = d)),
+                      ],
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              label('Elicottero'),
+                              DropdownButton<int>(
+                                value: heliId,
+                                isExpanded: true,
+                                items: [
+                                  for (final e in heliOptions.entries)
+                                    DropdownMenuItem(
+                                      value: e.key,
+                                      child: Text(e.value),
+                                    ),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) setD(() => heliId = v);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              label('Privilegio'),
+                              DropdownButton<int?>(
+                                value: privId,
+                                isExpanded: true,
+                                items: [
+                                  for (final e in privOptions.entries)
+                                    DropdownMenuItem(
+                                      value: e.key,
+                                      child: Text(
+                                        e.value,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) => setD(() => privId = v),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    label('Descrizione'),
+                    TextField(
+                      controller: desc,
+                      maxLines: 3,
+                      decoration: const InputDecoration(isDense: true),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(child: textField('Ordine di lavoro', odl)),
+                        const SizedBox(width: 12),
+                        Expanded(child: textField('Matricola militare', mm)),
+                        const SizedBox(width: 12),
+                        Expanded(child: textField('N. corrozzella', corr)),
+                      ],
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        error!,
+                        style: const TextStyle(
+                          color: AppColors.currencyExpired,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(false),
+                child: const Text('Annulla'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final f = from;
+                  final t = to;
+                  if (f != null && t != null && f.isAfter(t)) {
+                    setD(() => error = 'La data "Dal" è successiva ad "Al".');
+                    return;
+                  }
+                  Navigator.of(c).pop(true);
+                },
+                child: const Text('Salva'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (saved != true) return;
+
+    String? text(TextEditingController ctrl) =>
+        ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
+    String? iso(DateTime? d) => d?.toIso8601String().split('T').first;
+    await _activityService.updateMaintenanceActivity(a.id!, {
+      'activity_date': iso(date),
+      'date_from': iso(from),
+      'date_to': iso(to),
+      'helicopter_type_id': heliId,
+      'privilege_type_id': privId,
+      'description': text(desc),
+      'ordine_lavoro': text(odl),
+      'matricola_militare': text(mm),
+      'numero_corrozzella': text(corr),
+    });
+    await _afterChange();
+  }
+
+  Widget _sectionTitle(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 12,
+        letterSpacing: 1.2,
+        fontWeight: FontWeight.w800,
+        color: AppColors.secondary,
+      ),
+    ),
+  );
+
+  Widget _statusChip(CurrencyStatus status) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: status.isExpired
+          ? const Color(0xFFC0392B)
+          : status.isWarning
+          ? const Color(0xFFE67E22)
+          : const Color(0xFF27AE60),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(
+      status.statusText,
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+
+  Widget _info(IconData icon, String text) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 16, color: AppColors.textSecondary),
+      const SizedBox(width: 6),
+      Flexible(child: Text(text)),
+    ],
+  );
+
+  Widget _heliCard(int heliId, List<PrivilegeCurrencyStatus> privileges) {
+    final licenses = _row.licenses
+        .where((l) => l.helicopterTypeId == heliId)
+        .toList();
+    final heliCode = privileges.isNotEmpty
+        ? privileges.first.helicopterCode
+        : licenses.first.helicopterCode;
+    final cat = licenses.isNotEmpty
+        ? '  ·  Cat. ${licenses.first.licenseCode}'
+        : '';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$heliCode$cat',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (privileges.isEmpty)
+              const Text(
+                'Nessun privilegio assegnato.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            for (final ps in privileges)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(ps.privilegeName),
+                          Text(
+                            'Scadenza: ${_fmt(ps.status.expiryDate)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (ps.status.isExpired)
+                      IconButton(
+                        tooltip: 'Rimuovi privilegio scaduto',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.remove_circle_outline, size: 18),
+                        onPressed: () => _removePrivilege(ps),
+                      ),
+                    const SizedBox(width: 6),
+                    _statusChip(ps.status),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrivileges() {
+    final groups = <int, List<PrivilegeCurrencyStatus>>{};
+    for (final ps in _row.perPrivilegeCurrency) {
+      groups.putIfAbsent(ps.helicopterTypeId, () => []).add(ps);
+    }
+    for (final lic in _row.licenses) {
+      groups.putIfAbsent(lic.helicopterTypeId, () => []);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionTitle('Licenze e privilegi'),
+        if (groups.isEmpty)
+          const Text('Nessuna licenza o privilegio assegnato.'),
+        for (final e in groups.entries) _heliCard(e.key, e.value),
+        const SizedBox(height: 16),
+        _sectionTitle('Seminari validati'),
+        if (_seminars.isEmpty)
+          const Text(
+            'Nessun seminario validato.',
+            style: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        for (final s in _seminars)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.school_outlined),
+            title: Text(
+              '${s.seminarType.replaceAll('_', '/')}  ·  ${_fmt(s.seminarDate)}',
+            ),
+            subtitle: (s.description ?? '').isEmpty
+                ? null
+                : Text(s.description!),
+            trailing: IconButton(
+              tooltip: 'Elimina seminario',
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 20,
+                color: AppColors.currencyExpired,
+              ),
+              onPressed: () => _deleteSeminar(s),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _activityTile(MaintenanceActivity a) {
+    final hasRange = a.dateFrom != null || a.dateTo != null;
+    final refs = [
+      if ((a.ordineLavoro ?? '').isNotEmpty) 'OdL ${a.ordineLavoro}',
+      if ((a.matricolaMilitare ?? '').isNotEmpty) 'MM ${a.matricolaMilitare}',
+      if ((a.numeroCorrozzella ?? '').isNotEmpty)
+        'Corr. ${a.numeroCorrozzella}',
+    ].join('  ·  ');
+    const small = TextStyle(fontSize: 12, color: AppColors.textSecondary);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 92,
+              child: Text(
+                _fmt(a.effectiveDate),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${a.helicopterCode}  ·  ${a.privilegeName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  if (hasRange)
+                    Text(
+                      'dal ${_fmt(a.dateFrom ?? a.activityDate)} al ${_fmt(a.effectiveDate)}',
+                      style: small,
+                    ),
+                  if ((a.description ?? '').isNotEmpty)
+                    Text(
+                      a.description!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (refs.isNotEmpty)
+                    Text(
+                      refs,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: small,
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Modifica',
+              icon: const Icon(Icons.edit_outlined, size: 20),
+              onPressed: () => _editActivity(a),
+            ),
+            IconButton(
+              tooltip: 'Elimina',
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 20,
+                color: AppColors.currencyExpired,
+              ),
+              onPressed: () => _deleteActivity(a),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivities({required bool scrollable}) {
+    final items = _filtered;
+    final heliOptions = <int, String>{
+      for (final a in _acts) a.helicopterTypeId: a.helicopterCode,
+    };
+    final privOptions = <int, String>{
+      for (final a in _acts)
+        if (_heliId == null || a.helicopterTypeId == _heliId)
+          a.privilegeTypeId ?? -1: a.privilegeName,
+    };
+    final filtersActive =
+        _query.isNotEmpty ||
+        _heliId != null ||
+        _privId != null ||
+        _period != null;
+
+    final filters = Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SizedBox(
+          width: 280,
+          child: TextField(
+            controller: _searchCtrl,
+            decoration: const InputDecoration(
+              isDense: true,
+              hintText: 'Cerca OdL, matricola, descrizione...',
+              prefixIcon: Icon(Icons.search),
+            ),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        DropdownButton<int?>(
+          value: heliOptions.containsKey(_heliId) ? _heliId : null,
+          items: [
+            const DropdownMenuItem(value: null, child: Text('Ogni elicottero')),
+            for (final e in heliOptions.entries)
+              DropdownMenuItem(value: e.key, child: Text(e.value)),
+          ],
+          onChanged: (v) => setState(() {
+            _heliId = v;
+            _privId = null;
+          }),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: DropdownButton<int?>(
+            value: privOptions.containsKey(_privId) ? _privId : null,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(
+                value: null,
+                child: Text('Ogni privilegio'),
+              ),
+              for (final e in privOptions.entries)
+                DropdownMenuItem(
+                  value: e.key,
+                  child: Text(e.value, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (v) => setState(() => _privId = v),
+          ),
+        ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.date_range, size: 18),
+          label: Text(
+            _period == null
+                ? 'Periodo'
+                : '${_fmt(_period!.start)} – ${_fmt(_period!.end)}',
+          ),
+          onPressed: () async {
+            final r = await showDateRangePicker(
+              context: context,
+              firstDate: DateTime(2000),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+              initialDateRange: _period,
+            );
+            if (r != null) setState(() => _period = r);
+          },
+        ),
+        if (filtersActive)
+          TextButton.icon(
+            icon: const Icon(Icons.filter_alt_off, size: 18),
+            label: const Text('Azzera filtri'),
+            onPressed: () {
+              _searchCtrl.clear();
+              setState(() {
+                _query = '';
+                _heliId = null;
+                _privId = null;
+                _period = null;
+              });
+            },
+          ),
+      ],
+    );
+
+    final header = <Widget>[
+      _sectionTitle('Attività manutentive validate'),
+      filters,
+      const SizedBox(height: 8),
+      Text(
+        '${items.length} di ${_acts.length} attività',
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 8),
+    ];
+    final empty = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Text(
+          _acts.isEmpty
+              ? 'Nessuna attività validata.'
+              : 'Nessuna attività corrisponde ai filtri.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+      ),
+    );
+
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...header,
+        if (items.isEmpty)
+          empty
+        else if (scrollable)
+          Expanded(
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (_, i) => _activityTile(items[i]),
+            ),
+          )
+        else
+          ...items.map(_activityTile),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final wide = size.width >= 1100;
+    final user = _row.user;
+    final email = user.email?.trim() ?? '';
+    final subtitle = [
+      'Lic. ${user.numeroLicenza ?? '-'}',
+      user.orgUnitName.isEmpty ? 'Unità non indicata' : user.orgUnitName,
+      if (user.isPreRegistered) 'non ancora registrato',
+    ].join('  ·  ');
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: wide ? 1480 : 760,
+          maxHeight: (size.height - 48).clamp(420, 900),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: AppColors.surface,
+              padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+              child: Row(
+                children: [
+                  UserAvatar(user: user, radius: 24),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  CurrencyBadgeWidget(status: _row.status),
+                  if (email.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Invia email',
+                      icon: const Icon(Icons.email_outlined),
+                      onPressed: () => widget.onEmail(_row),
+                    ),
+                  IconButton(
+                    tooltip: 'Chiudi',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Wrap(
+                spacing: 28,
+                runSpacing: 6,
+                children: [
+                  _info(Icons.info_outline, _row.status.label),
+                  _info(
+                    Icons.history,
+                    'Ultima attività: ${_fmt(_row.lastActivityDate)}',
+                  ),
+                  _info(
+                    Icons.event,
+                    'Scadenza: ${_fmt(_row.status.expiryDate)}',
+                  ),
+                  _info(
+                    Icons.build_outlined,
+                    'Attività validate: ${_acts.length}',
+                  ),
+                ],
+              ),
+            ),
+            if (wide)
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildPrivileges(),
+                      ),
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(
+                      flex: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildActivities(scrollable: true),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildPrivileges(),
+                      const SizedBox(height: 20),
+                      _buildActivities(scrollable: false),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
