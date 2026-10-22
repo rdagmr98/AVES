@@ -47,6 +47,6 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-23
+- Web Push ad app chiusa (`e00810f`): `push/notify.mjs` eseguito dall'Action `push.yml` di `aves-data` sui commit `nuove notifiche` (`GhDbService.pushCommitMsg`, `saveNotifications(fresh: true)`); sottoscrizioni in `db/push_subscriptions.json`, SW `web/push/sw.js`, `NotificationService.enablePush`. Secret VAPID solo su `aves-data`. Nota vault `AVES Corsi/Web Push via Action repo dati 2026-10-23.md`.
 - Dashboard GO / NO GO: dettaglio utente = `_ServiceRecordDialog` (privilegi + attività validate con ricerca/filtri/modifica/eliminazione, seminari eliminabili); `ActivityService.updateMaintenanceActivity`. Nota vault `AVES Corsi/Tecnici scheda stato di servizio 2026-10-23.md`.
-- 2026-10-22: account pre-registrati (`password_hash` vuoto, `isPreRegistered`) creati dall'admin, presa di possesso in `signUp` con notifica `PROFILE_CLAIMED`; unità organizzative modificabili; merge a tre vie per id sui 409 (`GhDbService._mergeRemote`). Nota vault `AVES Corsi/Tecnici account pre-registrati 2026-10-22.md`.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
