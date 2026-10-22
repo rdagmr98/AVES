@@ -46,12 +46,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-10-17
-- Dashboard GO / NO GO manutentori: filtro "Elicotteri per GO / NO GO" (card Filtri) con predefiniti in SharedPreferences `go_nogo_helicopter_ids`; `CurrencyService.getMaintenanceCurrency/getPerPrivilegeCurrency` accettano `helicopterTypeIds` (null = tutti), applicato anche al Report PDF. Notifiche privilegio scaduto ancora senza filtro. Nota: vault `AVES Corsi/Tecnici filtro elicotteri GO NO GO 2026-10-17.md`.
-
-## Sessione precedente — 2026-10-16
-- Latenze rimosse: `GhDbService._writeFile` ora accoda e ritorna subito (nessun `await` di PUT nei ~80 call site), `reloadAll` sostituito da `refresh()`, GET con `?_=` anti-cache e timeout 30 s, permesso notifiche non più atteso in `signIn`/`initialize`, avviso `beforeunload` se ci sono salvataggi in coda + snackbar su errore di salvataggio (`lib/app.dart`). Limite: F5 entro 1-3 s da un salvataggio protetta solo dall'avviso del browser.
-- `web/index.html`: ricarica automatica una volta quando il service worker installa una nuova build (prima l'utente vedeva la versione vecchia dalla cache fino al secondo reload). Card Volo T: sottotitolo "semestre in corso".
-- Currency volo T ora a semestri di calendario (gen-giu, lug-dic), >= ore minime per semestre; NO-GO se semestre precedente chiuso sotto minimo e corrente sotto minimo; primo semestre di attività = grazia. MDB_FLIGHT resta rolling 180 gg (da decidere se passare a semestri).
-- Nomi utenti (`role == 'user'`) normalizzati in `GhDbService.saveUsers` + `signUp`; migrazione dei dati esistenti al primo login admin (`UserService.normalizeAllNames`).
-- Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android).
+## STATO SESSIONE — aggiornato 2026-10-23
+- Dashboard GO / NO GO: dettaglio utente = `_ServiceRecordDialog` (privilegi + attività validate con ricerca/filtri/modifica/eliminazione, seminari eliminabili); `ActivityService.updateMaintenanceActivity`. Nota vault `AVES Corsi/Tecnici scheda stato di servizio 2026-10-23.md`.
+- 2026-10-22: account pre-registrati (`password_hash` vuoto, `isPreRegistered`) creati dall'admin, presa di possesso in `signUp` con notifica `PROFILE_CLAIMED`; unità organizzative modificabili; merge a tre vie per id sui 409 (`GhDbService._mergeRemote`). Nota vault `AVES Corsi/Tecnici account pre-registrati 2026-10-22.md`.
+- Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
