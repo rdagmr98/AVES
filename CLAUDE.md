@@ -48,5 +48,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 
 ## STATO SESSIONE — aggiornato 2026-10-23
 - Web Push ad app chiusa (`e00810f`): `push/notify.mjs` eseguito dall'Action `push.yml` di `aves-data` sui commit `nuove notifiche` (`GhDbService.pushCommitMsg`, `saveNotifications(fresh: true)`); sottoscrizioni in `db/push_subscriptions.json`, SW `web/push/sw.js`, `NotificationService.enablePush`. Secret VAPID solo su `aves-data`. Nota vault `AVES Corsi/Web Push via Action repo dati 2026-10-23.md`.
-- Dashboard GO / NO GO: dettaglio utente = `_ServiceRecordDialog` (privilegi + attività validate con ricerca/filtri/modifica/eliminazione, seminari eliminabili); `ActivityService.updateMaintenanceActivity`. Nota vault `AVES Corsi/Tecnici scheda stato di servizio 2026-10-23.md`.
+- Dashboard GO / NO GO: dettaglio utente = `_ServiceRecordDialog`.
+  - Privilegi aggiungibili e modificabili per qualsiasi utente (`_editPrivileges`, `172b5a6`).
+  - Attività validate con ricerca, filtri, modifica ed eliminazione; seminari eliminabili.
+  - Usa `ActivityService.updateMaintenanceActivity`. Nota vault `AVES Corsi/Tecnici scheda stato di servizio 2026-10-23.md`.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
