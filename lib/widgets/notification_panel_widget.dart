@@ -6,6 +6,7 @@ import '../app.dart';
 import '../constants/app_constants.dart';
 import '../models/activity_models.dart';
 import '../services/notification_service.dart';
+import '../services/web_notification_service.dart';
 
 class NotificationPanelWidget extends ConsumerStatefulWidget {
   const NotificationPanelWidget({super.key, required this.userId});
@@ -198,6 +199,18 @@ class _NotificationPanelWidgetState
               ),
             ),
             const Divider(height: 1),
+            // Su iPhone il permesso si può chiedere solo da un tocco (PWA installata).
+            if (WebNotificationService.permission == 'default')
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('Attiva le notifiche di sistema'),
+                subtitle: const Text('Per ricevere avvisi anche ad app chiusa'),
+                onTap: () async {
+                  await _service.enablePush(widget.userId);
+                  if (mounted) setState(() {});
+                },
+              ),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())

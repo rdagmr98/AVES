@@ -9,7 +9,6 @@ import '../services/auth_service.dart';
 import '../services/currency_service.dart';
 import '../services/notification_service.dart';
 import '../services/user_service.dart';
-import '../services/web_notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final _authService = AuthService();
@@ -73,8 +72,8 @@ class AuthProvider extends ChangeNotifier {
       final userId = session?['userId'];
       if (userId != null) {
         // ponytail: nessuno dipende dal risultato; attenderlo bloccava il login finché
-      // l'utente non risponde al prompt del browser.
-      unawaited(WebNotificationService.requestPermission());
+        // l'utente non risponde al prompt del browser.
+        unawaited(_notifService.enablePush(userId));
         await _loadUserData(userId);
         if (_userProfile == null) {
           await _authService.signOut();
@@ -170,7 +169,7 @@ class AuthProvider extends ChangeNotifier {
       await _authService.saveSession(_userProfile!.id, _userProfile!.role);
       // ponytail: nessuno dipende dal risultato; attenderlo bloccava il login finché
       // l'utente non risponde al prompt del browser.
-      unawaited(WebNotificationService.requestPermission());
+      unawaited(_notifService.enablePush(_userProfile!.id));
       await _loadUserData(_userProfile!.id);
       return true;
     } catch (e) {

@@ -1039,7 +1039,7 @@ class CurrencyService {
       'is_read': false,
       'created_at': DateTime.now().toIso8601String(),
     });
-    await _db.saveNotifications(notifications);
+    await _db.saveNotifications(notifications, fresh: true);
     return resolvedMessage;
   }
 }

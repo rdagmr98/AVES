@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/gh_config.dart';
 import '../models/activity_models.dart';
 import 'gh_db_service.dart';
 import 'web_notification_service.dart';
@@ -89,7 +90,7 @@ class NotificationService {
       'is_read': false,
       'created_at': DateTime.now().toIso8601String(),
     });
-    await _db.saveNotifications(notifications);
+    await _db.saveNotifications(notifications, fresh: true);
   }
 
   Future<void> createNotifications(
@@ -131,7 +132,7 @@ class NotificationService {
       changed = true;
     }
     if (changed) {
-      await _db.saveNotifications(notifications);
+      await _db.saveNotifications(notifications, fresh: true);
     }
   }
 
@@ -175,6 +176,22 @@ class NotificationService {
       ),
       dedupeUnread: dedupeUnread,
     );
+  }
+
+  /// Chiede il permesso e sottoscrive questo browser al Web Push associandolo
+  /// all'utente (idempotente: va chiamata a ogni login/avvio). Un dispositivo
+  /// appartiene a un solo utente: l'ultimo che vi accede.
+  Future<void> enablePush(String userId) async {
+    if (!await WebNotificationService.requestPermission()) return;
+    final sub = await WebNotificationService.subscribe(GhConfig.vapidPublicKey);
+    if (sub == null) return;
+    final all = _db.pushSubscriptions;
+    final i = all.indexWhere((s) => s['endpoint'] == sub['endpoint']);
+    if (i != -1 && all[i]['user_id'] == userId) return;
+    if (i != -1) all.removeAt(i);
+    // id = endpoint: abilita la fusione per id di GhDbService sui conflitti.
+    all.add({'id': sub['endpoint'], 'user_id': userId, ...sub});
+    await _db.savePushSubscriptions(all);
   }
 
   Future<List<NotificationModel>> getNotifications(String userId) async {

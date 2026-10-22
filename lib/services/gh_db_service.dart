@@ -43,6 +43,7 @@ class GhDbService {
     'tob_acts.json',
     'criteria.json',
     'notifications.json',
+    'push_subscriptions.json',
     'pta.json',
     'pta_acknowledgments.json',
     'account_deletion_requests.json',
@@ -455,8 +456,29 @@ class GhDbService {
         _getData('notifications.json') as List? ?? [],
       );
 
-  Future<void> saveNotifications(List<Map<String, dynamic>> data) =>
-      _writeFile('notifications.json', data, 'aggiornamento notifiche');
+  /// Messaggio di commit che fa partire l'invio Web Push (Action push.yml di
+  /// aves-data). Resta finché la scrittura è in coda, così una lettura
+  /// ravvicinata non fa saltare il push delle notifiche appena create.
+  static const pushCommitMsg = 'nuove notifiche';
+
+  Future<void> saveNotifications(
+    List<Map<String, dynamic>> data, {
+    bool fresh = false,
+  }) => _writeFile(
+    'notifications.json',
+    data,
+    fresh || _pending['notifications.json'] == pushCommitMsg
+        ? pushCommitMsg
+        : 'aggiornamento notifiche',
+  );
+
+  List<Map<String, dynamic>> get pushSubscriptions =>
+      List<Map<String, dynamic>>.from(
+        _getData('push_subscriptions.json') as List? ?? [],
+      );
+
+  Future<void> savePushSubscriptions(List<Map<String, dynamic>> data) =>
+      _writeFile('push_subscriptions.json', data, 'aggiornamento sottoscrizioni push');
 
   List<Map<String, dynamic>> get pta =>
       List<Map<String, dynamic>>.from(_getData('pta.json') as List? ?? []);
