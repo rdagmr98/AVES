@@ -250,7 +250,12 @@ class _CurrencySettingsScreenState
       body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.separated(
-              padding: const EdgeInsets.all(24),
+              // Padding orizzontale = colonna centrata max 760px, scrollbar al bordo.
+              padding: EdgeInsets.symmetric(
+                horizontal: ((MediaQuery.sizeOf(context).width - 760) / 2)
+                    .clamp(16.0, double.infinity),
+                vertical: 24,
+              ),
               itemCount: criteria.length,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {

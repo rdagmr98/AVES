@@ -151,7 +151,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   Future<void> _submitFlight(UserProfile user) async {
     final hours = parseHours(_flightHoursCtrl.text);
     if (_flightHelicopterId == null || hours == null || hours <= 0) {
-      _showMessage('Inserisci elicottero e ore di volo valide (h:mm o minuti).');
+      _showMessage(
+        'Inserisci elicottero e ore di volo valide (h:mm o minuti).',
+      );
       return;
     }
     setState(() => _saving = true);
@@ -352,6 +354,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: isCompactTabs,
+          tabAlignment: isCompactTabs ? TabAlignment.start : null,
           tabs: const [
             Tab(text: 'Manutenzione'),
             Tab(text: 'Volo'),
@@ -539,10 +542,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                       _pickDate((value) => _flightDate = value, _flightDate),
                 ),
                 const SizedBox(height: 16),
-                HoursField(
-                  controller: _flightHoursCtrl,
-                  label: 'Ore di volo',
-                ),
+                HoursField(controller: _flightHoursCtrl, label: 'Ore di volo'),
                 if (isMdbFlightHelicopter) ...[
                   const SizedBox(height: 8),
                   CheckboxListTile(

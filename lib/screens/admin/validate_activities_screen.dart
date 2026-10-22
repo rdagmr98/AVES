@@ -345,6 +345,9 @@ class _ValidateActivitiesScreenState
         bottom: TabBar(
           controller: _tabController,
           isScrollable: MediaQuery.of(context).size.width < 420,
+          tabAlignment: MediaQuery.of(context).size.width < 420
+              ? TabAlignment.start
+              : null,
           tabs: _tabs
               .map(
                 (tab) => Tab(

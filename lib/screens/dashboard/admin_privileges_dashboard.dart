@@ -367,7 +367,8 @@ class _AdminPrivilegesDashboardState
     if (confirmed != true) return;
     await _reportService.downloadPrivilegeMatrix(
       orgUnitId:
-          _orgUnitId ?? (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
+          _orgUnitId ??
+          (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
       helicopterTypeIds: selectedHeliIds.length == helicopterTypes.length
           ? null
           : selectedHeliIds.toList(),
@@ -672,13 +673,13 @@ class _AdminPrivilegesDashboardState
                         Text(
                           row.user.nome,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 16),
+                          style: const TextStyle(fontSize: 13),
                         ),
                         Text(
                           row.user.cognome,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -996,7 +997,6 @@ class _AdminPrivilegesDashboardState
       Text(
         'Utenti con currency manutentiva',
         style: Theme.of(context).textTheme.titleLarge,
-        textAlign: TextAlign.center,
         softWrap: true,
       ),
       const SizedBox(height: 12),
@@ -1566,6 +1566,7 @@ class _AdminPrivilegesDashboardState
               leading: const Icon(Icons.flight),
               title: const Text(
                 'Elicotteri per GO / NO GO',
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
@@ -1600,7 +1601,7 @@ class _AdminPrivilegesDashboardState
             TextField(
               controller: _searchCtrl,
               decoration: const InputDecoration(
-                labelText: 'Cerca per nome o licenza',
+                hintText: 'Nome o licenza',
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: (value) => setState(() => _search = value),

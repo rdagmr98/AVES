@@ -477,7 +477,6 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                 Text(
                   'Stato Currency',
                   style: Theme.of(context).textTheme.titleLarge,
-                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 if (currencyCards.isEmpty)
@@ -576,11 +575,21 @@ class _UserHeaderCard extends StatelessWidget {
             avatar,
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                'Benvenuto ${user.nome}',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-                softWrap: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Benvenuto',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Text(
+                    user.nome,
+                    style: Theme.of(context).textTheme.titleLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
             if (showFleetShortcut) ...[

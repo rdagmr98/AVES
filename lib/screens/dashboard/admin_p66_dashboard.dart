@@ -69,6 +69,15 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
     P66Status.go => const Color(0xFF1A3A1A),
   };
 
+  Widget _statRow(List<Widget> cards) => Row(
+    children: [
+      for (var i = 0; i < cards.length; i++) ...[
+        if (i > 0) const SizedBox(width: 12),
+        Expanded(child: cards[i]),
+      ],
+    ],
+  );
+
   Color _borderColor(P66Status status) => switch (status) {
     P66Status.noGo => const Color(0xFFC0392B),
     P66Status.warning => const Color(0xFFE67E22),
@@ -203,34 +212,34 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                Expanded(
-                  child: Center(
-                    child: UserAvatar(user: row.user, radius: 16),
+                  Expanded(
+                    child: Center(
+                      child: UserAvatar(user: row.user, radius: 16),
+                    ),
                   ),
-                ),
-                Text(
-                  row.user.nome,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: Colors.white),
-                ),
-                Text(
-                  row.user.cognome,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                  Text(
+                    row.user.nome,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.white),
                   ),
-                ),
-                const SizedBox(height: 4),
-              ],
-            ),
+                  Text(
+                    row.user.cognome,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+              ),
             ),
           ),
         );
@@ -482,12 +491,17 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                     onChanged: (value) => setState(() => _search = value),
                   ),
                   const SizedBox(height: 16),
-                  Wrap(spacing: 16, runSpacing: 16, children: statCards),
+                  if (isDesktop)
+                    _statRow(statCards)
+                  else ...[
+                    _statRow(statCards.sublist(0, 2)),
+                    const SizedBox(height: 12),
+                    _statRow(statCards.sublist(2)),
+                  ],
                   const SizedBox(height: 24),
                   Text(
                     'Conformità P-66 e seminari (ultimi 24 mesi)',
                     style: Theme.of(context).textTheme.titleLarge,
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
                   if (rows.isEmpty)
@@ -563,34 +577,31 @@ class _P66StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = color ?? AppColors.secondary;
-    return SizedBox(
-      width: 220,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: accent),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
               ),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.headlineSmall?.copyWith(color: accent),
-              ),
-            ],
-          ),
+              child: Icon(icon, color: accent),
+            ),
+            const SizedBox(height: 12),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: accent),
+            ),
+          ],
         ),
       ),
     );

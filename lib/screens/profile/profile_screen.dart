@@ -1006,13 +1006,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _nomeCtrl,
-                        textAlign: TextAlign.center,
                         decoration: const InputDecoration(labelText: 'Nome'),
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _cognomeCtrl,
-                        textAlign: TextAlign.center,
                         decoration: const InputDecoration(labelText: 'Cognome'),
                       ),
                       if (!isAdminProfile) ...[
@@ -1020,7 +1018,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         TextField(
                           controller: _licenzaCtrl,
                           readOnly: true,
-                          textAlign: TextAlign.center,
                           decoration: const InputDecoration(
                             labelText: 'Numero licenza',
                           ),
@@ -1029,7 +1026,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         TextField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
-                          textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Email istituzionale',
                             hintText: 'nome.cognome@esercito.difesa.it',
@@ -1040,7 +1036,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ],
                       DropdownButtonFormField<int>(
                         initialValue: _orgUnitId,
-                        alignment: Alignment.center,
                         decoration: const InputDecoration(
                           labelText: 'Unità organizzativa',
                         ),
@@ -1048,11 +1043,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             .map(
                               (item) => DropdownMenuItem<int>(
                                 value: item.id,
-                                child: Text(
-                                  item.name,
-                                  textAlign: TextAlign.center,
-                                  softWrap: true,
-                                ),
+                                child: Text(item.name, softWrap: true),
                               ),
                             )
                             .toList(),

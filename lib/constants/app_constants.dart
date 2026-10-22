@@ -103,8 +103,8 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
-        elevation: 8,
-        shadowColor: AppColors.accentGlow.withValues(alpha: 0.10),
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.35),
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(

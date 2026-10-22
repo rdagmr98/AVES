@@ -575,7 +575,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                       ? Row(
                           children: [
                             SizedBox(
-                              width: 320,
+                              width: 400,
                               child: _UserList(
                                 users: filteredUsers,
                                 selected: _selectedUser,
@@ -1418,7 +1418,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                         const SizedBox(height: 8),
                         // ponytail: niente "Nessuna": copyWith non azzera orgUnitId.
                         DropdownButtonFormField<int>(
-                          initialValue: ref
+                          initialValue:
+                              ref
                                   .watch(authProvider)
                                   .orgUnits
                                   .any((u) => u.id == _user.orgUnitId)

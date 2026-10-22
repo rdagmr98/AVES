@@ -115,6 +115,7 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: isCompactTabs,
+          tabAlignment: isCompactTabs ? TabAlignment.start : null,
           tabs: const [
             Tab(text: 'Manutenzione'),
             Tab(text: 'Volo'),
