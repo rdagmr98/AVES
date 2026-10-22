@@ -975,10 +975,125 @@ class _AdminPrivilegesDashboardState
                 context.go('/admin/p66');
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.account_tree_outlined),
+              title: const Text('Unità organizzative'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _manageOrgUnits();
+              },
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _manageOrgUnits() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final units = ref.read(authProvider).orgUnits;
+          Future<void> edit(OrgUnit? unit) async {
+            if (await _editOrgUnit(unit)) setDialogState(() {});
+          }
+
+          return AlertDialog(
+            title: const Text('Unità organizzative'),
+            content: SizedBox(
+              width: 480,
+              height: 420,
+              child: ListView(
+                children: [
+                  for (final u in units)
+                    ListTile(
+                      leading: SizedBox(
+                        width: 64,
+                        child: Text(
+                          u.code,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      title: Text(u.name, overflow: TextOverflow.ellipsis),
+                      trailing: const Icon(Icons.edit_outlined, size: 18),
+                      onTap: () => edit(u),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton.icon(
+                onPressed: () => edit(null),
+                icon: const Icon(Icons.add),
+                label: const Text('Nuova unità'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Chiudi'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// true se l'unità è stata salvata.
+  Future<bool> _editOrgUnit(OrgUnit? unit) async {
+    final codeCtrl = TextEditingController(text: unit?.code);
+    final nameCtrl = TextEditingController(text: unit?.name);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(unit == null ? 'Nuova unità' : 'Modifica unità'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: codeCtrl,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(labelText: 'Sigla'),
+              ),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Nome'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Salva'),
+          ),
+        ],
+      ),
+    );
+    final code = codeCtrl.text;
+    final name = nameCtrl.text;
+    codeCtrl.dispose();
+    nameCtrl.dispose();
+    if (ok != true) return false;
+    try {
+      await UserService().saveOrgUnit(id: unit?.id, code: code, name: name);
+      await ref.read(authProvider).reloadOrgUnits();
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+      return false;
+    }
   }
 
   Widget _buildStatCardsSection(
@@ -2048,6 +2163,12 @@ class _AdminPrivilegesDashboardState
               label: 'Matrice Privilegi',
               icon: Icons.grid_on_outlined,
               onTap: _printPrivilegeMatrix,
+            ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Unità organizzative',
+              icon: Icons.account_tree_outlined,
+              onTap: _manageOrgUnits,
             ),
           ],
         ),

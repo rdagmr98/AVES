@@ -102,6 +102,12 @@ class AuthProvider extends ChangeNotifier {
     _orgUnits = await _userService.getOrgUnits();
   }
 
+  /// Dopo la modifica delle unità organizzative da parte di un admin.
+  Future<void> reloadOrgUnits() async {
+    _orgUnits = await _userService.getOrgUnits();
+    notifyListeners();
+  }
+
   Future<void> _loadUserData(String userId) async {
     _licenses = [];
     _privileges = [];

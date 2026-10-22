@@ -101,7 +101,12 @@ class UserService {
     String? email,
     String? profilePhotoBase64,
     String role = 'user',
+    int? orgUnitId,
+    bool approvedMaint = false,
+    bool approvedCrew = false,
+    String? provisionedBy,
   }) async {
+    await _db.refresh(); // il controllo duplicati va fatto sui dati aggiornati
     final users = _db.users;
     final resolvedUsername = (username ?? numeroLicenza ?? '').trim();
     final normalizedResolvedUsername = resolvedUsername.isEmpty
@@ -132,15 +137,16 @@ class UserService {
       'numero_licenza': normalizedLicense,
       'email': email,
       'profile_photo_base64': profilePhotoBase64,
-      'org_unit_id': null,
+      'org_unit_id': orgUnitId,
       'role': role,
-      'is_approved': false,
-      'is_approved_maint': false,
-      'is_approved_crew': false,
+      'is_approved': approvedMaint || approvedCrew,
+      'is_approved_maint': approvedMaint,
+      'is_approved_crew': approvedCrew,
       'is_active': true,
       'is_ti': false,
       'is_etp': false,
       'note': null,
+      'provisioned_by': provisionedBy,
       'created_at': now,
       'updated_at': now,
     };
@@ -550,6 +556,40 @@ class UserService {
     final items = _referenceList('orgUnits')
       ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
     return items.map(OrgUnit.fromJson).toList();
+  }
+
+  /// Crea ([id] null) o modifica un'unità organizzativa in reference.json.
+  Future<void> saveOrgUnit({
+    int? id,
+    required String code,
+    required String name,
+  }) async {
+    await _db.refresh();
+    final units = _referenceList('orgUnits');
+    final c = code.trim().toUpperCase();
+    final n = name.trim();
+    if (c.isEmpty || n.isEmpty) {
+      throw Exception('Sigla e nome sono obbligatori');
+    }
+    if (units.any(
+      (u) =>
+          u['id'] != id &&
+          ((u['code'] as String? ?? '').toUpperCase() == c ||
+              (u['name'] as String? ?? '').toLowerCase() == n.toLowerCase()),
+    )) {
+      throw Exception('Unità già presente');
+    }
+    if (id == null) {
+      final nextId =
+          units.fold<int>(0, (m, u) => (u['id'] as int) > m ? u['id'] as int : m) +
+          1;
+      units.add({'id': nextId, 'code': c, 'name': n});
+    } else {
+      final i = units.indexWhere((u) => u['id'] == id);
+      if (i == -1) throw Exception('Unità non trovata');
+      units[i] = {...units[i], 'code': c, 'name': n};
+    }
+    await _db.saveReference({..._db.referenceData, 'orgUnits': units});
   }
 
   Future<List<UserLicense>> getUserLicenses(String userId) async {

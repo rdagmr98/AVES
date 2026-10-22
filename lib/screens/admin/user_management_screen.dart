@@ -127,6 +127,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
         'pending_maint' => auth.isAdminPriv && !user.isApprovedMaint,
         'pending_crew' => auth.isAdminCrew && !user.isApprovedCrew,
         'pending' => !user.isApproved,
+        'unclaimed' => user.isPreRegistered,
         _ => true,
       };
       return matchesSearch && matchesOrg && matchesApproval;
@@ -241,6 +242,127 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     }
   }
 
+  /// Account creato dall'admin senza password: chi si registra con lo stesso
+  /// numero di licenza ne prende possesso (AuthService.signUp).
+  Future<void> _createPreRegistered() async {
+    final auth = ref.read(authProvider);
+    final licCtrl = TextEditingController();
+    final cognomeCtrl = TextEditingController();
+    final nomeCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    int? unitId = _orgUnitId;
+    String? required(String? v) =>
+        (v ?? '').trim().isEmpty ? 'Campo obbligatorio' : null;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nuovo account pre-registrato'),
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'L\'utente ne prenderà possesso registrandosi con lo stesso '
+                  'numero di licenza: privilegi e attività inseriti ora restano.',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: licCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Numero licenza (es. IT123456)',
+                  ),
+                  textCapitalization: TextCapitalization.characters,
+                  validator: required,
+                ),
+                TextFormField(
+                  controller: cognomeCtrl,
+                  decoration: const InputDecoration(labelText: 'Cognome'),
+                  validator: required,
+                ),
+                TextFormField(
+                  controller: nomeCtrl,
+                  decoration: const InputDecoration(labelText: 'Nome'),
+                  validator: required,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int?>(
+                  initialValue: unitId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Unità organizzativa',
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('Nessuna'),
+                    ),
+                    for (final u in auth.orgUnits)
+                      DropdownMenuItem<int?>(
+                        value: u.id,
+                        child: Text(u.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => unitId = v,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('Crea'),
+          ),
+        ],
+      ),
+    );
+
+    final licenza = licCtrl.text;
+    final cognome = cognomeCtrl.text.trim();
+    final nome = nomeCtrl.text.trim();
+    licCtrl.dispose();
+    cognomeCtrl.dispose();
+    nomeCtrl.dispose();
+    if (ok != true) return;
+
+    try {
+      final created = await _service.createProfile(
+        numeroLicenza: licenza,
+        nome: nome,
+        cognome: cognome,
+        orgUnitId: unitId,
+        approvedMaint: auth.isAdminPriv,
+        approvedCrew: auth.isAdminCrew,
+        provisionedBy: auth.userProfile?.id,
+      );
+      await _loadUsers();
+      if (!mounted) return;
+      await _openUserDetail(
+        context,
+        _users.firstWhere((u) => u.id == created.id, orElse: () => created),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
   /// Navigate to detail: push page on mobile, select in side-panel on desktop.
   Future<void> _openUserDetail(BuildContext context, UserProfile user) async {
     final isWide = MediaQuery.sizeOf(context).width >= 700;
@@ -277,6 +399,13 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       appBar: AppBar(
         leading: const AdminAppBarLeading(),
         title: const Text('Gestione Utenti'),
+        actions: [
+          IconButton(
+            tooltip: 'Nuovo account pre-registrato',
+            icon: const Icon(Icons.person_add_alt_1),
+            onPressed: _createPreRegistered,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -364,6 +493,10 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                         value: 'pending_crew',
                                         child: Text('In attesa - Equipaggio'),
                                       ),
+                                    const DropdownMenuItem(
+                                      value: 'unclaimed',
+                                      child: Text('Non ancora registrati'),
+                                    ),
                                   ],
                                   onChanged: (v) => setState(
                                     () => _approvalFilter = v ?? 'all',
@@ -565,7 +698,10 @@ class _UserList extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          user.numeroLicenza ?? 'Licenza non indicata',
+                          '${user.numeroLicenza ?? 'Licenza non indicata'}'
+                          '${user.isPreRegistered ? ' · non ancora registrato' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: Theme.of(
@@ -1279,14 +1415,34 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                             style: Theme.of(context).textTheme.bodyMedium,
                             textAlign: TextAlign.center,
                           ),
-                        Text(
-                          _user.orgUnitName,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.65),
+                        const SizedBox(height: 8),
+                        // ponytail: niente "Nessuna": copyWith non azzera orgUnitId.
+                        DropdownButtonFormField<int>(
+                          initialValue: ref
+                                  .watch(authProvider)
+                                  .orgUnits
+                                  .any((u) => u.id == _user.orgUnitId)
+                              ? _user.orgUnitId
+                              : null,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Unità organizzativa',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: [
+                            for (final u in ref.watch(authProvider).orgUnits)
+                              DropdownMenuItem(
+                                value: u.id,
+                                child: Text(
+                                  u.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
+                          ],
+                          onChanged: (v) => setState(
+                            () => _user = _user.copyWith(orgUnitId: v),
+                          ),
                         ),
                         if (_user.email != null &&
                             _user.email!.trim().isNotEmpty) ...[
