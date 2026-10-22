@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app.dart';
 import '../../models/activity_models.dart';
+import '../../services/hours_format.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/admin_write_pat_button.dart';
+import '../../widgets/hours_field.dart';
 
 class CurrencySettingsScreen extends ConsumerStatefulWidget {
   const CurrencySettingsScreen({super.key});
@@ -49,7 +51,7 @@ class _CurrencySettingsScreenState
 
     final periodCtrl = TextEditingController(text: '${criteria.periodDays}');
     final hoursCtrl = TextEditingController(
-      text: criteria.minHours == null ? '' : '${criteria.minHours}',
+      text: criteria.minHours == null ? '' : formatHours(criteria.minHours!),
     );
     final countCtrl = TextEditingController(
       text: criteria.minCount == null ? '' : '${criteria.minCount}',
@@ -93,16 +95,11 @@ class _CurrencySettingsScreenState
                 if (hasHoursField) ...[
                   if (criteria.criteriaType != 'FLIGHT_T')
                     const SizedBox(height: 16),
-                  TextField(
+                  HoursField(
                     controller: hoursCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: criteria.criteriaType == 'MDB_FLIGHT'
-                          ? 'Ore di volo semestrale MDB'
-                          : 'Ore minime (volo)',
-                    ),
+                    label: criteria.criteriaType == 'MDB_FLIGHT'
+                        ? 'Ore di volo semestrale MDB'
+                        : 'Ore minime (volo)',
                   ),
                 ],
                 if (hasCountField) ...[
@@ -173,7 +170,7 @@ class _CurrencySettingsScreenState
                   final period = int.tryParse(periodCtrl.text);
                   final hours = hoursCtrl.text.trim().isEmpty
                       ? null
-                      : double.tryParse(hoursCtrl.text.replaceAll(',', '.'));
+                      : parseHours(hoursCtrl.text);
                   final count = countCtrl.text.trim().isEmpty
                       ? null
                       : int.tryParse(countCtrl.text.trim());
@@ -301,10 +298,10 @@ class _CurrencySettingsScreenState
       return 'Fascia A: $a gg · Fascia B/C: $bc';
     }
     if (c.criteriaType == 'FLIGHT_T') {
-      return 'Per semestre (gen-giu, lug-dic) · Ore minime: ${c.minHours?.toStringAsFixed(1) ?? '-'}';
+      return 'Per semestre (gen-giu, lug-dic) · Ore minime: ${c.minHours == null ? '-' : formatHours(c.minHours!)}';
     }
     if (c.criteriaType == 'MDB_FLIGHT') {
-      return 'Periodo: ${c.periodDays} gg · Ore minime: ${c.minHours?.toStringAsFixed(1) ?? '-'}';
+      return 'Periodo: ${c.periodDays} gg · Ore minime: ${c.minHours == null ? '-' : formatHours(c.minHours!)}';
     }
     if (c.criteriaType == 'MTB_POLIGONO') {
       return 'Periodo base: ${c.periodDays} gg · Poligoni minimi: ${c.minCount ?? 1} (TI: 730 gg)';

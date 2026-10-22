@@ -9,8 +9,10 @@ import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/gh_db_service.dart';
+import '../../services/hours_format.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/hours_field.dart';
 
 class InsertActivityAdminScreen extends ConsumerStatefulWidget {
   const InsertActivityAdminScreen({super.key});
@@ -255,7 +257,7 @@ class _InsertActivityAdminScreenState
   Future<void> _submitFlight() async {
     final user = _selectedUser;
     final adminId = ref.read(authProvider).userProfile?.id;
-    final hours = double.tryParse(_flightHoursCtrl.text.replaceAll(',', '.'));
+    final hours = parseHours(_flightHoursCtrl.text);
     if (user == null ||
         adminId == null ||
         _flightHelicopterId == null ||
@@ -743,9 +745,7 @@ class _InsertActivityAdminScreenState
   Future<void> _submitCrewFlight() async {
     final adminId = ref.read(authProvider).userProfile?.id;
     final helicopterId = _crewFlightHelicopterId;
-    final hours = double.tryParse(
-      _crewFlightHoursCtrl.text.replaceAll(',', '.'),
-    );
+    final hours = parseHours(_crewFlightHoursCtrl.text);
     if (adminId == null || helicopterId == null || _crewEntries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1214,16 +1214,9 @@ class _InsertActivityAdminScreenState
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                TextField(
+                                HoursField(
                                   controller: _crewFlightHoursCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Ore di volo (per membri T/MTB)',
-                                    hintText: 'es. 1.5',
-                                  ),
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
+                                  label: 'Ore di volo (per membri T/MTB)',
                                 ),
                                 if (_crewEntries.any(
                                   (entry) => entry.role == 'MTB',
@@ -1671,15 +1664,9 @@ class _InsertActivityAdminScreenState
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                TextField(
+                                HoursField(
                                   controller: _flightHoursCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Ore di volo',
-                                  ),
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
+                                  label: 'Ore di volo',
                                 ),
                                 if (isMdbFlightHelicopter) ...[
                                   const SizedBox(height: 8),

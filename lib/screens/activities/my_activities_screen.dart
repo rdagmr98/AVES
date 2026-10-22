@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/hours_format.dart';
 
 class MyActivitiesScreen extends ConsumerStatefulWidget {
   const MyActivitiesScreen({super.key, this.initialType});
@@ -162,7 +163,7 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                     .map(
                       (item) => _ActivityListTile(
                         title:
-                            '${item.helicopterCode} · ${item.flightHours.toStringAsFixed(1)}h',
+                            '${item.helicopterCode} · ${formatHours(item.flightHours)} h',
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
@@ -170,7 +171,7 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                             ? () {
                                 _deleteActivity(
                                   title:
-                                      '${item.helicopterCode} · ${item.flightHours.toStringAsFixed(1)}h',
+                                      '${item.helicopterCode} · ${formatHours(item.flightHours)} h',
                                   delete: () =>
                                       _service.deleteFlightActivity(item.id!),
                                   userId: user.id,

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/hours_format.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 
 class ValidateActivitiesScreen extends ConsumerStatefulWidget {
@@ -407,7 +408,7 @@ class _ValidateActivitiesScreenState
           titleBuilder: (item) =>
               '${item.userFullName} · ${item.helicopterCode}',
           subtitleBuilder: (item) =>
-              '${item.flightHours.toStringAsFixed(1)}h\n${item.description ?? 'Nessuna descrizione'}',
+              '${formatHours(item.flightHours)} h\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
           onValidate: (item) => _validateFlight(item.id!),
           onReject: (item) async {

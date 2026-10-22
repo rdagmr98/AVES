@@ -3,6 +3,7 @@ import '../models/user_models.dart';
 import 'activity_service.dart';
 import 'flight_semester.dart';
 import 'gh_db_service.dart';
+import 'hours_format.dart';
 import 'pta_service.dart';
 import 'web_notification_service.dart';
 
@@ -480,7 +481,7 @@ class CurrencyService {
         : acts.map((a) => a.date).reduce((a, b) => a.isAfter(b) ? a : b);
 
     final label =
-        'Currency Volo T sem. ${sem.label} (${sem.hours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)';
+        'Currency Volo T sem. ${sem.label} (${formatHours(sem.hours)} h / ${formatHours(minHours)} h)';
 
     final deadline = sem.deadline;
     final daysLeft = deadline == null
@@ -721,7 +722,7 @@ class CurrencyService {
         : DateTime.parse(validatedFlights.first['activity_date'] as String);
 
     final flightLabel =
-        'Mitragliere di Bordo (${flightHours.toStringAsFixed(1)}h / ${minHours.toStringAsFixed(1)}h)';
+        'Mitragliere di Bordo (${formatHours(flightHours)} h / ${formatHours(minHours)} h)';
     final flightExpiry = lastFlightDate?.add(Duration(days: flightPeriodDays));
     final flightDaysLeft = flightExpiry?.difference(DateTime.now()).inDays;
     final flightStatus = flightHours < minHours
@@ -844,7 +845,7 @@ class CurrencyService {
       secondaryExpiryLabel: 'Poligono',
       daysUntilExpiry: daysCandidates.isEmpty ? null : daysCandidates.first,
       label:
-          'Mitragliere di Bordo · ${flightHours.toStringAsFixed(1)}h/${minHours.toStringAsFixed(1)}h · Poligono $poligonoCount/$minPoligonoCount · $labelSuffix',
+          'Mitragliere di Bordo · ${formatHours(flightHours)}/${formatHours(minHours)} h · Poligono $poligonoCount/$minPoligonoCount · $labelSuffix',
       flightHours: flightHours,
       minFlightHours: minHours,
     );

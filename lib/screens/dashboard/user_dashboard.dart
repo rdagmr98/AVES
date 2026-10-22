@@ -9,6 +9,7 @@ import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
 import '../../services/pta_service.dart';
 import '../../widgets/aves_logo_widget.dart';
+import '../../services/hours_format.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/privilege_grid_widget.dart';
 import '../../widgets/user_avatar.dart';
@@ -115,7 +116,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     final hours = currentStatus.flightHours;
     final minHours = currentStatus.minFlightHours;
     if (hours != null && minHours != null) {
-      return '${hours.toStringAsFixed(1)} h  /  ${minHours.toStringAsFixed(1)} h';
+      return '${formatHours(hours)} h  /  ${formatHours(minHours)} h';
     }
     return 'Nessun dato ore di volo';
   }
