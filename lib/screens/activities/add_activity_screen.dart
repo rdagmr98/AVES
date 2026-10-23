@@ -11,7 +11,10 @@ import '../../services/hours_format.dart';
 import '../../widgets/hours_field.dart';
 
 class AddActivityScreen extends ConsumerStatefulWidget {
-  const AddActivityScreen({super.key});
+  const AddActivityScreen({super.key, this.initialTab = 0});
+
+  /// 0 manutenzione, 1 volo, 2 TOB, 3 seminario.
+  final int initialTab;
 
   @override
   ConsumerState<AddActivityScreen> createState() => _AddActivityScreenState();
@@ -52,7 +55,11 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 3),
+    );
   }
 
   @override

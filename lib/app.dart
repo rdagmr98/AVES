@@ -83,7 +83,9 @@ class _AvesAppState extends ConsumerState<AvesApp> {
       ),
       GoRoute(
         path: '/activities/add',
-        builder: (context, state) => const AddActivityScreen(),
+        builder: (context, state) => AddActivityScreen(
+          initialTab: int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0,
+        ),
       ),
       GoRoute(
         path: '/activities/my',
@@ -218,7 +220,9 @@ class _AvesAppState extends ConsumerState<AvesApp> {
     if (GhDbService.saveError.value == null) return;
     _messengerKey.currentState?.showSnackBar(
       const SnackBar(
-        content: Text('Salvataggio non riuscito. Controlla la connessione e riprova.'),
+        content: Text(
+          'Salvataggio non riuscito. Controlla la connessione e riprova.',
+        ),
         backgroundColor: AppColors.currencyExpired,
       ),
     );

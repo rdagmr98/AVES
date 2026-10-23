@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -292,10 +294,8 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/activities/add'),
-        tooltip: 'Inserisci Attività',
-        child: const Icon(Icons.add),
+      floatingActionButton: _RadialAddButton(
+        onSelected: (tab) => context.go('/activities/add?tab=$tab'),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: RefreshIndicator(
@@ -730,6 +730,137 @@ class _CurrencyCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "+" che apre a ventaglio le 4 tipologie di attività (indice = tab).
+class _RadialAddButton extends StatefulWidget {
+  const _RadialAddButton({required this.onSelected});
+
+  final ValueChanged<int> onSelected;
+
+  @override
+  State<_RadialAddButton> createState() => _RadialAddButtonState();
+}
+
+class _RadialAddButtonState extends State<_RadialAddButton>
+    with SingleTickerProviderStateMixin {
+  static const _options = [
+    (Icons.build_outlined, 'Manutenzione'),
+    (Icons.flight, 'Volo'),
+    (Icons.groups_outlined, 'TOB'),
+    (Icons.school_outlined, 'Seminario'),
+  ];
+  static const _radius = 104.0;
+  static const _width = 300.0;
+  static const _height = 190.0;
+
+  late final _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+  );
+  late final _anim = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeOutBack,
+    reverseCurve: Curves.easeIn,
+  );
+
+  bool get _open =>
+      _ctrl.status == AnimationStatus.forward ||
+      _ctrl.status == AnimationStatus.completed;
+
+  void _toggle() => setState(() => _open ? _ctrl.reverse() : _ctrl.forward());
+
+  void _select(int tab) {
+    _ctrl.reverse();
+    widget.onSelected(tab);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _width,
+      height: _height,
+      child: AnimatedBuilder(
+        animation: _anim,
+        builder: (context, _) {
+          final t = _anim.value;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (var i = 0; i < _options.length; i++) _option(i, t),
+              Positioned(
+                left: _width / 2 - 28,
+                bottom: 0,
+                child: FloatingActionButton(
+                  onPressed: _toggle,
+                  tooltip: _open ? 'Chiudi' : 'Inserisci Attività',
+                  child: Transform.rotate(
+                    angle: t.clamp(0.0, 1.0) * math.pi / 4,
+                    child: const Icon(Icons.add),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _option(int i, double t) {
+    // Ventaglio da 160° a 20° sopra il "+".
+    final angle = (160 - i * 140 / (_options.length - 1)) * math.pi / 180;
+    final cx = _width / 2 + _radius * t * math.cos(angle);
+    final cy = _height - 28 - _radius * t * math.sin(angle);
+    final (icon, label) = _options[i];
+    return Positioned(
+      left: cx - 50,
+      top: cy - 22,
+      width: 100,
+      child: IgnorePointer(
+        ignoring: !_open,
+        child: Opacity(
+          opacity: t.clamp(0.0, 1.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingActionButton.small(
+                heroTag: null,
+                tooltip: label,
+                backgroundColor: AppColors.surfaceVariant,
+                foregroundColor: AppColors.accentGlow,
+                onPressed: () => _select(i),
+                child: Icon(icon),
+              ),
+              Container(
+                margin: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
