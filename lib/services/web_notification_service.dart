@@ -66,9 +66,9 @@ class WebNotificationService {
       // subscribe() restituisce la sottoscrizione esistente se c'è già (da spec).
       final sub = await pm.subscribe({
         'userVisibleOnly': true,
-        'applicationServerKey': base64Url.decode(
-          base64.normalize(vapidPublicKey),
-        ),
+        // stringa base64url (ammessa dalla spec): un Uint8List nella mappa di
+        // dart:html arriva al browser come array di numeri -> InvalidCharacterError
+        'applicationServerKey': vapidPublicKey,
       });
       final endpoint = sub.endpoint;
       final p256dh = _b64u(sub.getKey('p256dh'));
