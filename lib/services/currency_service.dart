@@ -293,7 +293,6 @@ class CurrencyService {
       );
     }
 
-    const seminarPeriodDays = 730;
     final lastSeminar = await _activityService.getLastValidatedSeminar(userId);
     if (lastSeminar == null) {
       return const CurrencyStatus(
@@ -303,9 +302,9 @@ class CurrencyService {
       );
     }
 
-    final seminarExpiry = lastSeminar.seminarDate.add(
-      const Duration(days: seminarPeriodDays),
-    );
+    // Validità 2 anni di calendario (stessa data due anni dopo, come il Riepilogo CAAE).
+    final sd = lastSeminar.seminarDate;
+    final seminarExpiry = DateTime(sd.year + 2, sd.month, sd.day);
     final seminarDaysLeft = seminarExpiry.difference(DateTime.now()).inDays;
     if (seminarDaysLeft < 0) {
       return CurrencyStatus(
