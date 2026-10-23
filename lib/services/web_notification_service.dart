@@ -5,6 +5,8 @@ import 'dart:html' as html;
 import 'dart:js_interop';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+
 @JS('avesShowNotification')
 external void _jsShowNotification(String title, String body);
 
@@ -14,7 +16,15 @@ external void _jsShowNotification(String title, String body);
 class WebNotificationService {
   /// Questo browser è sottoscritto al push: le notifiche arrivano da lì,
   /// quelle locali si saltano per non mostrarle due volte.
-  static bool _pushActive = false;
+  static final pushActive = ValueNotifier<bool>(false);
+
+  /// Motivo dell'ultima sottoscrizione fallita, da mostrare all'utente.
+  static String? lastError;
+
+  /// iPhone/iPad da Safari: il push esiste solo con l'app nella schermata Home.
+  static bool get needsHomeScreen =>
+      permission == 'unsupported' &&
+      RegExp('iPhone|iPad').hasMatch(html.window.navigator.userAgent);
 
   /// 'granted' | 'denied' | 'default' | 'unsupported'.
   static String get permission => _isSupported()
@@ -29,24 +39,30 @@ class WebNotificationService {
     return permissionResult == 'granted';
   }
 
-  static String _b64u(ByteBuffer? b) => b == null
-      ? ''
-      : base64Url.encode(Uint8List.view(b)).replaceAll('=', '');
+  static String _b64u(ByteBuffer? b) =>
+      b == null ? '' : base64Url.encode(Uint8List.view(b)).replaceAll('=', '');
 
   /// Sottoscrive il browser al push e restituisce `{endpoint, keys:{p256dh,auth}}`
   /// (null se non supportato, permesso negato o errore).
   static Future<Map<String, dynamic>?> subscribe(String vapidPublicKey) async {
     try {
+      lastError = null;
       if (permission != 'granted') return null;
       final container = html.window.navigator.serviceWorker;
-      if (container == null) return null;
+      if (container == null) {
+        lastError = 'service worker non disponibile';
+        return null;
+      }
       final reg = await container.register('push/sw.js', {'scope': 'push/'});
       // ponytail: polling breve, `ready` risolverebbe il SW di Flutter (scope padre).
       for (var i = 0; i < 50 && reg.active == null; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
       final pm = reg.active == null ? null : reg.pushManager;
-      if (pm == null) return null;
+      if (pm == null) {
+        lastError = 'service worker push non attivo';
+        return null;
+      }
       // subscribe() restituisce la sottoscrizione esistente se c'è già (da spec).
       final sub = await pm.subscribe({
         'userVisibleOnly': true,
@@ -57,19 +73,23 @@ class WebNotificationService {
       final endpoint = sub.endpoint;
       final p256dh = _b64u(sub.getKey('p256dh'));
       final auth = _b64u(sub.getKey('auth'));
-      if (endpoint == null || p256dh.isEmpty || auth.isEmpty) return null;
-      _pushActive = true;
+      if (endpoint == null || p256dh.isEmpty || auth.isEmpty) {
+        lastError = 'sottoscrizione incompleta';
+        return null;
+      }
+      pushActive.value = true;
       return {
         'endpoint': endpoint,
         'keys': {'p256dh': p256dh, 'auth': auth},
       };
-    } catch (_) {
+    } catch (e) {
+      lastError = '$e';
       return null;
     }
   }
 
   static void showNotification(String title, String body) {
-    if (_pushActive || permission != 'granted') return;
+    if (pushActive.value || permission != 'granted') return;
     try {
       _jsShowNotification(title, body);
     } catch (_) {}

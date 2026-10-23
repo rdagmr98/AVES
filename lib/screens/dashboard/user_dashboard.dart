@@ -758,9 +758,9 @@ class _RadialAddButtonState extends State<_RadialAddButton>
     (Icons.groups_outlined, 'TOB'),
     (Icons.school_outlined, 'Seminario'),
   ];
-  static const _radius = 104.0;
-  static const _width = 300.0;
-  static const _height = 190.0;
+  static const _radius = 122.0;
+  static const _width = 320.0;
+  static const _height = 210.0;
 
   late final _ctrl = AnimationController(
     vsync: this,
@@ -801,6 +801,31 @@ class _RadialAddButtonState extends State<_RadialAddButton>
           return Stack(
             clipBehavior: Clip.none,
             children: [
+              // Alone scuro sfumato dietro il ventaglio: stacca le icone dallo sfondo.
+              Positioned(
+                left: _width / 2 - 210,
+                top: _height - 28 - 210,
+                width: 420,
+                height: 420,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: t.clamp(0.0, 1.0),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            AppColors.primary.withValues(alpha: 0.95),
+                            AppColors.primary.withValues(alpha: 0.8),
+                            AppColors.primary.withValues(alpha: 0),
+                          ],
+                          stops: const [0, 0.6, 1],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               for (var i = 0; i < _options.length; i++) _option(i, t),
               Positioned(
                 left: _width / 2 - 28,
@@ -828,9 +853,9 @@ class _RadialAddButtonState extends State<_RadialAddButton>
     final cy = _height - 28 - _radius * t * math.sin(angle);
     final (icon, label) = _options[i];
     return Positioned(
-      left: cx - 50,
-      top: cy - 22,
-      width: 100,
+      left: cx - 55,
+      top: cy - 28,
+      width: 110,
       child: IgnorePointer(
         ignoring: !_open,
         child: Opacity(
@@ -838,28 +863,46 @@ class _RadialAddButtonState extends State<_RadialAddButton>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              FloatingActionButton.small(
-                heroTag: null,
-                tooltip: label,
-                backgroundColor: AppColors.surfaceVariant,
-                foregroundColor: AppColors.accentGlow,
-                onPressed: () => _select(i),
-                child: Icon(icon),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accentGlow.withValues(alpha: 0.55),
+                      blurRadius: 14,
+                    ),
+                  ],
+                ),
+                child: FloatingActionButton(
+                  heroTag: null,
+                  tooltip: label,
+                  backgroundColor: AppColors.accentGlow,
+                  foregroundColor: AppColors.primary,
+                  onPressed: () => _select(i),
+                  child: Icon(icon, size: 28),
+                ),
               ),
               Container(
-                margin: const EdgeInsets.only(top: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.accentGlow.withValues(alpha: 0.6),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black54, blurRadius: 6),
+                  ],
                 ),
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
@@ -891,17 +934,30 @@ class _PushPermissionBannerState extends State<_PushPermissionBanner> {
     await NotificationService().enablePush(widget.userId);
     if (!mounted) return;
     setState(() => _busy = false);
-    if (WebNotificationService.permission == 'granted') {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Notifiche attivate')));
+    final err = WebNotificationService.lastError;
+    if (WebNotificationService.pushActive.value || err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            err == null ? 'Notifiche attivate' : 'Notifiche non attivate: $err',
+          ),
+        ),
+      );
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: WebNotificationService.pushActive,
+    builder: (context, active, _) => _banner(active),
+  );
+
+  Widget _banner(bool active) {
     final permission = WebNotificationService.permission;
-    if (_hidden || (permission != 'default' && permission != 'denied')) {
+    final install = WebNotificationService.needsHomeScreen;
+    // Permesso già concesso (anche da un'altra app sulla stessa origine, es.
+    // Squadrone) ma nessuna sottoscrizione qui: serve comunque un tocco.
+    if (_hidden || active || (permission == 'unsupported' && !install)) {
       return const SizedBox.shrink();
     }
     final denied = permission == 'denied';
@@ -917,7 +973,7 @@ class _PushPermissionBannerState extends State<_PushPermissionBanner> {
         child: Row(
           children: [
             Icon(
-              denied
+              denied || install
                   ? Icons.notifications_off_outlined
                   : Icons.notifications_active_outlined,
               color: AppColors.accentGlow,
@@ -925,13 +981,17 @@ class _PushPermissionBannerState extends State<_PushPermissionBanner> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                denied
+                install
+                    ? "Per le notifiche su iPhone: Condividi → Aggiungi alla schermata Home, poi apri l'app da lì"
+                    : denied
                     ? 'Notifiche bloccate: riattivale dalle impostazioni del sito nel browser'
+                    : permission == 'granted'
+                    ? 'Notifiche non ancora attive su questo dispositivo'
                     : 'Consenti le notifiche per ricevere gli avvisi di scadenza anche ad app chiusa',
                 style: const TextStyle(fontSize: 13),
               ),
             ),
-            if (!denied)
+            if (!denied && !install)
               _busy
                   ? const Padding(
                       padding: EdgeInsets.all(12),
@@ -942,7 +1002,9 @@ class _PushPermissionBannerState extends State<_PushPermissionBanner> {
                     )
                   : TextButton(
                       onPressed: _enable,
-                      child: const Text('Consenti'),
+                      child: Text(
+                        permission == 'granted' ? 'Attiva' : 'Consenti',
+                      ),
                     ),
             IconButton(
               tooltip: 'Nascondi',
