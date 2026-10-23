@@ -9,7 +9,9 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
+import '../../services/notification_service.dart';
 import '../../services/pta_service.dart';
+import '../../services/web_notification_service.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../services/hours_format.dart';
 import '../../widgets/notification_panel_widget.dart';
@@ -320,6 +322,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                       ? () => context.go('/helicopters/fleet')
                       : null,
                 ),
+                _PushPermissionBanner(userId: user.id),
                 if (flightFitnessDate != null) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -862,6 +865,91 @@ class _RadialAddButtonState extends State<_RadialAddButton>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Invita a consentire le notifiche di sistema: il permesso va chiesto da un
+/// tocco (iPhone e Chrome bloccano la richiesta automatica al login).
+class _PushPermissionBanner extends StatefulWidget {
+  const _PushPermissionBanner({required this.userId});
+
+  final String userId;
+
+  @override
+  State<_PushPermissionBanner> createState() => _PushPermissionBannerState();
+}
+
+class _PushPermissionBannerState extends State<_PushPermissionBanner> {
+  bool _hidden = false;
+  bool _busy = false;
+
+  Future<void> _enable() async {
+    setState(() => _busy = true);
+    await NotificationService().enablePush(widget.userId);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (WebNotificationService.permission == 'granted') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Notifiche attivate')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final permission = WebNotificationService.permission;
+    if (_hidden || (permission != 'default' && permission != 'denied')) {
+      return const SizedBox.shrink();
+    }
+    final denied = permission == 'denied';
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 4, 10),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.accent),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              denied
+                  ? Icons.notifications_off_outlined
+                  : Icons.notifications_active_outlined,
+              color: AppColors.accentGlow,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                denied
+                    ? 'Notifiche bloccate: riattivale dalle impostazioni del sito nel browser'
+                    : 'Consenti le notifiche per ricevere gli avvisi di scadenza anche ad app chiusa',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            if (!denied)
+              _busy
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : TextButton(
+                      onPressed: _enable,
+                      child: const Text('Consenti'),
+                    ),
+            IconButton(
+              tooltip: 'Nascondi',
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => setState(() => _hidden = true),
+            ),
+          ],
         ),
       ),
     );
