@@ -1023,6 +1023,22 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   }
 
   void _setCrewTypeForHelicopter(int helicopterTypeId, String crewType) {
+    // Il T sul 169 vale per 169B e 169D: i gemelli liberi o T cambiano insieme.
+    final coupled =
+        crewType == 'T' || _crewTypeForHelicopter(helicopterTypeId) == 'T';
+    final ids = coupled
+        ? widget.service.tFamilyOf(helicopterTypeId).where(
+            (id) =>
+                id == helicopterTypeId ||
+                const {'T', 'NONE'}.contains(_crewTypeForHelicopter(id)),
+          )
+        : [helicopterTypeId];
+    for (final id in ids) {
+      _setCrewTypeForOne(id, crewType);
+    }
+  }
+
+  void _setCrewTypeForOne(int helicopterTypeId, String crewType) {
     setState(() {
       _tCrewHelicopters.remove(helicopterTypeId);
       _tobCrewHelicopters.remove(helicopterTypeId);

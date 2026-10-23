@@ -48,7 +48,7 @@ class NotificationService {
     if (type.startsWith('PROFILE_')) {
       return 'Profilo utente';
     }
-    if (type.startsWith('MAINTENANCE_')) {
+    if (type.startsWith('MAINTENANCE_') || type.startsWith('SEMINAR_')) {
       return 'Manutenzione';
     }
     if (type.startsWith('FLIGHT_') || type.startsWith('CREW_')) {

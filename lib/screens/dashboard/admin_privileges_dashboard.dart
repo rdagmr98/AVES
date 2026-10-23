@@ -144,7 +144,7 @@ class _AdminPrivilegesDashboardState
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getStringList(_matrixDefaultHeliPrefsKey);
     if (saved == null) {
-      return allIds;
+      return _goHeliIds?.toSet() ?? allIds;
     }
     if (saved.length == 1 && saved.first == 'all') {
       return allIds;
@@ -163,22 +163,16 @@ class _AdminPrivilegesDashboardState
     );
   }
 
-  static const _goHeliPrefsKey = 'go_nogo_helicopter_ids';
-
+  // Preferenza nel profilo dell'admin (UserService.viewHelicopterIds): vale
+  // su ogni dispositivo e filtra anche le sue notifiche privilegio scaduto.
   Future<Set<int>?> _loadGoHeliIds() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getStringList(_goHeliPrefsKey);
-    if (saved == null || saved.contains('all')) return null;
-    final ids = saved.map(int.tryParse).whereType<int>().toSet();
-    return ids.isEmpty ? null : ids;
+    final userId = ref.read(authProvider).userProfile?.id;
+    return userId == null ? null : _userService.viewHelicopterIds(userId);
   }
 
   Future<void> _saveGoHeliIds(Set<int>? ids) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _goHeliPrefsKey,
-      ids == null ? ['all'] : ids.map((id) => id.toString()).toList(),
-    );
+    final userId = ref.read(authProvider).userProfile?.id;
+    if (userId != null) await _userService.setViewHelicopterIds(userId, ids);
   }
 
   String _goHeliSummary(List<HelicopterType> helicopterTypes) {
@@ -198,7 +192,7 @@ class _AdminPrivilegesDashboardState
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Elicotteri per GO / NO GO'),
+          title: const Text('Elicotteri da mostrare'),
           content: SizedBox(
             width: double.maxFinite,
             child: Column(
@@ -206,7 +200,9 @@ class _AdminPrivilegesDashboardState
               children: [
                 const Text(
                   'Privilegi e licenze degli altri elicotteri non incidono '
-                  'sullo stato GO / NO GO.',
+                  'sullo stato GO / NO GO. Con "Imposta predefiniti" la scelta '
+                  'resta nel tuo profilo e vale anche per le notifiche di '
+                  'privilegio scaduto.',
                 ),
                 Align(
                   alignment: Alignment.centerRight,
@@ -401,6 +397,8 @@ class _AdminPrivilegesDashboardState
     final users = await _userService.getAllUsers();
     final pendingActivities = await _activityService
         .getPendingMaintenanceActivities();
+    final pendingSeminars = await _activityService
+        .getPendingSeminarActivities();
     final rows = <_MaintenanceUserRow>[];
     final scope = _goHeliIds;
 
@@ -441,7 +439,7 @@ class _AdminPrivilegesDashboardState
       return;
     }
     setState(() {
-      _pendingActivities = pendingActivities.length;
+      _pendingActivities = pendingActivities.length + pendingSeminars.length;
       _activePtaCount = _ptaService.getActivePta().length;
       _pendingAcksCount = _ptaService.getPendingAcknowledgments().length;
       _rows = rows;
@@ -726,16 +724,6 @@ class _AdminPrivilegesDashboardState
               },
             ),
             ListTile(
-              leading: const Icon(Icons.picture_as_pdf_outlined),
-              title: const Text('Report PDF'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _reportService.downloadMaintenanceReport(
-                  helicopterTypeIds: _goHeliIds,
-                );
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.grid_on_outlined),
               title: const Text('Matrice Privilegi'),
               onTap: () {
@@ -752,17 +740,146 @@ class _AdminPrivilegesDashboardState
               },
             ),
             ListTile(
-              leading: const Icon(Icons.account_tree_outlined),
-              title: const Text('Unità organizzative'),
+              leading: const Icon(Icons.tune),
+              title: const Text('Opzioni'),
               onTap: () {
                 Navigator.of(context).pop();
-                _manageOrgUnits();
+                _openOptions();
               },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openOptions() async {
+    final helicopterTypes = ref.read(authProvider).helicopterTypes;
+    final action = await showDialog<VoidCallback>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Opzioni'),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.account_tree_outlined),
+            title: const Text('Unità organizzative'),
+            onTap: () => Navigator.of(ctx).pop(_manageOrgUnits),
+          ),
+          ListTile(
+            leading: const Icon(Icons.build_outlined),
+            title: const Text('Tipi di attività OL'),
+            onTap: () => Navigator.of(ctx).pop(_manageActivityTypes),
+          ),
+          ListTile(
+            leading: const Icon(Icons.flight_outlined),
+            title: const Text('Elicotteri da mostrare'),
+            subtitle: Text(
+              _goHeliSummary(helicopterTypes),
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => Navigator.of(ctx).pop(_chooseGoHelicopters),
+          ),
+        ],
+      ),
+    );
+    action?.call();
+  }
+
+  Future<void> _manageActivityTypes() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final types = _userService.getActivityTypes();
+          Future<void> edit(String? old) async {
+            if (await _editActivityType(old)) setDialogState(() {});
+          }
+
+          return AlertDialog(
+            title: const Text('Tipi di attività OL'),
+            content: SizedBox(
+              width: 480,
+              height: 420,
+              child: ListView(
+                children: [
+                  for (final t in types)
+                    ListTile(
+                      title: Text(t, overflow: TextOverflow.ellipsis),
+                      trailing: const Icon(Icons.edit_outlined, size: 18),
+                      onTap: () => edit(t),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton.icon(
+                onPressed: () => edit(null),
+                icon: const Icon(Icons.add),
+                label: const Text('Nuovo tipo'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Chiudi'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// true se la lista dei tipi attività è cambiata.
+  Future<bool> _editActivityType(String? old) async {
+    final ctrl = TextEditingController(text: old);
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(old == null ? 'Nuovo tipo attività' : 'Modifica tipo attività'),
+        content: SizedBox(
+          width: 360,
+          child: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Nome'),
+          ),
+        ),
+        actions: [
+          if (old != null)
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('delete'),
+              child: const Text('Elimina'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('save'),
+            child: const Text('Salva'),
+          ),
+        ],
+      ),
+    );
+    final value = ctrl.text;
+    ctrl.dispose();
+    if (choice == null) return false;
+    try {
+      await _userService.saveActivityType(
+        old: old,
+        value: choice == 'delete' ? null : value,
+      );
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+      return false;
+    }
   }
 
   Future<void> _manageOrgUnits() async {
@@ -1554,7 +1671,7 @@ class _AdminPrivilegesDashboardState
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.flight, size: 20),
               title: const Text(
-                'Elicotteri per GO / NO GO',
+                'Elicotteri da mostrare',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1700,23 +1817,15 @@ class _AdminPrivilegesDashboardState
             ),
             const SizedBox(height: 8),
             _NavButton(
-              label: 'Report PDF',
-              icon: Icons.picture_as_pdf_outlined,
-              onTap: () => _reportService.downloadMaintenanceReport(
-                helicopterTypeIds: _goHeliIds,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _NavButton(
               label: 'Matrice Privilegi',
               icon: Icons.grid_on_outlined,
               onTap: _printPrivilegeMatrix,
             ),
             const SizedBox(height: 8),
             _NavButton(
-              label: 'Unità organizzative',
-              icon: Icons.account_tree_outlined,
-              onTap: _manageOrgUnits,
+              label: 'Opzioni',
+              icon: Icons.tune,
+              onTap: _openOptions,
             ),
           ],
         ),

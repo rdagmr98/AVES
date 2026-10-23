@@ -5,6 +5,7 @@ import 'flight_semester.dart';
 import 'gh_db_service.dart';
 import 'hours_format.dart';
 import 'pta_service.dart';
+import 'user_service.dart';
 import 'web_notification_service.dart';
 
 class CurrencyService {
@@ -944,6 +945,9 @@ class CurrencyService {
     }
 
     final userFullName = _userFullName(userId);
+    final adminHeliIds = UserService().viewHelicopterIds(
+      _adminPrivNotificationUserId,
+    );
     final perPrivilegeStatuses = await getPerPrivilegeCurrency(userId);
     for (final privilege in perPrivilegeStatuses) {
       if (!privilege.status.isExpired && !privilege.status.isWarning) {
@@ -977,6 +981,11 @@ class CurrencyService {
         );
       }
 
+      // Elicotteri esclusi dall'admin in Opzioni: nessuna notifica per lui.
+      if (adminHeliIds != null &&
+          !adminHeliIds.contains(privilege.helicopterTypeId)) {
+        continue;
+      }
       await _upsertNotification(
         _adminPrivNotificationUserId,
         'PRIVILEGE_EXPIRED_ADMIN',

@@ -754,10 +754,17 @@ class _InsertActivityAdminScreenState
           decoration: const InputDecoration(
             labelText: 'Tipo attività (opzionale)',
           ),
-          items: const [
-            DropdownMenuItem(value: 'Linea', child: Text('Linea')),
-            DropdownMenuItem(value: 'Motori', child: Text('Motori')),
-            DropdownMenuItem(value: 'Altri', child: Text('Altri')),
+          isExpanded: true,
+          // Voci gestite dagli admin in Opzioni (reference.json).
+          items: [
+            for (final t in {
+              ..._userService.getActivityTypes(),
+              ?_workOrderActivityType,
+            })
+              DropdownMenuItem(
+                value: t,
+                child: Text(t, overflow: TextOverflow.ellipsis),
+              ),
           ],
           onChanged: (value) => setState(() => _workOrderActivityType = value),
         ),

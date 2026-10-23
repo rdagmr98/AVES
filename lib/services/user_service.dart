@@ -592,6 +592,65 @@ class UserService {
     await _db.saveReference({..._db.referenceData, 'orgUnits': units});
   }
 
+  /// Voci di "Tipo attività" dell'OL, gestite dagli admin in reference.json
+  /// (`activityTypes`); finché la chiave manca valgono queste.
+  static const _defaultActivityTypes = [
+    'Ispezione intermedia',
+    'Ispezione maggiore',
+    'Troubleshooting',
+    'Linea',
+    'Motori',
+    'Altri',
+  ];
+
+  List<String> getActivityTypes() =>
+      (_db.referenceData['activityTypes'] as List<dynamic>?)
+          ?.cast<String>()
+          .toList() ??
+      [..._defaultActivityTypes];
+
+  /// Aggiunge ([old] null), rinomina o elimina ([value] null) un tipo attività.
+  /// Le attività già salvate tengono il testo vecchio.
+  Future<void> saveActivityType({String? old, String? value}) async {
+    await _db.refresh();
+    final types = getActivityTypes();
+    final i = old == null ? -1 : types.indexOf(old);
+    if (old != null && i == -1) throw Exception('Tipo attività non trovato');
+    final v = value?.trim();
+    if (v == null) {
+      types.removeAt(i);
+    } else {
+      if (v.isEmpty) throw Exception('Il nome è obbligatorio');
+      if (types.any((t) => t != old && t.toLowerCase() == v.toLowerCase())) {
+        throw Exception('Tipo attività già presente');
+      }
+      i == -1 ? types.add(v) : types[i] = v;
+    }
+    await _db.saveReference({..._db.referenceData, 'activityTypes': types});
+  }
+
+  /// Elicotteri che l'admin vuole vedere (GO / NO GO, matrice, notifiche
+  /// privilegio scaduto): campo `view_helicopter_ids` della sua riga in
+  /// users.json, così vale su ogni dispositivo. null = tutti.
+  Set<int>? viewHelicopterIds(String userId) {
+    final user = _db.users.firstWhere(
+      (u) => u['id'] == userId,
+      orElse: () => const {},
+    );
+    return (user['view_helicopter_ids'] as List<dynamic>?)?.cast<int>().toSet();
+  }
+
+  Future<void> setViewHelicopterIds(String userId, Set<int>? ids) async {
+    final users = _db.users;
+    final i = users.indexWhere((u) => u['id'] == userId);
+    if (i == -1) throw Exception('Utente non trovato');
+    users[i] = {
+      ...users[i],
+      'view_helicopter_ids': ids == null ? null : (ids.toList()..sort()),
+    };
+    await _db.saveUsers(users);
+  }
+
   Future<List<UserLicense>> getUserLicenses(String userId) async {
     final rows = _db.licenses
         .where((item) => item['user_id'] == userId && item['active'] != false)
@@ -720,9 +779,34 @@ class UserService {
     await _db.savePrivileges(updated);
   }
 
+  /// Elicotteri su cui un T vale insieme: la famiglia 169 (UH169B/UH169D),
+  /// altrimenti solo l'elicottero stesso.
+  // ponytail: famiglia riconosciuta dal codice '169'; reference esplicito se ne arrivano altre.
+  Set<int> tFamilyOf(int helicopterTypeId) {
+    bool is169(Map<String, dynamic>? h) =>
+        (h?['code'] as String? ?? '').contains('169');
+    if (!is169(_findReference('helicopterTypes', helicopterTypeId))) {
+      return {helicopterTypeId};
+    }
+    return _referenceList(
+      'helicopterTypes',
+    ).where(is169).map((h) => h['id'] as int).toSet();
+  }
+
   Future<List<UserCrewAssignment>> getUserCrewAssignments(String userId) async {
-    final rows = _db.crew
+    final active = _db.crew
         .where((item) => item['user_id'] == userId && item['active'] != false)
+        .toList();
+    // Un T sul 169 vale su 169B e 169D: riga virtuale sul gemello senza
+    // assegnazioni, con l'id della riga vera (l'eliminazione resta valida).
+    for (final t in active.where((i) => i['crew_type'] == 'T').toList()) {
+      for (final twin in tFamilyOf(t['helicopter_type_id'] as int)) {
+        if (!active.any((i) => i['helicopter_type_id'] == twin)) {
+          active.add({...t, 'helicopter_type_id': twin});
+        }
+      }
+    }
+    final rows = active
         .map(
           (item) => UserCrewAssignment.fromJson({
             ...item,
@@ -934,11 +1018,21 @@ class UserService {
     if (index == -1) {
       return;
     }
-    crews[index] = {
-      ...crews[index],
-      'active': false,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
+    final row = crews[index];
+    // Togliere un T sul 169 lo toglie da tutta la famiglia (169B e 169D).
+    final family = row['crew_type'] == 'T'
+        ? tFamilyOf(row['helicopter_type_id'] as int)
+        : const <int>{};
+    final now = DateTime.now().toIso8601String();
+    for (var i = 0; i < crews.length; i++) {
+      final c = crews[i];
+      if (i == index ||
+          (c['user_id'] == row['user_id'] &&
+              c['crew_type'] == 'T' &&
+              family.contains(c['helicopter_type_id']))) {
+        crews[i] = {...c, 'active': false, 'updated_at': now};
+      }
+    }
     await _db.saveCrew(crews);
   }
 
