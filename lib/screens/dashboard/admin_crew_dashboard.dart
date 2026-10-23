@@ -16,6 +16,7 @@ import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
+import '../../widgets/filter_panel.dart';
 import '../../widgets/user_avatar.dart';
 
 enum _CrewSortMode { status, alphabetical, lastModified, lastActivity }
@@ -38,17 +39,13 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   int _pendingActivities = 0;
   List<_CrewUserRow> _rows = [];
   String _search = '';
-  int? _orgUnitId;
   final List<int> _orgUnitChipIds = [];
   final List<int> _helicopterTypeIds = [];
   final List<String> _crewTypeIds = [];
-  int? _tobCapabilityId;
   final List<int> _tobCapabilityChipIds = [];
-  String _statusFilter = 'all';
   final List<String> _statusChipFilters = [];
   bool _andMode = false;
   bool _gridView = true;
-  bool _filterModeDropdown = true;
   bool _onlyTi = false;
   bool _onlyEtp = false;
   _CrewSortMode _sortMode = _CrewSortMode.status;
@@ -63,26 +60,6 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  void _toggleHelicopterFilter(int id) {
-    setState(() {
-      if (_helicopterTypeIds.contains(id)) {
-        _helicopterTypeIds.remove(id);
-      } else {
-        _helicopterTypeIds.add(id);
-      }
-    });
-  }
-
-  void _toggleCrewTypeFilter(String value) {
-    setState(() {
-      if (_crewTypeIds.contains(value)) {
-        _crewTypeIds.remove(value);
-      } else {
-        _crewTypeIds.add(value);
-      }
-    });
   }
 
   void _toggleIntFilter(List<int> values, int value) {
@@ -110,13 +87,39 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     bool Function(T value) predicate,
   ) {
     if (selected.isEmpty) {
-      return false;
+      return true;
     }
     return _andMode ? selected.every(predicate) : selected.any(predicate);
   }
 
   String get _statusCrewFilter =>
       _crewTypeIds.length == 1 ? _crewTypeIds.first : 'all';
+
+  int? get _statusCapabilityFilter =>
+      _tobCapabilityChipIds.length == 1 ? _tobCapabilityChipIds.first : null;
+
+  int get _activeFilterCount =>
+      _orgUnitChipIds.length +
+      _helicopterTypeIds.length +
+      _crewTypeIds.length +
+      _tobCapabilityChipIds.length +
+      _statusChipFilters.length +
+      (_onlyTi ? 1 : 0) +
+      (_onlyEtp ? 1 : 0);
+
+  void _clearFilters() {
+    setState(() {
+      _orgUnitChipIds.clear();
+      _helicopterTypeIds.clear();
+      _crewTypeIds.clear();
+      _tobCapabilityChipIds.clear();
+      _statusChipFilters.clear();
+      _onlyTi = false;
+      _onlyEtp = false;
+      _search = '';
+      _searchCtrl.clear();
+    });
+  }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
@@ -252,17 +255,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           .map((item) => item.tobCapabilityId)
           .toSet();
 
-      final statusCrewFilter = _crewTypeIds.length == 1
-          ? _crewTypeIds.first
-          : 'all';
-      final statusCapabilityFilter = _filterModeDropdown
-          ? _tobCapabilityId
-          : _tobCapabilityChipIds.length == 1
-          ? _tobCapabilityChipIds.first
-          : null;
       final rowStatuses = row.relevantStatuses(
-        statusCrewFilter,
-        statusCapabilityFilter,
+        _statusCrewFilter,
+        _statusCapabilityFilter,
       );
       final statusKeys = <String>{
         if (rowStatuses.any((item) => item.isValid)) 'valid',
@@ -270,63 +265,22 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         if (rowStatuses.any((item) => item.isExpired)) 'expired',
       };
 
-      final activeMatches = <bool>[];
-      if (_filterModeDropdown) {
-        if (_orgUnitId != null) {
-          activeMatches.add(row.user.orgUnitId == _orgUnitId);
-        }
-        if (_tobCapabilityId != null) {
-          activeMatches.add(capabilityIds.contains(_tobCapabilityId));
-        }
-        if (_statusFilter != 'all') {
-          activeMatches.add(statusKeys.contains(_statusFilter));
-        }
-      } else {
-        if (_orgUnitChipIds.isNotEmpty) {
-          activeMatches.add(
-            _matchSelectedValues<int>(
-              _orgUnitChipIds,
-              (value) => row.user.orgUnitId == value,
-            ),
-          );
-        }
-        if (_tobCapabilityChipIds.isNotEmpty) {
-          activeMatches.add(
-            _matchSelectedValues<int>(
-              _tobCapabilityChipIds,
-              capabilityIds.contains,
-            ),
-          );
-        }
-        if (_statusChipFilters.isNotEmpty) {
-          activeMatches.add(
-            _matchSelectedValues<String>(
-              _statusChipFilters,
-              statusKeys.contains,
-            ),
-          );
-        }
-      }
-
-      if (_helicopterTypeIds.isNotEmpty) {
-        activeMatches.add(
+      // AND tra le voci; dentro una voce unità e stato sono "almeno uno",
+      // le altre seguono _andMode.
+      final matchesFilters =
+          (_orgUnitChipIds.isEmpty ||
+              _orgUnitChipIds.contains(row.user.orgUnitId)) &&
+          (_statusChipFilters.isEmpty ||
+              _statusChipFilters.any(statusKeys.contains)) &&
+          _matchSelectedValues<int>(
+            _tobCapabilityChipIds,
+            capabilityIds.contains,
+          ) &&
           _matchSelectedValues<int>(
             _helicopterTypeIds,
             assignmentHelicopters.contains,
-          ),
-        );
-      }
-      if (_crewTypeIds.isNotEmpty) {
-        activeMatches.add(
-          _matchSelectedValues<String>(_crewTypeIds, assignmentTypes.contains),
-        );
-      }
-
-      final matchesFilters = activeMatches.isEmpty
-          ? true
-          : _andMode
-          ? activeMatches.every((match) => match)
-          : activeMatches.any((match) => match);
+          ) &&
+          _matchSelectedValues<String>(_crewTypeIds, assignmentTypes.contains);
 
       final matchesQualifications =
           (!_onlyTi || row.user.isTi) && (!_onlyEtp || row.user.isEtp);
@@ -350,7 +304,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     final body = recipients
         .map(
           (row) =>
-              '${row.user.fullName} — ${row.relevantStatuses(_statusCrewFilter, _tobCapabilityId).where((item) => item.isWarning || item.isExpired).map((item) => item.label).join(' | ')}',
+              '${row.user.fullName} — ${row.relevantStatuses(_statusCrewFilter, _statusCapabilityFilter).where((item) => item.isWarning || item.isExpired).map((item) => item.label).join(' | ')}',
         )
         .join('\n');
     final uri = Uri(
@@ -459,7 +413,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
         final row = filteredRows[index];
         final statuses = row.relevantStatuses(
           _statusCrewFilter,
-          _tobCapabilityId,
+          _statusCapabilityFilter,
         );
         final hasExpired = statuses.any((item) => item.isExpired);
         final hasWarning = statuses.any((item) => item.isWarning);
@@ -494,7 +448,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                 children: [
                   Expanded(
                     child: Center(
-                      child: UserAvatar(user: row.user, radius: 14),
+                      child: UserAvatar.fill(user: row.user),
                     ),
                   ),
                   FittedBox(
@@ -650,317 +604,106 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
 
   Widget _buildFiltersSection() {
     final auth = ref.watch(authProvider);
+    const statusChips = [
+      ('valid', 'GO', AppColors.currencyValid),
+      ('warning', 'In scadenza', AppColors.currencyWarning),
+      ('expired', 'NO GO', AppColors.currencyExpired),
+    ];
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Filtri', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Dropdown'),
-                  selected: _filterModeDropdown,
-                  onSelected: (_) => setState(() => _filterModeDropdown = true),
-                ),
-                ChoiceChip(
-                  label: const Text('Chip'),
-                  selected: !_filterModeDropdown,
-                  onSelected: (_) =>
-                      setState(() => _filterModeDropdown = false),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            FiltersHeader(active: _activeFilterCount, onClear: _clearFilters),
+            const SizedBox(height: 8),
             TextField(
               controller: _searchCtrl,
               decoration: const InputDecoration(
-                labelText: 'Cerca per nome o licenza',
+                hintText: 'Cerca nome o licenza',
                 prefixIcon: Icon(Icons.search),
+                isDense: true,
               ),
               onChanged: (value) => setState(() => _search = value),
             ),
-            const SizedBox(height: 16),
-            if (_filterModeDropdown) ...[
-              DropdownButtonFormField<int?>(
-                initialValue: _orgUnitId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(
-                  labelText: 'Unità organizzativa',
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutte'),
-                  ),
-                  ...auth.orgUnits.map(
-                    (unit) => DropdownMenuItem<int?>(
-                      value: unit.id,
-                      child: Text(unit.name),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => _orgUnitId = value),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int?>(
-                initialValue: _tobCapabilityId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Capacità TOB'),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutte'),
-                  ),
-                  ...auth.tobCapabilityTypes.map(
-                    (item) => DropdownMenuItem<int?>(
-                      value: item.id,
-                      child: Text(item.name),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => _tobCapabilityId = value),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _statusFilter,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Stato currency'),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('Tutte')),
-                  DropdownMenuItem(value: 'valid', child: Text('GO')),
-                  DropdownMenuItem(
-                    value: 'warning',
-                    child: Text('In Scadenza'),
-                  ),
-                  DropdownMenuItem(value: 'expired', child: Text('NO GO')),
-                ],
-                onChanged: (value) =>
-                    setState(() => _statusFilter = value ?? 'all'),
-              ),
-              const SizedBox(height: 16),
-              Text('Elicotteri', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int?>(
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Elicottero'),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutti'),
-                  ),
-                  ...auth.helicopterTypes.map(
-                    (h) => DropdownMenuItem<int?>(
-                      value: h.id,
-                      child: Text(h.code),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _helicopterTypeIds.clear();
-                    if (value != null) _helicopterTypeIds.add(value);
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Tipi equipaggio',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Tipo equipaggio'),
-                items: const [
-                  DropdownMenuItem<String?>(value: null, child: Text('Tutti')),
-                  DropdownMenuItem<String?>(value: 'T', child: Text('T')),
-                  DropdownMenuItem<String?>(value: 'TOB', child: Text('TOB')),
-                  DropdownMenuItem<String?>(value: 'MTB', child: Text('MTB')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _crewTypeIds.clear();
-                    if (value != null) _crewTypeIds.add(value);
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Qualifiche istruttori',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Mostra solo TI'),
-                    selected: _onlyTi,
-                    onSelected: (value) => setState(() => _onlyTi = value),
-                  ),
-                  FilterChip(
-                    label: const Text('Mostra solo ETP'),
-                    selected: _onlyEtp,
-                    onSelected: (value) => setState(() => _onlyEtp = value),
-                  ),
-                ],
-              ),
-            ] else ...[
-              Text(
-                'Unità organizzativa',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final unit in auth.orgUnits)
-                    FilterChip(
-                      label: Text(unit.name, softWrap: true),
-                      selected: _orgUnitChipIds.contains(unit.id),
-                      onSelected: (_) =>
-                          _toggleIntFilter(_orgUnitChipIds, unit.id),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Capacità TOB',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final cap in auth.tobCapabilityTypes)
-                    FilterChip(
-                      label: Text(cap.name, softWrap: true),
-                      selected: _tobCapabilityChipIds.contains(cap.id),
-                      onSelected: (_) =>
-                          _toggleIntFilter(_tobCapabilityChipIds, cap.id),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Stato currency',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('GO'),
-                    selected: _statusChipFilters.contains('valid'),
-                    onSelected: (_) =>
-                        _toggleStringFilter(_statusChipFilters, 'valid'),
-                  ),
-                  FilterChip(
-                    label: const Text('In Scadenza'),
-                    selected: _statusChipFilters.contains('warning'),
-                    onSelected: (_) =>
-                        _toggleStringFilter(_statusChipFilters, 'warning'),
-                  ),
-                  FilterChip(
-                    label: const Text('NO GO'),
-                    selected: _statusChipFilters.contains('expired'),
-                    onSelected: (_) =>
-                        _toggleStringFilter(_statusChipFilters, 'expired'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text('Elicotteri', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final helicopter in auth.helicopterTypes)
-                    FilterChip(
-                      label: Text(helicopter.code, softWrap: true),
-                      selected: _helicopterTypeIds.contains(helicopter.id),
-                      onSelected: (_) => _toggleHelicopterFilter(helicopter.id),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Tipi equipaggio',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final crewType in const ['T', 'TOB', 'MTB'])
-                    FilterChip(
-                      label: Text(crewType),
-                      selected: _crewTypeIds.contains(crewType),
-                      onSelected: (_) => _toggleCrewTypeFilter(crewType),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Qualifiche istruttori',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Mostra solo TI'),
-                    selected: _onlyTi,
-                    onSelected: (value) => setState(() => _onlyTi = value),
-                  ),
-                  FilterChip(
-                    label: const Text('Mostra solo ETP'),
-                    selected: _onlyEtp,
-                    onSelected: (value) => setState(() => _onlyEtp = value),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+            FilterSection(
+              title: 'Stato currency',
               children: [
-                ChoiceChip(
-                  label: const Text('OR'),
-                  selected: !_andMode,
-                  onSelected: (_) => setState(() => _andMode = false),
+                for (final (key, label, color) in statusChips)
+                  FilterPill(
+                    label: label,
+                    color: color,
+                    selected: _statusChipFilters.contains(key),
+                    onTap: () => _toggleStringFilter(_statusChipFilters, key),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Tipo equipaggio',
+              children: [
+                for (final crewType in const ['T', 'TOB', 'MTB'])
+                  FilterPill(
+                    label: crewType,
+                    selected: _crewTypeIds.contains(crewType),
+                    onTap: () => _toggleStringFilter(_crewTypeIds, crewType),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Unità',
+              children: [
+                for (final unit in auth.orgUnits)
+                  FilterPill(
+                    label: unit.code,
+                    tooltip: unit.name,
+                    selected: _orgUnitChipIds.contains(unit.id),
+                    onTap: () => _toggleIntFilter(_orgUnitChipIds, unit.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Elicotteri',
+              children: [
+                for (final heli in auth.helicopterTypes)
+                  FilterPill(
+                    label: heli.code,
+                    tooltip: heli.name,
+                    selected: _helicopterTypeIds.contains(heli.id),
+                    onTap: () => _toggleIntFilter(_helicopterTypeIds, heli.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Capacità TOB',
+              children: [
+                for (final cap in auth.tobCapabilityTypes)
+                  FilterPill(
+                    label: cap.name,
+                    selected: _tobCapabilityChipIds.contains(cap.id),
+                    onTap: () =>
+                        _toggleIntFilter(_tobCapabilityChipIds, cap.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Qualifiche istruttori',
+              children: [
+                FilterPill(
+                  label: 'Solo TI',
+                  selected: _onlyTi,
+                  onTap: () => setState(() => _onlyTi = !_onlyTi),
                 ),
-                ChoiceChip(
-                  label: const Text('AND'),
-                  selected: _andMode,
-                  onSelected: (_) => setState(() => _andMode = true),
+                FilterPill(
+                  label: 'Solo ETP',
+                  selected: _onlyEtp,
+                  onTap: () => setState(() => _onlyEtp = !_onlyEtp),
                 ),
               ],
+            ),
+            FilterMatchMode(
+              all: _andMode,
+              onChanged: (value) => setState(() => _andMode = value),
             ),
           ],
         ),

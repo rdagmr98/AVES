@@ -216,7 +216,7 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                 children: [
                   Expanded(
                     child: Center(
-                      child: UserAvatar(user: row.user, radius: 16),
+                      child: UserAvatar.fill(user: row.user),
                     ),
                   ),
                   Text(

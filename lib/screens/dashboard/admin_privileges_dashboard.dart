@@ -19,6 +19,7 @@ import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
+import '../../widgets/filter_panel.dart';
 import '../../widgets/user_avatar.dart';
 
 enum _MaintenanceSortMode { status, alphabetical, lastModified, lastActivity }
@@ -46,9 +47,6 @@ class _AdminPrivilegesDashboardState
   int _pendingAcksCount = 0;
   List<_MaintenanceUserRow> _rows = [];
   String _search = '';
-  int? _orgUnitId;
-  int? _licenseTypeId;
-  String _statusFilter = 'all';
   final List<int> _orgUnitChipIds = [];
   final List<int> _licenseTypeChipIds = [];
   final List<String> _statusChipFilters = [];
@@ -56,7 +54,6 @@ class _AdminPrivilegesDashboardState
   final List<int> _privilegeTypeIds = [];
   bool _andMode = false;
   bool _gridView = true;
-  bool _useDropdownFilters = true;
   bool _onlyTi = false;
   bool _onlyEtp = false;
   _MaintenanceSortMode _sortMode = _MaintenanceSortMode.status;
@@ -103,9 +100,32 @@ class _AdminPrivilegesDashboardState
     bool Function(T value) predicate,
   ) {
     if (selected.isEmpty) {
-      return false;
+      return true;
     }
     return _andMode ? selected.every(predicate) : selected.any(predicate);
+  }
+
+  int get _activeFilterCount =>
+      _orgUnitChipIds.length +
+      _licenseTypeChipIds.length +
+      _statusChipFilters.length +
+      _helicopterTypeIds.length +
+      _privilegeTypeIds.length +
+      (_onlyTi ? 1 : 0) +
+      (_onlyEtp ? 1 : 0);
+
+  void _clearFilters() {
+    setState(() {
+      _orgUnitChipIds.clear();
+      _licenseTypeChipIds.clear();
+      _statusChipFilters.clear();
+      _helicopterTypeIds.clear();
+      _privilegeTypeIds.clear();
+      _onlyTi = false;
+      _onlyEtp = false;
+      _search = '';
+      _searchCtrl.clear();
+    });
   }
 
   static const _matrixDefaultHeliPrefsKey =
@@ -366,15 +386,13 @@ class _AdminPrivilegesDashboardState
     );
     if (confirmed != true) return;
     await _reportService.downloadPrivilegeMatrix(
-      orgUnitId:
-          _orgUnitId ??
-          (_orgUnitChipIds.isNotEmpty ? _orgUnitChipIds.first : null),
+      orgUnitId: _orgUnitChipIds.length == 1 ? _orgUnitChipIds.first : null,
       helicopterTypeIds: selectedHeliIds.length == helicopterTypes.length
           ? null
           : selectedHeliIds.toList(),
-      licenseTypeId:
-          _licenseTypeId ??
-          (_licenseTypeChipIds.isNotEmpty ? _licenseTypeChipIds.first : null),
+      licenseTypeId: _licenseTypeChipIds.length == 1
+          ? _licenseTypeChipIds.first
+          : null,
     );
   }
 
@@ -498,66 +516,25 @@ class _AdminPrivilegesDashboardState
           ? 'valid'
           : 'all';
 
-      final activeMatches = <bool>[];
-      if (_useDropdownFilters) {
-        if (_orgUnitId != null) {
-          activeMatches.add(row.user.orgUnitId == _orgUnitId);
-        }
-        if (_licenseTypeId != null) {
-          activeMatches.add(
-            row.licenses.any((item) => item.licenseTypeId == _licenseTypeId),
-          );
-        }
-        if (_statusFilter != 'all') {
-          activeMatches.add(rowStatusKey == _statusFilter);
-        }
-      } else {
-        if (_orgUnitChipIds.isNotEmpty) {
-          activeMatches.add(
-            _matchSelectedValues<int>(
-              _orgUnitChipIds,
-              (value) => row.user.orgUnitId == value,
-            ),
-          );
-        }
-        if (_licenseTypeChipIds.isNotEmpty) {
-          activeMatches.add(
-            _matchSelectedValues<int>(
-              _licenseTypeChipIds,
-              (value) =>
-                  row.licenses.any((item) => item.licenseTypeId == value),
-            ),
-          );
-        }
-        if (_statusChipFilters.isNotEmpty) {
-          activeMatches.add(
-            _matchSelectedValues<String>(
-              _statusChipFilters,
-              (value) => rowStatusKey == value,
-            ),
-          );
-        }
-      }
-
-      if (_helicopterTypeIds.isNotEmpty) {
-        activeMatches.add(
+      final licenseTypes = row.licenses
+          .map((item) => item.licenseTypeId)
+          .toSet();
+      // AND tra le voci; dentro una voce: unità e stato sono valori unici
+      // (sempre "almeno uno"), le altre seguono _andMode.
+      final matchesFilters =
+          (_orgUnitChipIds.isEmpty ||
+              _orgUnitChipIds.contains(row.user.orgUnitId)) &&
+          (_statusChipFilters.isEmpty ||
+              _statusChipFilters.contains(rowStatusKey)) &&
+          _matchSelectedValues<int>(
+            _licenseTypeChipIds,
+            licenseTypes.contains,
+          ) &&
           _matchSelectedValues<int>(
             _helicopterTypeIds,
             privilegeHelicopters.contains,
-          ),
-        );
-      }
-      if (_privilegeTypeIds.isNotEmpty) {
-        activeMatches.add(
-          _matchSelectedValues<int>(_privilegeTypeIds, privilegeTypes.contains),
-        );
-      }
-
-      final matchesFilters = activeMatches.isEmpty
-          ? true
-          : _andMode
-          ? activeMatches.every((match) => match)
-          : activeMatches.any((match) => match);
+          ) &&
+          _matchSelectedValues<int>(_privilegeTypeIds, privilegeTypes.contains);
 
       final matchesQualifications =
           (!_onlyTi || row.user.isTi) && (!_onlyEtp || row.user.isEtp);
@@ -662,7 +639,7 @@ class _AdminPrivilegesDashboardState
                 children: [
                   Expanded(
                     child: Center(
-                      child: UserAvatar(user: row.user, radius: 14),
+                      child: UserAvatar.fill(user: row.user),
                     ),
                   ),
                   FittedBox(
@@ -1549,21 +1526,33 @@ class _AdminPrivilegesDashboardState
   }
 
   Widget _buildFiltersCard(AuthProvider auth) {
+    const statusChips = [
+      ('valid', 'GO', AppColors.currencyValid),
+      ('warning', 'In scadenza', AppColors.currencyWarning),
+      ('expired', 'NO GO', AppColors.currencyExpired),
+    ];
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Filtri',
-              style: Theme.of(context).textTheme.titleLarge,
-              softWrap: true,
-            ),
+            FiltersHeader(active: _activeFilterCount, onClear: _clearFilters),
             const SizedBox(height: 8),
+            TextField(
+              controller: _searchCtrl,
+              decoration: const InputDecoration(
+                hintText: 'Cerca nome o licenza',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+              onChanged: (value) => setState(() => _search = value),
+            ),
+            const SizedBox(height: 4),
             ListTile(
+              dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.flight),
+              leading: const Icon(Icons.flight, size: 20),
               title: const Text(
                 'Elicotteri per GO / NO GO',
                 maxLines: 2,
@@ -1573,327 +1562,87 @@ class _AdminPrivilegesDashboardState
                 _goHeliSummary(auth.helicopterTypes),
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.tune),
+              trailing: const Icon(Icons.tune, size: 20),
               onTap: _chooseGoHelicopters,
             ),
-            const SizedBox(height: 8),
-            // Filter mode toggle
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+            FilterSection(
+              title: 'Stato currency',
               children: [
-                ChoiceChip(
-                  label: const Text('Dropdown'),
-                  selected: _useDropdownFilters,
-                  onSelected: (_) => setState(() => _useDropdownFilters = true),
-                ),
-                ChoiceChip(
-                  label: const Text('Chip'),
-                  selected: !_useDropdownFilters,
-                  onSelected: (_) =>
-                      setState(() => _useDropdownFilters = false),
-                ),
+                for (final (key, label, color) in statusChips)
+                  FilterPill(
+                    label: label,
+                    color: color,
+                    selected: _statusChipFilters.contains(key),
+                    onTap: () => _toggleFilterValue(_statusChipFilters, key),
+                  ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Search bar
-            TextField(
-              controller: _searchCtrl,
-              decoration: const InputDecoration(
-                hintText: 'Nome o licenza',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) => setState(() => _search = value),
-            ),
-            const SizedBox(height: 16),
-            if (_useDropdownFilters) ...[
-              // Dropdown mode
-              DropdownButtonFormField<int?>(
-                isExpanded: true,
-                initialValue: _orgUnitId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(
-                  labelText: 'Unità organizzativa',
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutte'),
-                  ),
-                  ...auth.orgUnits.map(
-                    (unit) => DropdownMenuItem<int?>(
-                      value: unit.id,
-                      child: Text(unit.name, softWrap: true),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => _orgUnitId = value),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int?>(
-                isExpanded: true,
-                initialValue: _licenseTypeId,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Tipo licenza'),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutte'),
-                  ),
-                  ...auth.licenseTypes.map(
-                    (item) => DropdownMenuItem<int?>(
-                      value: item.id,
-                      child: Text(item.code, softWrap: true),
-                    ),
-                  ),
-                ],
-                onChanged: (value) => setState(() => _licenseTypeId = value),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _statusFilter,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Stato currency'),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('Tutte')),
-                  DropdownMenuItem(value: 'valid', child: Text('GO')),
-                  DropdownMenuItem(
-                    value: 'warning',
-                    child: Text('In Scadenza'),
-                  ),
-                  DropdownMenuItem(value: 'expired', child: Text('NO GO')),
-                ],
-                onChanged: (value) =>
-                    setState(() => _statusFilter = value ?? 'all'),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Elicotteri',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int?>(
-                isExpanded: true,
-                initialValue: _helicopterTypeIds.isEmpty
-                    ? null
-                    : _helicopterTypeIds.first,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Elicottero'),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutti'),
-                  ),
-                  ...auth.helicopterTypes.map(
-                    (heli) => DropdownMenuItem<int?>(
-                      value: heli.id,
-                      child: Text(heli.code, softWrap: true),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _helicopterTypeIds.clear();
-                    if (value != null) _helicopterTypeIds.add(value);
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Privilegi',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int?>(
-                isExpanded: true,
-                initialValue: _privilegeTypeIds.isEmpty
-                    ? null
-                    : _privilegeTypeIds.first,
-                menuMaxHeight: 300,
-                decoration: const InputDecoration(labelText: 'Privilegio'),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tutti'),
-                  ),
-                  ...auth.privilegeTypes.map(
-                    (priv) => DropdownMenuItem<int?>(
-                      value: priv.id,
-                      child: Text(priv.name, softWrap: true),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _privilegeTypeIds.clear();
-                    if (value != null) _privilegeTypeIds.add(value);
-                  });
-                },
-              ),
-            ] else ...[
-              // Chip mode
-              Text(
-                'Unità organizzativa',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final unit in auth.orgUnits)
-                    FilterChip(
-                      label: Text(unit.name, softWrap: true),
-                      selected: _orgUnitChipIds.contains(unit.id),
-                      onSelected: (_) =>
-                          _toggleFilterId(_orgUnitChipIds, unit.id),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Tipo licenza',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final licenseType in auth.licenseTypes)
-                    FilterChip(
-                      label: Text(licenseType.code, softWrap: true),
-                      selected: _licenseTypeChipIds.contains(licenseType.id),
-                      onSelected: (_) =>
-                          _toggleFilterId(_licenseTypeChipIds, licenseType.id),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Stato currency',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('GO'),
-                    selected: _statusChipFilters.contains('valid'),
-                    onSelected: (_) =>
-                        _toggleFilterValue(_statusChipFilters, 'valid'),
-                  ),
-                  FilterChip(
-                    label: const Text('In Scadenza'),
-                    selected: _statusChipFilters.contains('warning'),
-                    onSelected: (_) =>
-                        _toggleFilterValue(_statusChipFilters, 'warning'),
-                  ),
-                  FilterChip(
-                    label: const Text('NO GO'),
-                    selected: _statusChipFilters.contains('expired'),
-                    onSelected: (_) =>
-                        _toggleFilterValue(_statusChipFilters, 'expired'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Elicotteri',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final helicopter in auth.helicopterTypes)
-                    FilterChip(
-                      label: Text(helicopter.code, softWrap: true),
-                      selected: _helicopterTypeIds.contains(helicopter.id),
-                      onSelected: (_) =>
-                          _toggleFilterId(_helicopterTypeIds, helicopter.id),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Privilegi',
-                style: Theme.of(context).textTheme.titleSmall,
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final privilege in auth.privilegeTypes)
-                    FilterChip(
-                      label: Text(privilege.name, softWrap: true),
-                      selected: _privilegeTypeIds.contains(privilege.id),
-                      onSelected: (_) =>
-                          _toggleFilterId(_privilegeTypeIds, privilege.id),
-                    ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-            Text(
-              'Qualifiche istruttori',
-              style: Theme.of(context).textTheme.titleSmall,
-              softWrap: true,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+            FilterSection(
+              title: 'Unità',
               children: [
-                FilterChip(
-                  label: const Text('Mostra solo TI'),
+                for (final unit in auth.orgUnits)
+                  FilterPill(
+                    label: unit.code,
+                    tooltip: unit.name,
+                    selected: _orgUnitChipIds.contains(unit.id),
+                    onTap: () => _toggleFilterId(_orgUnitChipIds, unit.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Licenza',
+              children: [
+                for (final item in auth.licenseTypes)
+                  FilterPill(
+                    label: item.code,
+                    tooltip: item.name,
+                    selected: _licenseTypeChipIds.contains(item.id),
+                    onTap: () => _toggleFilterId(_licenseTypeChipIds, item.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Elicotteri',
+              children: [
+                for (final heli in auth.helicopterTypes)
+                  FilterPill(
+                    label: heli.code,
+                    tooltip: heli.name,
+                    selected: _helicopterTypeIds.contains(heli.id),
+                    onTap: () => _toggleFilterId(_helicopterTypeIds, heli.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Privilegi',
+              children: [
+                for (final priv in auth.privilegeTypes)
+                  FilterPill(
+                    label: priv.code,
+                    tooltip: priv.name,
+                    selected: _privilegeTypeIds.contains(priv.id),
+                    onTap: () => _toggleFilterId(_privilegeTypeIds, priv.id),
+                  ),
+              ],
+            ),
+            FilterSection(
+              title: 'Qualifiche istruttori',
+              children: [
+                FilterPill(
+                  label: 'Solo TI',
                   selected: _onlyTi,
-                  onSelected: (value) => setState(() => _onlyTi = value),
+                  onTap: () => setState(() => _onlyTi = !_onlyTi),
                 ),
-                FilterChip(
-                  label: const Text('Mostra solo ETP'),
+                FilterPill(
+                  label: 'Solo ETP',
                   selected: _onlyEtp,
-                  onSelected: (value) => setState(() => _onlyEtp = value),
+                  onTap: () => setState(() => _onlyEtp = !_onlyEtp),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            // AND/OR toggle
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('OR'),
-                  selected: !_andMode,
-                  onSelected: (_) => setState(() => _andMode = false),
-                ),
-                ChoiceChip(
-                  label: const Text('AND'),
-                  selected: _andMode,
-                  onSelected: (_) => setState(() => _andMode = true),
-                ),
-              ],
+            FilterMatchMode(
+              all: _andMode,
+              onChanged: (value) => setState(() => _andMode = value),
             ),
           ],
         ),
