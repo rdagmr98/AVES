@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../app.dart';
+import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
@@ -12,7 +13,9 @@ import '../../services/gh_db_service.dart';
 import '../../services/hours_format.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/filter_panel.dart';
 import '../../widgets/hours_field.dart';
+import '../../widgets/user_avatar.dart';
 
 class InsertActivityAdminScreen extends ConsumerStatefulWidget {
   const InsertActivityAdminScreen({super.key});
@@ -61,11 +64,10 @@ class _InsertActivityAdminScreenState
   List<UserTobCapability> _tobCapabilities = [];
 
   int? _maintenanceHelicopterId;
-  final Set<int> _maintenancePrivilegeIds = {};
-  final Set<String> _maintenanceUserIds = {};
+  // privilegio -> tecnici selezionati
+  final Map<int, Set<String>> _maintenanceTeam = {};
   String _maintenanceUserSearch = '';
   DateTime _maintenanceDate = DateTime.now();
-  String? _maintenanceActivityType;
 
   int? _flightHelicopterId;
   DateTime _flightDate = DateTime.now();
@@ -78,14 +80,13 @@ class _InsertActivityAdminScreenState
   String _seminarType = 'NAM';
   final Set<String> _seminarUserIds = {};
   String _seminarUserSearch = '';
-  final _seminarSearchCtrl = TextEditingController();
 
   int? _workOrderHelicopterId;
-  DateTime _workOrderDate = DateTime.now();
   DateTime? _workOrderDateFrom;
   DateTime? _workOrderDateTo;
   String? _workOrderActivityType;
-  final List<_TechEntry> _techEntries = [];
+  final Map<int, Set<String>> _workOrderTeam = {};
+  String _workOrderSearch = '';
 
   int? _crewFlightHelicopterId;
   DateTime _crewFlightDate = DateTime.now();
@@ -130,7 +131,6 @@ class _InsertActivityAdminScreenState
     _flightDescCtrl.dispose();
     _tobDescCtrl.dispose();
     _seminarDescCtrl.dispose();
-    _seminarSearchCtrl.dispose();
     _flightHoursCtrl.dispose();
     _crewFlightHoursCtrl.dispose();
     _crewFlightDescCtrl.dispose();
@@ -197,27 +197,21 @@ class _InsertActivityAdminScreenState
     final adminId = ref.read(authProvider).userProfile?.id;
     if (adminId == null ||
         _maintenanceHelicopterId == null ||
-        _maintenancePrivilegeIds.isEmpty) {
+        _teamRows(_maintenanceTeam) == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Seleziona elicottero e almeno un privilegio.'),
+          content: Text(
+            'Seleziona elicottero e almeno un tecnico per privilegio.',
+          ),
         ),
-      );
-      return;
-    }
-    final userIds = _maintenanceUserIds.isNotEmpty
-        ? _maintenanceUserIds
-        : (_selectedUser != null ? {_selectedUser!.id} : <String>{});
-    if (userIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona almeno un utente.')),
       );
       return;
     }
     setState(() => _saving = true);
     try {
-      for (final userId in userIds) {
-        for (final privilegeId in _maintenancePrivilegeIds) {
+      for (final MapEntry(key: privilegeId, value: userIds)
+          in _maintenanceTeam.entries) {
+        for (final userId in userIds) {
           await _activityService.addMaintenanceActivityValidated(
             MaintenanceActivity(
               userId: userId,
@@ -227,7 +221,6 @@ class _InsertActivityAdminScreenState
               description: _maintenanceDescCtrl.text.trim().isEmpty
                   ? null
                   : _maintenanceDescCtrl.text.trim(),
-              activityType: _maintenanceActivityType,
               matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
                   ? null
                   : _maintenanceMatricolaCtrl.text.trim(),
@@ -367,20 +360,18 @@ class _InsertActivityAdminScreenState
       }
       await db.saveSeminars(rows);
       if (mounted) {
+        final summary =
+            '${_seminarUserIds.length} partecipanti '
+            '(${_seminarType == 'NAM_MHF' ? 'NAM + MHF' : _seminarType})';
         setState(() {
           _saving = false;
           _seminarUserIds.clear();
           _seminarDescCtrl.clear();
-          _seminarSearchCtrl.clear();
           _seminarType = 'NAM';
           _seminarDate = DateTime.now();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Seminario inserito per ${_seminarUserIds.isEmpty ? 'i partecipanti selezionati' : '${_seminarUserIds.length} partecipanti'} ($_seminarType).',
-            ),
-          ),
+          SnackBar(content: Text('Seminario inserito per $summary.')),
         );
         context.go('/admin/validate');
       }
@@ -510,168 +501,377 @@ class _InsertActivityAdminScreenState
     }
   }
 
-  Future<void> _addTechEntry() async {
-    final helicopterId = _workOrderHelicopterId;
-    if (helicopterId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona prima un elicottero.')),
-      );
-      return;
-    }
-    final availableUsers = _users
-        .where((u) => !_techEntries.any((e) => e.user.id == u.id))
-        .toList(growable: false);
-    if (availableUsers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nessun tecnico disponibile da aggiungere.'),
-        ),
-      );
-      return;
-    }
-
-    String? selectedUserId;
-    List<UserPrivilege> userPrivileges = [];
-    final Set<int> selectedPrivilegeIds = {};
-
-    final result = await showDialog<_TechEntry>(
+  Future<void> _pickWorkOrderRange() async {
+    final from = _workOrderDateFrom;
+    final to = _workOrderDateTo;
+    final picked = await showDateRangePicker(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setD) => AlertDialog(
-            scrollable: true,
-            title: const Text('Aggiungi tecnico'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  menuMaxHeight: 300,
-                  decoration: const InputDecoration(labelText: 'Tecnico'),
-                  items: availableUsers
-                      .map(
-                        (u) => DropdownMenuItem<String>(
-                          value: u.id,
-                          child: Text(
-                            '${u.fullName} · ${u.numeroLicenza ?? ''}',
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) async {
-                    setD(() {
-                      selectedUserId = value;
-                      selectedPrivilegeIds.clear();
-                      userPrivileges = [];
-                    });
-                    if (value != null) {
-                      final privileges = await _userService.getUserPrivileges(
-                        value,
-                      );
-                      final filtered = privileges
-                          .where((p) => p.helicopterTypeId == helicopterId)
-                          .toList(growable: false);
-                      if (ctx.mounted) {
-                        setD(() => userPrivileges = filtered);
-                      }
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (userPrivileges.isNotEmpty) ...[
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Privilegi esercitati',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  ...userPrivileges.map((p) {
-                    final sel = selectedPrivilegeIds.contains(
-                      p.privilegeTypeId,
-                    );
-                    return CheckboxListTile(
-                      dense: true,
-                      value: sel,
-                      title: Text(p.privilegeName),
-                      onChanged: (v) => setD(() {
-                        if (v == true) {
-                          selectedPrivilegeIds.add(p.privilegeTypeId);
-                        } else {
-                          selectedPrivilegeIds.remove(p.privilegeTypeId);
-                        }
-                      }),
-                    );
-                  }),
-                ] else if (selectedUserId != null)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Nessun privilegio su questo elicottero.',
-                      style: TextStyle(color: Colors.orange),
-                    ),
-                  ),
-              ],
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: from != null && to != null
+          ? DateTimeRange(start: from, end: to)
+          : null,
+      builder: (context, child) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
+          child: child,
+        ),
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _workOrderDateFrom = picked.start;
+        _workOrderDateTo = picked.end;
+      });
+    }
+  }
+
+  /// Tecnici abilitati per privilegio sull'elicottero, ordinati per nome.
+  Map<int, List<UserProfile>> _eligibleTechs(int helicopterId) {
+    final byId = {for (final u in _users) u.id: u};
+    final result = <int, List<UserProfile>>{};
+    for (final p in GhDbService().privileges) {
+      if (p['helicopter_type_id'] != helicopterId || p['active'] == false) {
+        continue;
+      }
+      final user = byId[p['user_id']];
+      if (user == null) continue;
+      final list = result.putIfAbsent(p['privilege_type_id'] as int, () => []);
+      if (!list.contains(user)) list.add(user);
+    }
+    for (final users in result.values) {
+      users.sort((a, b) => a.fullName.compareTo(b.fullName));
+    }
+    return result;
+  }
+
+  int _teamRows(Map<int, Set<String>> team) =>
+      team.values.fold(0, (n, ids) => n + ids.length);
+
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    String? hint,
+    int maxLines = 1,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        decoration: InputDecoration(labelText: label, hintText: hint),
+      ),
+    );
+  }
+
+  Widget _paneHeader(
+    String title,
+    String search,
+    String hint,
+    ValueChanged<String> onSearch,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+        ),
+        SizedBox(
+          width: 280,
+          child: TextFormField(
+            initialValue: search,
+            decoration: InputDecoration(
+              hintText: hint,
+              prefixIcon: const Icon(Icons.search),
+              isDense: true,
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (selectedUserId == null || selectedPrivilegeIds.isEmpty) {
-                    return;
-                  }
-                  final user = _users.firstWhere((u) => u.id == selectedUserId);
-                  final names = userPrivileges
-                      .where(
-                        (p) => selectedPrivilegeIds.contains(p.privilegeTypeId),
-                      )
-                      .map((p) => p.privilegeName)
-                      .toList();
-                  Navigator.pop(
-                    ctx,
-                    _TechEntry(
-                      user: user,
-                      privilegeTypeIds: selectedPrivilegeIds.toList(),
-                      privilegeNames: names,
-                    ),
-                  );
-                },
-                child: const Text('Aggiungi'),
-              ),
+            onChanged: onSearch,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Colonna sinistra (elicottero, privilegi, dettagli) + a destra una
+  /// sezione di tecnici abilitati per ogni privilegio scelto.
+  Widget _teamTab({
+    required int? helicopterId,
+    required ValueSetter<int?> onHelicopter,
+    required Map<int, Set<String>> team,
+    required String search,
+    required ValueChanged<String> onSearch,
+    required List<Widget> details,
+    required String submitLabel,
+    required VoidCallback onSubmit,
+  }) {
+    final auth = ref.read(authProvider);
+    final eligible = helicopterId == null
+        ? const <int, List<UserProfile>>{}
+        : _eligibleTechs(helicopterId);
+    final privileges = auth.privilegeTypes
+        .where((p) => eligible.containsKey(p.id))
+        .toList();
+    final usersById = {for (final u in _users) u.id: u};
+    final codesByUser = <String, List<String>>{};
+    for (final p in privileges) {
+      for (final id in team[p.id] ?? const <String>{}) {
+        codesByUser.putIfAbsent(id, () => []).add(p.code);
+      }
+    }
+    final members = [for (final id in codesByUser.keys) usersById[id]!]
+      ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    final rows = _teamRows(team);
+
+    return _TwoPane(
+      left: [
+        DropdownButtonFormField<int>(
+          initialValue: helicopterId,
+          decoration: const InputDecoration(labelText: 'Elicottero'),
+          items: [
+            for (final h in auth.helicopterTypes)
+              DropdownMenuItem(value: h.id, child: Text(h.name)),
+          ],
+          onChanged: (v) => setState(() {
+            team.clear();
+            onHelicopter(v);
+          }),
+        ),
+        if (helicopterId != null && privileges.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 14),
+            child: Text(
+              'Nessun tecnico abilitato su questo elicottero.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          )
+        else if (helicopterId != null)
+          FilterSection(
+            title: 'Privilegi',
+            children: [
+              for (final p in privileges)
+                FilterPill(
+                  label: '${p.code} (${eligible[p.id]!.length})',
+                  tooltip: p.name,
+                  selected: team.containsKey(p.id),
+                  onTap: () => setState(() {
+                    if (team.remove(p.id) == null) team[p.id] = {};
+                  }),
+                ),
             ],
           ),
-        );
-      },
+        const SizedBox(height: 16),
+        ...details,
+        const SizedBox(height: 20),
+        Text(
+          '${members.length} ${members.length == 1 ? 'tecnico' : 'tecnici'}'
+          ' · $rows ${rows == 1 ? 'riga' : 'righe'}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        for (final u in members)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${u.fullName}: ${codesByUser[u.id]!.join(', ')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          onPressed: _saving ? null : onSubmit,
+          icon: const Icon(Icons.check),
+          label: Text('$submitLabel ($rows)'),
+        ),
+      ],
+      header: _paneHeader(
+        'Squadra di lavoro',
+        search,
+        'Cerca tecnico',
+        onSearch,
+      ),
+      sections: [
+        if (team.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 24),
+            child: Center(
+              child: Text(
+                'Scegli elicottero e privilegi a sinistra.',
+                style: TextStyle(color: AppColors.textHint),
+              ),
+            ),
+          )
+        else
+          for (final p in privileges)
+            if (team[p.id] case final selected?)
+              _TeamSection(
+                title: p.code,
+                subtitle: p.name,
+                users: eligible[p.id]!,
+                query: search,
+                selected: selected,
+                onChanged: () => setState(() {}),
+              ),
+      ],
     );
-    if (result != null && mounted) {
-      setState(() => _techEntries.add(result));
-    }
+  }
+
+  Widget _buildWorkOrderTab() {
+    final from = _workOrderDateFrom;
+    final to = _workOrderDateTo;
+    final fmt = DateFormat('dd/MM/yyyy');
+    return _teamTab(
+      helicopterId: _workOrderHelicopterId,
+      onHelicopter: (v) => _workOrderHelicopterId = v,
+      team: _workOrderTeam,
+      search: _workOrderSearch,
+      onSearch: (v) => setState(() => _workOrderSearch = v),
+      submitLabel: 'Inserisci OL',
+      onSubmit: _submitWorkOrder,
+      details: [
+        OutlinedButton.icon(
+          onPressed: _pickWorkOrderRange,
+          icon: const Icon(Icons.date_range_outlined),
+          label: Text(
+            from == null || to == null
+                ? 'Periodo Dal – Al'
+                : 'Periodo: ${fmt.format(from)} – ${fmt.format(to)} '
+                      '(${(to.difference(from).inHours / 24).round() + 1} gg)',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          initialValue: _workOrderActivityType,
+          decoration: const InputDecoration(
+            labelText: 'Tipo attività (opzionale)',
+          ),
+          items: const [
+            DropdownMenuItem(value: 'Linea', child: Text('Linea')),
+            DropdownMenuItem(value: 'Motori', child: Text('Motori')),
+            DropdownMenuItem(value: 'Altri', child: Text('Altri')),
+          ],
+          onChanged: (value) => setState(() => _workOrderActivityType = value),
+        ),
+        _field(
+          _workOrderMatricolaCtrl,
+          'Matricola militare (opzionale)',
+          hint: 'es. MM1234',
+        ),
+        _field(_workOrderNumCarrCtrl, 'Num. carrozzella (opzionale)'),
+        _field(_workOrderOrdLavCtrl, 'Ordine di lavoro (opzionale)'),
+        _field(_workOrderDescCtrl, 'Descrizione (opzionale)', maxLines: 2),
+      ],
+    );
+  }
+
+  Widget _buildMaintenanceTab() {
+    return _teamTab(
+      helicopterId: _maintenanceHelicopterId,
+      onHelicopter: (v) => _maintenanceHelicopterId = v,
+      team: _maintenanceTeam,
+      search: _maintenanceUserSearch,
+      onSearch: (v) => setState(() => _maintenanceUserSearch = v),
+      submitLabel: 'Inserisci come validata',
+      onSubmit: _submitMaintenance,
+      details: [
+        _AdminDateButton(
+          label: 'Data attività',
+          date: _maintenanceDate,
+          onPressed: () =>
+              _pickDate((value) => _maintenanceDate = value, _maintenanceDate),
+        ),
+        _field(_maintenanceDescCtrl, 'Descrizione', maxLines: 2),
+        _field(
+          _maintenanceMatricolaCtrl,
+          'Matricola militare (opzionale)',
+          hint: 'es. MM1234',
+        ),
+        _field(_maintenanceNumCarrCtrl, 'Num. carrozzella (opzionale)'),
+        _field(_maintenanceOrdLavCtrl, 'Ordine di lavoro (opzionale)'),
+      ],
+    );
+  }
+
+  Widget _buildSeminarTab() {
+    return _TwoPane(
+      left: [
+        DropdownButtonFormField<String>(
+          initialValue: _seminarType,
+          decoration: const InputDecoration(labelText: 'Tipo seminario'),
+          items: const [
+            DropdownMenuItem(value: 'NAM', child: Text('NAM')),
+            DropdownMenuItem(value: 'MHF', child: Text('MHF')),
+            DropdownMenuItem(value: 'NAM_MHF', child: Text('NAM + MHF')),
+          ],
+          onChanged: (v) => setState(() => _seminarType = v ?? 'NAM'),
+        ),
+        const SizedBox(height: 16),
+        _AdminDateButton(
+          label: 'Data seminario',
+          date: _seminarDate,
+          onPressed: () =>
+              _pickDate((value) => _seminarDate = value, _seminarDate),
+        ),
+        _field(_seminarDescCtrl, 'Note (opzionale)', maxLines: 2),
+        const SizedBox(height: 20),
+        Text(
+          '${_seminarUserIds.length} '
+          '${_seminarUserIds.length == 1 ? 'partecipante' : 'partecipanti'}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          onPressed: _saving ? null : _submitSeminar,
+          icon: const Icon(Icons.check),
+          label: const Text('Inserisci seminario'),
+        ),
+      ],
+      header: _paneHeader(
+        'Partecipanti',
+        _seminarUserSearch,
+        'Cerca partecipante',
+        (v) => setState(() => _seminarUserSearch = v),
+      ),
+      sections: [
+        _TeamSection(
+          title: 'Partecipanti',
+          users: _users,
+          query: _seminarUserSearch,
+          selected: _seminarUserIds,
+          onChanged: () => setState(() {}),
+        ),
+      ],
+    );
   }
 
   Future<void> _submitWorkOrder() async {
     final adminId = ref.read(authProvider).userProfile?.id;
     final helicopterId = _workOrderHelicopterId;
-    if (adminId == null || helicopterId == null || _techEntries.isEmpty) {
+    if (adminId == null ||
+        helicopterId == null ||
+        _teamRows(_workOrderTeam) == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Compila elicottero e aggiungi almeno un tecnico.'),
+          content: Text(
+            'Seleziona elicottero e almeno un tecnico per privilegio.',
+          ),
         ),
       );
       return;
     }
-    if (_workOrderDateFrom == null || _workOrderDateTo == null) {
+    final dateTo = _workOrderDateTo;
+    if (_workOrderDateFrom == null || dateTo == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Le date Dal e Al sono obbligatorie.')),
-      );
-      return;
-    }
-    if (_workOrderDateFrom != null &&
-        _workOrderDateTo != null &&
-        _workOrderDateTo!.isBefore(_workOrderDateFrom!)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Data Al deve essere >= Data Dal.')),
+        const SnackBar(content: Text('Scegli il periodo Dal – Al.')),
       );
       return;
     }
@@ -689,15 +889,15 @@ class _InsertActivityAdminScreenState
       final ordLav = _workOrderOrdLavCtrl.text.trim().isEmpty
           ? null
           : _workOrderOrdLavCtrl.text.trim();
-      final effectiveDate = _workOrderDateTo ?? _workOrderDate;
-      for (final entry in _techEntries) {
-        for (final privilegeId in entry.privilegeTypeIds) {
+      for (final MapEntry(key: privilegeId, value: userIds)
+          in _workOrderTeam.entries) {
+        for (final userId in userIds) {
           await _activityService.addMaintenanceActivityValidated(
             MaintenanceActivity(
-              userId: entry.user.id,
+              userId: userId,
               helicopterTypeId: helicopterId,
               privilegeTypeId: privilegeId,
-              activityDate: effectiveDate,
+              activityDate: dateTo,
               dateFrom: _workOrderDateFrom,
               dateTo: _workOrderDateTo,
               description: desc,
@@ -714,14 +914,13 @@ class _InsertActivityAdminScreenState
       if (mounted) {
         setState(() {
           _saving = false;
-          _techEntries.clear();
+          _workOrderTeam.clear();
           _workOrderHelicopterId = null;
           _workOrderMatricolaCtrl.clear();
           _workOrderNumCarrCtrl.clear();
           _workOrderOrdLavCtrl.clear();
           _workOrderDescCtrl.clear();
           _workOrderActivityType = null;
-          _workOrderDate = DateTime.now();
           _workOrderDateFrom = null;
           _workOrderDateTo = null;
         });
@@ -871,16 +1070,6 @@ class _InsertActivityAdminScreenState
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
 
-    final auth = ref.read(authProvider);
-    final allHelicopterTypes = auth.helicopterTypes;
-    final allPrivilegeTypes = auth.privilegeTypes;
-    final maintUsers = _users.where((u) {
-      if (_maintenanceUserSearch.isEmpty) return true;
-      return u.fullName.toLowerCase().contains(
-        _maintenanceUserSearch.toLowerCase(),
-      );
-    }).toList();
-
     return Scaffold(
       appBar: AppBar(
         leading: const AdminAppBarLeading(),
@@ -905,276 +1094,56 @@ class _InsertActivityAdminScreenState
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(24),
+          : Column(
               children: [
                 AnimatedBuilder(
                   animation: _tabController,
                   builder: (context, _) {
                     final currentTab = _tabs[_tabController.index];
                     final needsUserSelector =
-                        currentTab == _AdminInsertTabType.maintenance ||
                         currentTab == _AdminInsertTabType.flight ||
                         currentTab == _AdminInsertTabType.tob;
                     if (!needsUserSelector) {
                       return const SizedBox.shrink();
                     }
-                    return Column(
-                      children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedUser?.id,
-                          decoration: const InputDecoration(
-                            labelText: 'Seleziona utente',
-                          ),
-                          items: _users
-                              .map(
-                                (user) => DropdownMenuItem<String>(
-                                  value: user.id,
-                                  child: Text(
-                                    '${user.fullName} · ${user.numeroLicenza ?? 'N/A'}',
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            UserProfile? user;
-                            for (final item in _users) {
-                              if (item.id == value) {
-                                user = item;
-                                break;
-                              }
-                            }
-                            _selectUser(user);
-                          },
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedUser?.id,
+                        decoration: const InputDecoration(
+                          labelText: 'Seleziona utente',
                         ),
-                        const SizedBox(height: 24),
-                      ],
+                        items: _users
+                            .map(
+                              (user) => DropdownMenuItem<String>(
+                                value: user.id,
+                                child: Text(
+                                  '${user.fullName} · ${user.numeroLicenza ?? 'N/A'}',
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          UserProfile? user;
+                          for (final item in _users) {
+                            if (item.id == value) {
+                              user = item;
+                              break;
+                            }
+                          }
+                          _selectUser(user);
+                        },
+                      ),
                     );
                   },
                 ),
-                SizedBox(
-                  height: 800,
+                Expanded(
                   child: TabBarView(
                     controller: _tabController,
                     children: _tabs.map((tab) {
                       switch (tab) {
                         case _AdminInsertTabType.workOrder:
-                          final auth = ref.read(authProvider);
-                          final allHelicopters = auth.helicopterTypes;
-                          final helicopterItems = allHelicopters
-                              .map(
-                                (h) => DropdownMenuItem<int>(
-                                  value: h.id,
-                                  child: Text(h.name),
-                                ),
-                              )
-                              .toList(growable: false);
-                          return _AdminActivityTab(
-                            enabled: true,
-                            child: _AdminActivityCard(
-                              children: [
-                                DropdownButtonFormField<int>(
-                                  initialValue: _workOrderHelicopterId,
-                                  menuMaxHeight: 300,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Elicottero',
-                                  ),
-                                  items: helicopterItems,
-                                  onChanged: (value) => setState(() {
-                                    _workOrderHelicopterId = value;
-                                    _techEntries.clear();
-                                  }),
-                                ),
-                                const SizedBox(height: 16),
-                                _AdminDateButton(
-                                  label: 'Data attività',
-                                  date: _workOrderDate,
-                                  onPressed: () => _pickDate(
-                                    (value) => _workOrderDate = value,
-                                    _workOrderDate,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _AdminDateButton(
-                                        label: 'Dal',
-                                        date: _workOrderDateFrom,
-                                        onPressed: () async {
-                                          final picked = await showDatePicker(
-                                            context: context,
-                                            initialDate:
-                                                _workOrderDateFrom ??
-                                                DateTime.now(),
-                                            firstDate: DateTime(2020),
-                                            lastDate: DateTime.now(),
-                                          );
-                                          if (picked != null && mounted) {
-                                            setState(
-                                              () => _workOrderDateFrom = picked,
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: _AdminDateButton(
-                                        label: 'Al',
-                                        date: _workOrderDateTo,
-                                        onPressed: () async {
-                                          final picked = await showDatePicker(
-                                            context: context,
-                                            initialDate:
-                                                _workOrderDateTo ??
-                                                DateTime.now(),
-                                            firstDate: DateTime(2020),
-                                            lastDate: DateTime.now(),
-                                          );
-                                          if (picked != null && mounted) {
-                                            setState(
-                                              () => _workOrderDateTo = picked,
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (_workOrderDateFrom != null &&
-                                    _workOrderDateTo != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: Text(
-                                      'Giorni: ${_workOrderDateTo!.difference(_workOrderDateFrom!).inDays + 1}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: Colors.blue,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                  ),
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<String>(
-                                  initialValue: _workOrderActivityType,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tipo attività (opzionale)',
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'Linea',
-                                      child: Text('Linea'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'Motori',
-                                      child: Text('Motori'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'Altri',
-                                      child: Text('Altri'),
-                                    ),
-                                  ],
-                                  onChanged: (value) => setState(
-                                    () => _workOrderActivityType = value,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _workOrderMatricolaCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Matricola militare (opzionale)',
-                                    hintText: 'es. MM1234',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _workOrderNumCarrCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Num. carrozzella (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _workOrderOrdLavCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Ordine di lavoro (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _workOrderDescCtrl,
-                                  maxLines: 2,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Descrizione (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Tecnici (${_techEntries.length})',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                    ),
-                                    const Spacer(),
-                                    TextButton.icon(
-                                      onPressed: _addTechEntry,
-                                      icon: const Icon(
-                                        Icons.person_add_outlined,
-                                      ),
-                                      label: const Text('Aggiungi tecnico'),
-                                    ),
-                                  ],
-                                ),
-                                if (_techEntries.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text(
-                                      'Nessun tecnico aggiunto.',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  )
-                                else
-                                  ...List.generate(_techEntries.length, (i) {
-                                    final entry = _techEntries[i];
-                                    return ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: const CircleAvatar(
-                                        child: Icon(
-                                          Icons.engineering,
-                                          size: 18,
-                                        ),
-                                      ),
-                                      title: Text(entry.user.fullName),
-                                      subtitle: Text(entry.privilegeSummary),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.remove_circle_outline,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () => setState(
-                                          () => _techEntries.removeAt(i),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                const SizedBox(height: 24),
-                                ElevatedButton.icon(
-                                  onPressed: _saving ? null : _submitWorkOrder,
-                                  icon: const Icon(
-                                    Icons.assignment_turned_in_outlined,
-                                  ),
-                                  label: const Text(
-                                    'Inserisci per tutti i tecnici',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
+                          return _buildWorkOrderTab();
                         case _AdminInsertTabType.crewFlight:
                           final auth = ref.read(authProvider);
                           final tobCaps = auth.tobCapabilityTypes;
@@ -1313,313 +1282,9 @@ class _InsertActivityAdminScreenState
                             ),
                           );
                         case _AdminInsertTabType.maintenance:
-                          return _AdminActivityTab(
-                            enabled: true,
-                            child: _AdminActivityCard(
-                              children: [
-                                DropdownButtonFormField<int>(
-                                  initialValue: _maintenanceHelicopterId,
-                                  menuMaxHeight: 300,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Elicottero',
-                                  ),
-                                  items: allHelicopterTypes
-                                      .map(
-                                        (h) => DropdownMenuItem<int>(
-                                          value: h.id,
-                                          child: Text(h.name),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) => setState(() {
-                                    _maintenanceHelicopterId = value;
-                                    _maintenancePrivilegeIds.clear();
-                                  }),
-                                ),
-                                if (_maintenanceHelicopterId != null) ...[
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Privilegi esercitati',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelLarge,
-                                  ),
-                                  ...allPrivilegeTypes.map((p) {
-                                    final sel = _maintenancePrivilegeIds
-                                        .contains(p.id);
-                                    return CheckboxListTile(
-                                      dense: true,
-                                      value: sel,
-                                      title: Text('${p.code} · ${p.name}'),
-                                      onChanged: (v) => setState(() {
-                                        if (v == true) {
-                                          _maintenancePrivilegeIds.add(p.id);
-                                        } else {
-                                          _maintenancePrivilegeIds.remove(p.id);
-                                        }
-                                      }),
-                                    );
-                                  }),
-                                ],
-                                const SizedBox(height: 12),
-                                _AdminDateButton(
-                                  label: 'Data attività',
-                                  date: _maintenanceDate,
-                                  onPressed: () => _pickDate(
-                                    (value) => _maintenanceDate = value,
-                                    _maintenanceDate,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _maintenanceDescCtrl,
-                                  maxLines: 2,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Descrizione',
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _maintenanceMatricolaCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Matricola militare (opzionale)',
-                                    hintText: 'es. MM1234',
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _maintenanceNumCarrCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Num. carrozzella (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _maintenanceOrdLavCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Ordine di lavoro (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Tecnici (${_maintenanceUserIds.length})',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => setState(() {
-                                        if (_maintenanceUserIds.length ==
-                                            maintUsers.length) {
-                                          _maintenanceUserIds.clear();
-                                        } else {
-                                          _maintenanceUserIds.addAll(
-                                            maintUsers.map((u) => u.id),
-                                          );
-                                        }
-                                      }),
-                                      child: Text(
-                                        _maintenanceUserIds.length ==
-                                                maintUsers.length
-                                            ? 'Deseleziona tutti'
-                                            : 'Seleziona tutti',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                TextField(
-                                  decoration: const InputDecoration(
-                                    labelText: 'Cerca tecnico',
-                                    prefixIcon: Icon(Icons.search),
-                                    isDense: true,
-                                  ),
-                                  onChanged: (v) => setState(
-                                    () => _maintenanceUserSearch = v,
-                                  ),
-                                ),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxHeight: 200,
-                                  ),
-                                  child: ListView.builder(
-                                    shrinkWrap: true,
-                                    itemCount: maintUsers.length,
-                                    itemBuilder: (context, idx) {
-                                      final u = maintUsers[idx];
-                                      final sel = _maintenanceUserIds.contains(
-                                        u.id,
-                                      );
-                                      return CheckboxListTile(
-                                        dense: true,
-                                        value: sel,
-                                        title: Text(u.fullName),
-                                        subtitle: Text(
-                                          u.orgUnitName,
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
-                                        onChanged: (v) => setState(() {
-                                          if (v == true) {
-                                            _maintenanceUserIds.add(u.id);
-                                          } else {
-                                            _maintenanceUserIds.remove(u.id);
-                                          }
-                                        }),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                ElevatedButton(
-                                  onPressed: _saving
-                                      ? null
-                                      : _submitMaintenance,
-                                  child: const Text('Inserisci come validata'),
-                                ),
-                              ],
-                            ),
-                          );
+                          return _buildMaintenanceTab();
                         case _AdminInsertTabType.seminar:
-                          final seminarUsers = _users.where((u) {
-                            if (_seminarUserSearch.isEmpty) return true;
-                            return u.fullName.toLowerCase().contains(
-                              _seminarUserSearch.toLowerCase(),
-                            );
-                          }).toList();
-                          return _AdminActivityTab(
-                            enabled: true,
-                            child: _AdminActivityCard(
-                              children: [
-                                Text(
-                                  'Seminario NAM / MHF',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<String>(
-                                  initialValue: _seminarType,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Tipo seminario',
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(
-                                      value: 'NAM',
-                                      child: Text('NAM'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'MHF',
-                                      child: Text('MHF'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'NAM_MHF',
-                                      child: Text('NAM + MHF'),
-                                    ),
-                                  ],
-                                  onChanged: (v) =>
-                                      setState(() => _seminarType = v ?? 'NAM'),
-                                ),
-                                const SizedBox(height: 16),
-                                _AdminDateButton(
-                                  label: 'Data seminario',
-                                  date: _seminarDate,
-                                  onPressed: () => _pickDate(
-                                    (value) => _seminarDate = value,
-                                    _seminarDate,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _seminarDescCtrl,
-                                  maxLines: 2,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Note (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        'Partecipanti (${_seminarUserIds.length}/${seminarUsers.length})',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => setState(() {
-                                        if (_seminarUserIds.length ==
-                                            seminarUsers.length) {
-                                          _seminarUserIds.clear();
-                                        } else {
-                                          _seminarUserIds.addAll(
-                                            seminarUsers.map((u) => u.id),
-                                          );
-                                        }
-                                      }),
-                                      child: Text(
-                                        _seminarUserIds.length ==
-                                                seminarUsers.length
-                                            ? 'Deseleziona tutti'
-                                            : 'Seleziona tutti',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                TextField(
-                                  controller: _seminarSearchCtrl,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Cerca partecipante',
-                                    prefixIcon: Icon(Icons.search),
-                                    isDense: true,
-                                  ),
-                                  onChanged: (v) =>
-                                      setState(() => _seminarUserSearch = v),
-                                ),
-                                const SizedBox(height: 8),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxHeight: 250,
-                                  ),
-                                  child: ListView.builder(
-                                    shrinkWrap: true,
-                                    itemCount: seminarUsers.length,
-                                    itemBuilder: (context, idx) {
-                                      final u = seminarUsers[idx];
-                                      final sel = _seminarUserIds.contains(
-                                        u.id,
-                                      );
-                                      return CheckboxListTile(
-                                        dense: true,
-                                        value: sel,
-                                        title: Text(u.fullName),
-                                        subtitle: Text(
-                                          u.orgUnitName,
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
-                                        onChanged: (v) => setState(() {
-                                          if (v == true) {
-                                            _seminarUserIds.add(u.id);
-                                          } else {
-                                            _seminarUserIds.remove(u.id);
-                                          }
-                                        }),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                ElevatedButton(
-                                  onPressed: _saving ? null : _submitSeminar,
-                                  child: const Text('Inserisci seminario'),
-                                ),
-                              ],
-                            ),
-                          );
+                          return _buildSeminarTab();
                         case _AdminInsertTabType.flight:
                           return _AdminActivityTab(
                             enabled:
@@ -1810,20 +1475,6 @@ class _ActivityHelicopterOption {
   final String name;
 }
 
-class _TechEntry {
-  const _TechEntry({
-    required this.user,
-    required this.privilegeTypeIds,
-    required this.privilegeNames,
-  });
-
-  final UserProfile user;
-  final List<int> privilegeTypeIds;
-  final List<String> privilegeNames;
-
-  String get privilegeSummary => privilegeNames.join(', ');
-}
-
 class _CrewEntry {
   const _CrewEntry({
     required this.user,
@@ -1851,7 +1502,10 @@ class _AdminActivityTab extends StatelessWidget {
         child: Text('Seleziona un utente con le abilitazioni richieste.'),
       );
     }
-    return SingleChildScrollView(child: child);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: child,
+    );
   }
 }
 
@@ -1896,6 +1550,280 @@ class _AdminDateButton extends StatelessWidget {
         date != null
             ? '$label: ${DateFormat('dd/MM/yyyy').format(date!)}'
             : label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+/// Desktop: colonna fissa a sinistra + sezioni scorrevoli a destra.
+/// Sotto i 900 px tutto in un'unica colonna.
+class _TwoPane extends StatelessWidget {
+  const _TwoPane({
+    required this.left,
+    required this.header,
+    required this.sections,
+  });
+
+  final List<Widget> left;
+  final Widget header;
+  final List<Widget> sections;
+
+  @override
+  Widget build(BuildContext context) {
+    final leftCard = Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: left,
+        ),
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 900) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              leftCard,
+              const SizedBox(height: 16),
+              header,
+              const SizedBox(height: 12),
+              ...sections,
+            ],
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 400,
+                child: SingleChildScrollView(child: leftCard),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  children: [
+                    header,
+                    const SizedBox(height: 12),
+                    Expanded(child: ListView(children: sections)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TeamSection extends StatelessWidget {
+  const _TeamSection({
+    required this.title,
+    this.subtitle,
+    required this.users,
+    required this.query,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<UserProfile> users;
+  final String query;
+  // modificato in place, poi onChanged
+  final Set<String> selected;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final q = query.trim().toLowerCase();
+    final visible = q.isEmpty
+        ? users
+        : users.where((u) => u.fullName.toLowerCase().contains(q)).toList();
+    final allVisible =
+        visible.isNotEmpty && visible.every((u) => selected.contains(u.id));
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 12, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: title,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (subtitle != null)
+                          TextSpan(
+                            text: '   $subtitle',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                      ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  '${selected.length}/${users.length}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: selected.isEmpty
+                        ? AppColors.textHint
+                        : AppColors.accentGlow,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: visible.isEmpty
+                      ? null
+                      : () {
+                          final ids = visible.map((u) => u.id);
+                          if (allVisible) {
+                            selected.removeAll(ids);
+                          } else {
+                            selected.addAll(ids);
+                          }
+                          onChanged();
+                        },
+                  child: Text(allVisible ? 'Nessuno' : 'Tutti'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (visible.isEmpty)
+              const Text(
+                'Nessuno corrisponde alla ricerca.',
+                style: TextStyle(color: AppColors.textHint),
+              )
+            else
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final u in visible)
+                    _TechTile(
+                      user: u,
+                      selected: selected.contains(u.id),
+                      onTap: () {
+                        if (!selected.remove(u.id)) selected.add(u.id);
+                        onChanged();
+                      },
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TechTile extends StatelessWidget {
+  const _TechTile({
+    required this.user,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final UserProfile user;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: SizedBox(
+        width: 210,
+        child: Material(
+          color: selected
+              ? AppColors.accent.withValues(alpha: 0.22)
+              : AppColors.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: selected ? AppColors.accentGlow : AppColors.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  SizedBox.square(
+                    dimension: 44,
+                    child: UserAvatar.fill(user: user),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.nome,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          user.cognome,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (user.orgUnitName.isNotEmpty)
+                          Text(
+                            user.orgUnitName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.textHint,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    selected ? Icons.check_circle : Icons.circle_outlined,
+                    size: 20,
+                    color: selected ? AppColors.accentGlow : AppColors.textHint,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

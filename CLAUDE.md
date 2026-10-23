@@ -4,8 +4,8 @@ Repo app: `rdagmr98/AVES` | Repo dati: `rdagmr98/aves-data`
 Vault Obsidian: `C:\Users\Gianmarco\ObsidianVault\AVES Corsi\AVES Tecnici.md`
 
 ## Release workflow
+Deploy solo web: il push su main avvia `deploy.yml` (GitHub Actions). Nessuna cartella android, quindi niente APK.
 ```
-flutter build apk --release
 git add lib/...
 git commit -m "..."
 git push origin main   ← autorizzato, sempre senza chiedere
@@ -48,6 +48,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-23
+- Inserimento admin (`screens/admin/insert_activity_admin_screen.dart`): OL, manutenzione e seminario a due colonne (`_TwoPane`). Squadra = `Map<privilegio, Set<utente>>`, riquadri `_TechTile` per privilegio. Nota vault `AVES Corsi/Tecnici inserimento OL squadra per privilegio 2026-10-23.md`.
 - Seminari NAM/MHF importati dal Riepilogo CAAE (`aves-data` `a36eb62`, data = scadenza − 2 anni); scadenza seminario ora 2 anni di calendario, non 730 giorni (`c0924bf`). Nota vault `AVES Corsi/Tecnici import seminari NAM MHF Riepilogo CAAE 2026-10-23.md`.
 - Import privilegi NO GO da Annesso 1 (`aves-data` `cfc928f`), formato ore h:mm (`b1e090b`), giro grafico (`bd08710`). Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche. Nota vault `AVES Corsi/Tecnici import Annesso utenti registrati e formato ore 2026-10-23.md`.
 - Dashboard GO / NO GO: dettaglio utente = `_ServiceRecordDialog`.
