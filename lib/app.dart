@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -235,6 +236,10 @@ class _AvesAppState extends ConsumerState<AvesApp> {
       scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
+      // calendari e testi di sistema in italiano, settimana da lunedì
+      locale: const Locale('it'),
+      supportedLocales: const [Locale('it')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: _router,
     );
   }

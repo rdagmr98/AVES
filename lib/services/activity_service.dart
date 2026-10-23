@@ -178,7 +178,12 @@ class ActivityService {
     );
   }
 
-  Future<void> rejectMaintenanceActivity(int id) async {
+  static String _reasonSuffix(String? reason) =>
+      reason == null || reason.trim().isEmpty
+      ? ''
+      : ' Motivo: ${reason.trim()}';
+
+  Future<void> rejectMaintenanceActivity(int id, {String? reason}) async {
     final current = _db.maintenanceActs.firstWhere(
       (item) => item['id'] == id,
       orElse: () => <String, dynamic>{},
@@ -191,7 +196,7 @@ class ActivityService {
         userId: activity.userId,
         type: 'MAINTENANCE_REJECTED',
         message:
-            'Attività manutentiva non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_privilegeLabel(activity.privilegeTypeId)} · ${_formatDate(activity.activityDate)}.',
+            'Attività manutentiva non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_privilegeLabel(activity.privilegeTypeId)} · ${_formatDate(activity.activityDate)}.${_reasonSuffix(reason)}',
       );
     }
   }
@@ -337,7 +342,7 @@ class ActivityService {
     );
   }
 
-  Future<void> rejectFlightActivity(int id) async {
+  Future<void> rejectFlightActivity(int id, {String? reason}) async {
     final current = _db.flightActs.firstWhere(
       (item) => item['id'] == id,
       orElse: () => <String, dynamic>{},
@@ -350,7 +355,7 @@ class ActivityService {
         userId: activity.userId,
         type: 'FLIGHT_REJECTED',
         message:
-            'Attività di volo non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_formatDate(activity.activityDate)}.',
+            'Attività di volo non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_formatDate(activity.activityDate)}.${_reasonSuffix(reason)}',
       );
     }
   }
@@ -464,7 +469,7 @@ class ActivityService {
     );
   }
 
-  Future<void> rejectTobActivity(int id) async {
+  Future<void> rejectTobActivity(int id, {String? reason}) async {
     final current = _db.tobActs.firstWhere(
       (item) => item['id'] == id,
       orElse: () => <String, dynamic>{},
@@ -477,7 +482,7 @@ class ActivityService {
         userId: activity.userId,
         type: 'TOB_REJECTED',
         message:
-            'Attività TOB non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_tobCapabilityLabel(activity.tobCapabilityId)} · ${_formatDate(activity.activityDate)}.',
+            'Attività TOB non approvata: ${_helicopterLabel(activity.helicopterTypeId)} · ${_tobCapabilityLabel(activity.tobCapabilityId)} · ${_formatDate(activity.activityDate)}.${_reasonSuffix(reason)}',
       );
     }
   }
@@ -604,7 +609,7 @@ class ActivityService {
     );
   }
 
-  Future<void> rejectSeminarActivity(int id) async {
+  Future<void> rejectSeminarActivity(int id, {String? reason}) async {
     final current = _db.seminars.firstWhere(
       (item) => item['id'] == id,
       orElse: () => <String, dynamic>{},
@@ -617,7 +622,7 @@ class ActivityService {
         userId: activity.userId,
         type: 'SEMINAR_REJECTED',
         message:
-            'Seminario ${activity.seminarType} non approvato: ${_formatDate(activity.seminarDate)}.',
+            'Seminario ${activity.seminarType} non approvato: ${_formatDate(activity.seminarDate)}.${_reasonSuffix(reason)}',
       );
     }
   }

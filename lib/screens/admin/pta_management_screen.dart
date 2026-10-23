@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
@@ -399,7 +400,7 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
 
 // ── Create PTA dialog ─────────────────────────────────────────────────────────
 
-class _CreatePtaDialog extends StatefulWidget {
+class _CreatePtaDialog extends ConsumerStatefulWidget {
   final PtaRecord? initialPta;
   final Future<void> Function(
     int helicopterTypeId,
@@ -412,10 +413,10 @@ class _CreatePtaDialog extends StatefulWidget {
   const _CreatePtaDialog({required this.onSaved, this.initialPta});
 
   @override
-  State<_CreatePtaDialog> createState() => _CreatePtaDialogState();
+  ConsumerState<_CreatePtaDialog> createState() => _CreatePtaDialogState();
 }
 
-class _CreatePtaDialogState extends State<_CreatePtaDialog> {
+class _CreatePtaDialogState extends ConsumerState<_CreatePtaDialog> {
   final _formKey = GlobalKey<FormState>();
   final _numberCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
@@ -423,18 +424,9 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
   int? _helicopterTypeId;
   bool _saving = false;
 
-  // Loaded from reference data
-  List<Map<String, dynamic>> _helicopters = [];
-
   @override
   void initState() {
     super.initState();
-    final ptaService = PtaService();
-    // Access reference data directly from the db singleton
-    final ghDb = ptaService.referenceData;
-    _helicopters = List<Map<String, dynamic>>.from(
-      (ghDb['helicopterTypes'] as List<dynamic>? ?? const []),
-    );
     _numberCtrl.text = widget.initialPta?.number ?? '';
     _titleCtrl.text = widget.initialPta?.title ?? '';
     _issueDate = widget.initialPta?.issueDate ?? DateTime.now();
@@ -497,20 +489,19 @@ class _CreatePtaDialogState extends State<_CreatePtaDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ignore: deprecated_member_use
-              DropdownButtonFormField<int>(
+              AppDropdown<int>(
                 initialValue: _helicopterTypeId,
                 decoration: const InputDecoration(
                   labelText: 'Elicottero *',
                   prefixIcon: Icon(Icons.flight),
                 ),
-                items: _helicopters
-                    .map(
-                      (h) => DropdownMenuItem<int>(
-                        value: h['id'] as int,
-                        child: Text(h['code'] as String? ?? '?'),
-                      ),
-                    )
-                    .toList(),
+                items: [
+                  for (final h
+                      in ref
+                          .read(authProvider)
+                          .visibleHelicopters(keep: _helicopterTypeId))
+                    DropdownMenuItem(value: h.id, child: Text(h.code)),
+                ],
                 onChanged: (v) => setState(() => _helicopterTypeId = v),
                 validator: (v) => v == null ? 'Obbligatorio' : null,
               ),

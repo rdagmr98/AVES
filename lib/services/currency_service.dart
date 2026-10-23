@@ -376,6 +376,28 @@ class CurrencyService {
     );
   }
 
+  /// Ultima attività validata (data fine, o data) che tiene corrente il
+  /// privilegio su quell'elicottero; null = mai svolta.
+  DateTime? lastMaintenanceDate(
+    String userId,
+    int helicopterTypeId,
+    int privilegeTypeId,
+  ) {
+    DateTime? last;
+    for (final a in _db.maintenanceActs) {
+      if (a['user_id'] != userId ||
+          a['is_validated'] != true ||
+          a['helicopter_type_id'] != helicopterTypeId ||
+          (a['privilege_type_id'] != null &&
+              a['privilege_type_id'] != privilegeTypeId)) {
+        continue;
+      }
+      final d = DateTime.parse((a['date_to'] ?? a['activity_date']) as String);
+      if (last == null || d.isAfter(last)) last = d;
+    }
+    return last;
+  }
+
   Future<List<PrivilegeCurrencyStatus>> getPerPrivilegeCurrency(
     String userId, {
     Set<int>? helicopterTypeIds,
@@ -408,32 +430,11 @@ class CurrencyService {
           _findReference('privilegeTypes', privilegeTypeId) ??
           const {'name': '?'};
 
-      final acts =
-          _db.maintenanceActs
-              .where(
-                (a) =>
-                    a['user_id'] == userId &&
-                    a['is_validated'] == true &&
-                    a['helicopter_type_id'] == helicopterTypeId &&
-                    ((a['privilege_type_id'] as int?) == privilegeTypeId ||
-                        a['privilege_type_id'] == null),
-              )
-              .toList()
-            ..sort((a, b) {
-              final aEffective = a['date_to'] != null
-                  ? DateTime.parse(a['date_to'] as String)
-                  : DateTime.parse(a['activity_date'] as String);
-              final bEffective = b['date_to'] != null
-                  ? DateTime.parse(b['date_to'] as String)
-                  : DateTime.parse(b['activity_date'] as String);
-              return bEffective.compareTo(aEffective);
-            });
-
-      final lastDate = acts.isEmpty
-          ? null
-          : (acts.first['date_to'] != null
-                ? DateTime.parse(acts.first['date_to'] as String)
-                : DateTime.parse(acts.first['activity_date'] as String));
+      final lastDate = lastMaintenanceDate(
+        userId,
+        helicopterTypeId,
+        privilegeTypeId,
+      );
 
       result.add(
         PrivilegeCurrencyStatus(

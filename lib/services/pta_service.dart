@@ -6,7 +6,6 @@ class PtaService {
   final _db = GhDbService();
   final _notifications = NotificationService();
 
-  Map<String, dynamic> get referenceData => _db.referenceData;
 
   // ── helpers ─────────────────────────────────────────────────────────────
 

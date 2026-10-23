@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../widgets/app_dropdown.dart';
+import '../../widgets/date_range_dialog.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/currency_service.dart';
 import '../../services/gh_db_service.dart';
 import '../../services/hours_format.dart';
 import '../../services/user_service.dart';
@@ -39,6 +42,10 @@ class _InsertActivityAdminScreenState
     with SingleTickerProviderStateMixin {
   final _activityService = ActivityService();
   final _userService = UserService();
+  final _currencyService = CurrencyService();
+  int _periodDays = 180;
+  // squadra: false = scadenza più vicina in cima (predefinito), true = A-Z
+  bool _sortByName = false;
   final _maintenanceDescCtrl = TextEditingController();
   final _maintenanceMatricolaCtrl = TextEditingController();
   final _maintenanceNumCarrCtrl = TextEditingController();
@@ -143,11 +150,13 @@ class _InsertActivityAdminScreenState
 
   Future<void> _loadUsers() async {
     final users = await _userService.getAllUsers();
+    final criteria = await _currencyService.getMaintenanceCriteria();
     final auth = ref.read(authProvider);
     if (!mounted) {
       return;
     }
     setState(() {
+      _periodDays = criteria?.periodDays ?? 180;
       _users = users.where((item) {
         if (auth.isAdminPriv) {
           return item.isApprovedMaint;
@@ -422,7 +431,7 @@ class _InsertActivityAdminScreenState
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<String>(
+                AppDropdown<String>(
                   decoration: const InputDecoration(labelText: 'Membro'),
                   menuMaxHeight: 300,
                   items: availableUsers
@@ -438,7 +447,7 @@ class _InsertActivityAdminScreenState
                   onChanged: (v) => setD(() => userId = v),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                AppDropdown<String>(
                   initialValue: role,
                   decoration: const InputDecoration(labelText: 'Ruolo'),
                   items: roleItems,
@@ -450,7 +459,7 @@ class _InsertActivityAdminScreenState
                 ),
                 if (role == 'TOB') ...[
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
+                  AppDropdown<int>(
                     decoration: const InputDecoration(
                       labelText: 'Capacità TOB',
                     ),
@@ -504,19 +513,13 @@ class _InsertActivityAdminScreenState
   Future<void> _pickWorkOrderRange() async {
     final from = _workOrderDateFrom;
     final to = _workOrderDateTo;
-    final picked = await showDateRangePicker(
-      context: context,
+    final picked = await showDateRangeDialog(
+      context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
       initialDateRange: from != null && to != null
           ? DateTimeRange(start: from, end: to)
           : null,
-      builder: (context, child) => Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
-          child: child,
-        ),
-      ),
     );
     if (picked != null) {
       setState(() {
@@ -526,8 +529,13 @@ class _InsertActivityAdminScreenState
     }
   }
 
-  /// Tecnici abilitati per privilegio sull'elicottero, ordinati per nome.
-  Map<int, List<UserProfile>> _eligibleTechs(int helicopterId) {
+  /// Tecnici abilitati per privilegio sull'elicottero, ordinati per scadenza
+  /// del privilegio più vicina (mai svolto = scaduto, in cima) o per nome.
+  /// Riempie [expiry] (privilegio -> tecnico -> scadenza) per i riquadri.
+  Map<int, List<UserProfile>> _eligibleTechs(
+    int helicopterId,
+    Map<int, Map<String, DateTime?>> expiry,
+  ) {
     final byId = {for (final u in _users) u.id: u};
     final result = <int, List<UserProfile>>{};
     for (final p in GhDbService().privileges) {
@@ -536,11 +544,29 @@ class _InsertActivityAdminScreenState
       }
       final user = byId[p['user_id']];
       if (user == null) continue;
-      final list = result.putIfAbsent(p['privilege_type_id'] as int, () => []);
-      if (!list.contains(user)) list.add(user);
+      final privId = p['privilege_type_id'] as int;
+      final list = result.putIfAbsent(privId, () => []);
+      if (list.contains(user)) continue;
+      list.add(user);
+      final last = _currencyService.lastMaintenanceDate(
+        user.id,
+        helicopterId,
+        privId,
+      );
+      (expiry[privId] ??= {})[user.id] = last?.add(Duration(days: _periodDays));
     }
-    for (final users in result.values) {
-      users.sort((a, b) => a.fullName.compareTo(b.fullName));
+    for (final MapEntry(key: privId, value: users) in result.entries) {
+      final exp = expiry[privId]!;
+      users.sort((a, b) {
+        if (!_sortByName) {
+          final ea = exp[a.id], eb = exp[b.id];
+          final c = ea == null
+              ? (eb == null ? 0 : -1)
+              : (eb == null ? 1 : ea.compareTo(eb));
+          if (c != 0) return c;
+        }
+        return a.fullName.compareTo(b.fullName);
+      });
     }
     return result;
   }
@@ -568,8 +594,9 @@ class _InsertActivityAdminScreenState
     String title,
     String search,
     String hint,
-    ValueChanged<String> onSearch,
-  ) {
+    ValueChanged<String> onSearch, {
+    Widget? trailing,
+  }) {
     return Row(
       children: [
         Expanded(
@@ -580,6 +607,7 @@ class _InsertActivityAdminScreenState
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
         ),
+        if (trailing != null) ...[trailing, const SizedBox(width: 12)],
         SizedBox(
           width: 280,
           child: TextFormField(
@@ -609,9 +637,10 @@ class _InsertActivityAdminScreenState
     required VoidCallback onSubmit,
   }) {
     final auth = ref.read(authProvider);
+    final expiry = <int, Map<String, DateTime?>>{};
     final eligible = helicopterId == null
         ? const <int, List<UserProfile>>{}
-        : _eligibleTechs(helicopterId);
+        : _eligibleTechs(helicopterId, expiry);
     final privileges = auth.privilegeTypes
         .where((p) => eligible.containsKey(p.id))
         .toList();
@@ -628,11 +657,11 @@ class _InsertActivityAdminScreenState
 
     return _TwoPane(
       left: [
-        DropdownButtonFormField<int>(
+        AppDropdown<int>(
           initialValue: helicopterId,
           decoration: const InputDecoration(labelText: 'Elicottero'),
           items: [
-            for (final h in auth.helicopterTypes)
+            for (final h in auth.visibleHelicopters(keep: helicopterId))
               DropdownMenuItem(value: h.id, child: Text(h.name)),
           ],
           onChanged: (v) => setState(() {
@@ -696,6 +725,26 @@ class _InsertActivityAdminScreenState
         search,
         'Cerca tecnico',
         onSearch,
+        trailing: SegmentedButton<bool>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: const [
+            ButtonSegment(
+              value: false,
+              icon: Icon(Icons.event_busy, size: 18),
+              label: Text('Scadenza'),
+              tooltip: 'Prima chi scade prima',
+            ),
+            ButtonSegment(
+              value: true,
+              icon: Icon(Icons.sort_by_alpha, size: 18),
+              label: Text('A-Z'),
+              tooltip: 'Ordine alfabetico',
+            ),
+          ],
+          selected: {_sortByName},
+          onSelectionChanged: (v) => setState(() => _sortByName = v.first),
+        ),
       ),
       sections: [
         if (team.isEmpty)
@@ -715,6 +764,7 @@ class _InsertActivityAdminScreenState
                 title: p.code,
                 subtitle: p.name,
                 users: eligible[p.id]!,
+                expiry: expiry[p.id],
                 query: search,
                 selected: selected,
                 onChanged: () => setState(() {}),
@@ -749,7 +799,7 @@ class _InsertActivityAdminScreenState
           ),
         ),
         const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
+        AppDropdown<String>(
           initialValue: _workOrderActivityType,
           decoration: const InputDecoration(
             labelText: 'Tipo attività (opzionale)',
@@ -811,7 +861,7 @@ class _InsertActivityAdminScreenState
   Widget _buildSeminarTab() {
     return _TwoPane(
       left: [
-        DropdownButtonFormField<String>(
+        AppDropdown<String>(
           initialValue: _seminarType,
           decoration: const InputDecoration(labelText: 'Tipo seminario'),
           items: const [
@@ -1115,7 +1165,7 @@ class _InsertActivityAdminScreenState
                     }
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                      child: DropdownButtonFormField<String>(
+                      child: AppDropdown<String>(
                         initialValue: _selectedUser?.id,
                         decoration: const InputDecoration(
                           labelText: 'Seleziona utente',
@@ -1167,7 +1217,7 @@ class _InsertActivityAdminScreenState
                             enabled: true,
                             child: _AdminActivityCard(
                               children: [
-                                DropdownButtonFormField<int>(
+                                AppDropdown<int>(
                                   initialValue: _crewFlightHelicopterId,
                                   menuMaxHeight: 300,
                                   decoration: const InputDecoration(
@@ -1299,7 +1349,7 @@ class _InsertActivityAdminScreenState
                                 flightHelicopters.isNotEmpty,
                             child: _AdminActivityCard(
                               children: [
-                                DropdownButtonFormField<int>(
+                                AppDropdown<int>(
                                   initialValue:
                                       flightHelicopters.any(
                                         (item) =>
@@ -1376,7 +1426,7 @@ class _InsertActivityAdminScreenState
                                 tobHelicopters.isNotEmpty,
                             child: _AdminActivityCard(
                               children: [
-                                DropdownButtonFormField<int>(
+                                AppDropdown<int>(
                                   initialValue:
                                       tobHelicopters.any(
                                         (item) => item.id == _tobHelicopterId,
@@ -1398,7 +1448,7 @@ class _InsertActivityAdminScreenState
                                       setState(() => _tobHelicopterId = value),
                                 ),
                                 const SizedBox(height: 16),
-                                DropdownButtonFormField<int>(
+                                AppDropdown<int>(
                                   initialValue:
                                       filteredCapabilities.any(
                                         (item) =>
@@ -1634,6 +1684,7 @@ class _TeamSection extends StatelessWidget {
     required this.title,
     this.subtitle,
     required this.users,
+    this.expiry,
     required this.query,
     required this.selected,
     required this.onChanged,
@@ -1642,10 +1693,27 @@ class _TeamSection extends StatelessWidget {
   final String title;
   final String? subtitle;
   final List<UserProfile> users;
+  // tecnico -> scadenza del privilegio (null = mai svolto); assente = non mostrata
+  final Map<String, DateTime?>? expiry;
   final String query;
   // modificato in place, poi onChanged
   final Set<String> selected;
   final VoidCallback onChanged;
+
+  static final _fmt = DateFormat('dd/MM/yy');
+
+  static (String, Color) _badge(DateTime? d) {
+    if (d == null) return ('Mai svolta', AppColors.currencyExpired);
+    final days = d.difference(DateTime.now()).inDays;
+    return (
+      'Scad. ${_fmt.format(d)}',
+      days < 0
+          ? AppColors.currencyExpired
+          : days <= CurrencyService.warningDays
+          ? AppColors.currencyWarning
+          : AppColors.currencyValid,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1729,6 +1797,7 @@ class _TeamSection extends StatelessWidget {
                   for (final u in visible)
                     _TechTile(
                       user: u,
+                      expiry: expiry == null ? null : _badge(expiry![u.id]),
                       selected: selected.contains(u.id),
                       onTap: () {
                         if (!selected.remove(u.id)) selected.add(u.id);
@@ -1747,11 +1816,13 @@ class _TeamSection extends StatelessWidget {
 class _TechTile extends StatelessWidget {
   const _TechTile({
     required this.user,
+    this.expiry,
     required this.selected,
     required this.onTap,
   });
 
   final UserProfile user;
+  final (String, Color)? expiry;
   final bool selected;
   final VoidCallback onTap;
 
@@ -1816,6 +1887,17 @@ class _TechTile extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 10.5,
                               color: AppColors.textHint,
+                            ),
+                          ),
+                        if (expiry case (final text, final color))
+                          Text(
+                            text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: color,
                             ),
                           ),
                       ],

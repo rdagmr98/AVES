@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
@@ -378,7 +379,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             disabledMessage: 'Nessun privilegio manutentivo assegnato.',
             child: _ActivityFormCard(
               children: [
-                DropdownButtonFormField<int>(
+                AppDropdown<int>(
                   isExpanded: true,
                   initialValue:
                       maintenanceHelicopters.any(
@@ -402,7 +403,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<int?>(
+                AppDropdown<int?>(
                   isExpanded: true,
                   initialValue:
                       _maintenancePrivilegeId == null ||
@@ -523,7 +524,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                 'Nessuna abilitazione equipaggio T o MDB assegnata.',
             child: _ActivityFormCard(
               children: [
-                DropdownButtonFormField<int>(
+                AppDropdown<int>(
                   isExpanded: true,
                   initialValue:
                       flightHelicopters.any(
@@ -584,7 +585,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
             disabledMessage: 'Nessuna abilitazione equipaggio TOB assegnata.',
             child: _ActivityFormCard(
               children: [
-                DropdownButtonFormField<int>(
+                AppDropdown<int>(
                   isExpanded: true,
                   initialValue:
                       tobHelicopters.any((item) => item.id == _tobHelicopterId)
@@ -605,7 +606,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen>
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
+                AppDropdown<int>(
                   isExpanded: true,
                   initialValue:
                       filteredCapabilities.any(

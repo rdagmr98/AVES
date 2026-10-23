@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
@@ -222,7 +223,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             title: const Text('Aggiungi equipaggio'),
             scrollable: true,
             content: _buildDialogContent([
-              DropdownButtonFormField<int>(
+              AppDropdown<int>(
                 initialValue: helicopterId,
                 menuMaxHeight: 300,
                 decoration: const InputDecoration(labelText: 'Elicottero'),
@@ -256,7 +257,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
               if (crewType == 'TOB') ...[
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
+                AppDropdown<String>(
                   initialValue: fascia,
                   menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Fascia TOB'),
@@ -394,7 +395,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             scrollable: true,
             content: _buildDialogContent([
               if (forHelicopterId == null)
-                DropdownButtonFormField<int>(
+                AppDropdown<int>(
                   initialValue: selectedHelicopter,
                   menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Elicottero'),
@@ -410,7 +411,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       setDialogState(() => selectedHelicopter = v),
                 ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int?>(
+              AppDropdown<int?>(
                 initialValue: selectedLicenseId,
                 menuMaxHeight: 300,
                 decoration: const InputDecoration(labelText: 'Tipo licenza'),
@@ -693,7 +694,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             : null,
                       ),
                       const SizedBox(height: 16),
-                      DropdownButtonFormField<int>(
+                      AppDropdown<int>(
                         initialValue: _orgUnitId,
                         menuMaxHeight: 300,
                         decoration: const InputDecoration(

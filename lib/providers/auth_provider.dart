@@ -52,6 +52,19 @@ class AuthProvider extends ChangeNotifier {
   int get unreadNotifications => _unreadNotifications;
 
   List<HelicopterType> get helicopterTypes => _helicopterTypes;
+
+  /// Elicotteri nelle tendine admin: quelli scelti in Opzioni → Elicotteri da
+  /// mostrare (`view_helicopter_ids`), più [keep] per non perdere un valore già salvato.
+  List<HelicopterType> visibleHelicopters({int? keep}) {
+    final userId = _userProfile?.id;
+    final ids = userId == null ? null : _userService.viewHelicopterIds(userId);
+    if (ids == null) return _helicopterTypes;
+    return [
+      for (final h in _helicopterTypes)
+        if (ids.contains(h.id) || h.id == keep) h,
+    ];
+  }
+
   List<PrivilegeType> get privilegeTypes => _privilegeTypes;
   List<LicenseType> get licenseTypes => _licenseTypes;
   List<TobCapability> get tobCapabilityTypes => _tobCapabilityTypes;

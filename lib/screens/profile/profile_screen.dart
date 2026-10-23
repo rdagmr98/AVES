@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
@@ -423,7 +424,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      DropdownButtonFormField<int>(
+                      AppDropdown<int>(
                         initialValue: helicopterId,
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -443,7 +444,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   setDialogState(() => helicopterId = value),
                       ),
                       const SizedBox(height: 16),
-                      DropdownButtonFormField<int>(
+                      AppDropdown<int>(
                         initialValue: licenseTypeId,
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -598,7 +599,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    DropdownButtonFormField<int>(
+                    AppDropdown<int>(
                       initialValue: helicopterId,
                       decoration: const InputDecoration(
                         labelText: 'Elicottero',
@@ -640,7 +641,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     if (crewType == 'TOB') ...[
                       const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
+                      AppDropdown<String>(
                         initialValue: fascia,
                         decoration: const InputDecoration(
                           labelText: 'Fascia TOB',
@@ -756,7 +757,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      DropdownButtonFormField<int>(
+                      AppDropdown<int>(
                         initialValue: helicopterId,
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -1034,7 +1035,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                         const SizedBox(height: 16),
                       ],
-                      DropdownButtonFormField<int>(
+                      AppDropdown<int>(
                         initialValue: _orgUnitId,
                         decoration: const InputDecoration(
                           labelText: 'Unità organizzativa',

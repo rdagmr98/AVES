@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../constants/app_constants.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
@@ -385,8 +386,8 @@ class _ValidateActivitiesScreenState
               '${item.privilegeName}\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
           onValidate: (item) => _validateMaintenance(item.id!),
-          onReject: (item) async {
-            await _service.rejectMaintenanceActivity(item.id!);
+          onReject: (item, reason) async {
+            await _service.rejectMaintenanceActivity(item.id!, reason: reason);
             await _load();
           },
           onBulkValidate: _bulkValidateMaintenance,
@@ -399,8 +400,8 @@ class _ValidateActivitiesScreenState
               'Seminario ${item.seminarType}\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.seminarDate,
           onValidate: (item) => _validateSeminar(item.id!),
-          onReject: (item) async {
-            await _service.rejectSeminarActivity(item.id!);
+          onReject: (item, reason) async {
+            await _service.rejectSeminarActivity(item.id!, reason: reason);
             await _load();
           },
           onBulkValidate: _bulkValidateSeminars,
@@ -414,8 +415,8 @@ class _ValidateActivitiesScreenState
               '${formatHours(item.flightHours)} h\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
           onValidate: (item) => _validateFlight(item.id!),
-          onReject: (item) async {
-            await _service.rejectFlightActivity(item.id!);
+          onReject: (item, reason) async {
+            await _service.rejectFlightActivity(item.id!, reason: reason);
             await _load();
           },
           onBulkValidate: _bulkValidateFlight,
@@ -429,8 +430,8 @@ class _ValidateActivitiesScreenState
               '${item.capabilityName}\n${item.description ?? 'Nessuna descrizione'}',
           dateBuilder: (item) => item.activityDate,
           onValidate: (item) => _validateTob(item.id!),
-          onReject: (item) async {
-            await _service.rejectTobActivity(item.id!);
+          onReject: (item, reason) async {
+            await _service.rejectTobActivity(item.id!, reason: reason);
             await _load();
           },
           onBulkValidate: _bulkValidateTob,
@@ -455,8 +456,58 @@ class _ValidationList<T> extends StatelessWidget {
   final String Function(T item) subtitleBuilder;
   final DateTime Function(T item) dateBuilder;
   final Future<void> Function(T item) onValidate;
-  final Future<void> Function(T item) onReject;
+  final Future<void> Function(T item, String? reason) onReject;
   final VoidCallback onBulkValidate;
+
+  // Rifiutare cancella l'attività: conferma + motivo opzionale nella notifica
+  Future<void> _confirmReject(BuildContext context, T item) async {
+    final reasonCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Rifiutare l'attività?"),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(titleBuilder(item)),
+              const SizedBox(height: 4),
+              const Text(
+                "L'attività viene eliminata e il tecnico riceve una notifica.",
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                autofocus: true,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  hintText: 'Motivo (facoltativo)',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.currencyExpired,
+            ),
+            child: const Text('Rifiuta'),
+          ),
+        ],
+      ),
+    );
+    final reason = reasonCtrl.text;
+    reasonCtrl.dispose();
+    if (ok == true) await onReject(item, reason);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -511,7 +562,7 @@ class _ValidationList<T> extends StatelessWidget {
                             child: const Text('Valida'),
                           );
                           final rejectButton = OutlinedButton(
-                            onPressed: () => onReject(item),
+                            onPressed: () => _confirmReject(context, item),
                             child: const Text('Rifiuta'),
                           );
 

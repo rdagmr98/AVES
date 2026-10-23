@@ -19,6 +19,7 @@ import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
+import '../../widgets/date_range_dialog.dart';
 import '../../widgets/filter_panel.dart';
 import '../../widgets/user_avatar.dart';
 
@@ -184,10 +185,12 @@ class _AdminPrivilegesDashboardState
         .join(', ');
   }
 
-  Future<void> _chooseGoHelicopters() async {
+  /// [save]: da Opzioni, solo "Salva" (sempre nel profilo); dalla dashboard
+  /// anche "Applica" per la sola sessione.
+  Future<void> _chooseGoHelicopters({bool save = false}) async {
     final helicopterTypes = ref.read(authProvider).helicopterTypes;
     final selected = (_goHeliIds ?? helicopterTypes.map((h) => h.id)).toSet();
-    var saveAsDefault = false;
+    var saveAsDefault = save;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -198,11 +201,12 @@ class _AdminPrivilegesDashboardState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Privilegi e licenze degli altri elicotteri non incidono '
-                  'sullo stato GO / NO GO. Con "Imposta predefiniti" la scelta '
-                  'resta nel tuo profilo e vale anche per le notifiche di '
-                  'privilegio scaduto.',
+                  'sullo stato GO / NO GO. '
+                  '${save ? 'La scelta' : 'Con "Imposta predefiniti" la scelta'} '
+                  'resta nel tuo profilo e vale anche per le tendine '
+                  'elicotteri e per le notifiche di privilegio scaduto.',
                 ),
                 Align(
                   alignment: Alignment.centerRight,
@@ -251,21 +255,22 @@ class _AdminPrivilegesDashboardState
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('Annulla'),
             ),
-            TextButton.icon(
-              onPressed: selected.isEmpty
-                  ? null
-                  : () {
-                      saveAsDefault = true;
-                      Navigator.of(ctx).pop(true);
-                    },
-              icon: const Icon(Icons.bookmark_outline, size: 18),
-              label: const Text('Imposta predefiniti'),
-            ),
+            if (!save)
+              TextButton.icon(
+                onPressed: selected.isEmpty
+                    ? null
+                    : () {
+                        saveAsDefault = true;
+                        Navigator.of(ctx).pop(true);
+                      },
+                icon: const Icon(Icons.bookmark_outline, size: 18),
+                label: const Text('Imposta predefiniti'),
+              ),
             ElevatedButton(
               onPressed: selected.isEmpty
                   ? null
                   : () => Navigator.of(ctx).pop(true),
-              child: const Text('Applica'),
+              child: Text(save ? 'Salva' : 'Applica'),
             ),
           ],
         ),
@@ -277,7 +282,7 @@ class _AdminPrivilegesDashboardState
       await _saveGoHeliIds(ids);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selezione salvata come predefinita')),
+        const SnackBar(content: Text('Elicotteri da mostrare salvati')),
       );
     }
     setState(() => _goHeliIds = ids);
@@ -587,7 +592,6 @@ class _AdminPrivilegesDashboardState
           return _rows.where((r) => r.user.id == row.user.id).firstOrNull;
         },
         onEmail: (r) => _launchMaintenanceEmail([r]),
-        helicopterTypes: ref.read(authProvider).helicopterTypes,
         privilegeTypes: ref.read(authProvider).privilegeTypes,
       ),
     );
@@ -636,9 +640,7 @@ class _AdminPrivilegesDashboardState
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Center(
-                      child: UserAvatar.fill(user: row.user),
-                    ),
+                    child: Center(child: UserAvatar.fill(user: row.user)),
                   ),
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -683,30 +685,6 @@ class _AdminPrivilegesDashboardState
               softWrap: true,
             ),
             const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.manage_accounts_outlined),
-              title: const Text('Gestione Utenti'),
-              onTap: () {
-                Navigator.of(context).pop();
-                context.go('/admin/users');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.verified_outlined),
-              title: const Text('Valida Attività'),
-              onTap: () {
-                Navigator.of(context).pop();
-                context.go('/admin/validate');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.block_outlined),
-              title: const Text('Gestione PTA'),
-              onTap: () {
-                Navigator.of(context).pop();
-                context.go('/admin/pta');
-              },
-            ),
             ListTile(
               leading: const Icon(Icons.add_task_outlined),
               title: const Text('Inserisci Attività'),
@@ -777,7 +755,8 @@ class _AdminPrivilegesDashboardState
               _goHeliSummary(helicopterTypes),
               overflow: TextOverflow.ellipsis,
             ),
-            onTap: () => Navigator.of(ctx).pop(_chooseGoHelicopters),
+            onTap: () =>
+                Navigator.of(ctx).pop(() => _chooseGoHelicopters(save: true)),
           ),
         ],
       ),
@@ -834,7 +813,9 @@ class _AdminPrivilegesDashboardState
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(old == null ? 'Nuovo tipo attività' : 'Modifica tipo attività'),
+        title: Text(
+          old == null ? 'Nuovo tipo attività' : 'Modifica tipo attività',
+        ),
         content: SizedBox(
           width: 360,
           child: TextField(
@@ -1722,12 +1703,13 @@ class _AdminPrivilegesDashboardState
               title: 'Elicotteri',
               children: [
                 for (final heli in auth.helicopterTypes)
-                  FilterPill(
-                    label: heli.code,
-                    tooltip: heli.name,
-                    selected: _helicopterTypeIds.contains(heli.id),
-                    onTap: () => _toggleFilterId(_helicopterTypeIds, heli.id),
-                  ),
+                  if (_goHeliIds?.contains(heli.id) ?? true)
+                    FilterPill(
+                      label: heli.code,
+                      tooltip: heli.name,
+                      selected: _helicopterTypeIds.contains(heli.id),
+                      onTap: () => _toggleFilterId(_helicopterTypeIds, heli.id),
+                    ),
               ],
             ),
             FilterSection(
@@ -1781,24 +1763,6 @@ class _AdminPrivilegesDashboardState
             ),
             const SizedBox(height: 16),
             _NavButton(
-              label: 'Gestione Utenti',
-              icon: Icons.manage_accounts_outlined,
-              onTap: () => context.go('/admin/users'),
-            ),
-            const SizedBox(height: 8),
-            _NavButton(
-              label: 'Valida Attività',
-              icon: Icons.verified_outlined,
-              onTap: () => context.go('/admin/validate'),
-            ),
-            const SizedBox(height: 8),
-            _NavButton(
-              label: 'Gestione PTA',
-              icon: Icons.block_outlined,
-              onTap: () => context.go('/admin/pta'),
-            ),
-            const SizedBox(height: 8),
-            _NavButton(
               label: 'Inserisci Attività',
               icon: Icons.add_task_outlined,
               onTap: () => context.go('/admin/insert'),
@@ -1822,11 +1786,7 @@ class _AdminPrivilegesDashboardState
               onTap: _printPrivilegeMatrix,
             ),
             const SizedBox(height: 8),
-            _NavButton(
-              label: 'Opzioni',
-              icon: Icons.tune,
-              onTap: _openOptions,
-            ),
+            _NavButton(label: 'Opzioni', icon: Icons.tune, onTap: _openOptions),
           ],
         ),
       ),
@@ -2006,26 +1966,25 @@ class _NavButton extends StatelessWidget {
 /// Scheda "stato di servizio" dell'utente: privilegi con currency a sinistra,
 /// attività manutentive validate (ricerca, filtri, modifica, eliminazione)
 /// a destra. A tutto schermo su desktop, colonna unica su schermi stretti.
-class _ServiceRecordDialog extends StatefulWidget {
+class _ServiceRecordDialog extends ConsumerStatefulWidget {
   const _ServiceRecordDialog({
     required this.initialRow,
     required this.reload,
     required this.onEmail,
-    required this.helicopterTypes,
     required this.privilegeTypes,
   });
 
   final _MaintenanceUserRow initialRow;
   final Future<_MaintenanceUserRow?> Function() reload;
   final void Function(_MaintenanceUserRow row) onEmail;
-  final List<HelicopterType> helicopterTypes;
   final List<PrivilegeType> privilegeTypes;
 
   @override
-  State<_ServiceRecordDialog> createState() => _ServiceRecordDialogState();
+  ConsumerState<_ServiceRecordDialog> createState() =>
+      _ServiceRecordDialogState();
 }
 
-class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
+class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
   static final _df = DateFormat('dd/MM/yyyy');
   final _activityService = ActivityService();
   final _userService = UserService();
@@ -2145,7 +2104,8 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
       for (final p in current)
         if (p.helicopterTypeId == h) p.privilegeTypeId,
     };
-    var heli = heliId ?? widget.helicopterTypes.firstOrNull?.id;
+    final helis = ref.read(authProvider).visibleHelicopters(keep: heliId);
+    var heli = heliId ?? helis.firstOrNull?.id;
     var selected = assigned(heli);
     final ok = await showDialog<bool>(
       context: context,
@@ -2165,8 +2125,10 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
                   DropdownButton<int>(
                     value: heli,
                     isExpanded: true,
+                    borderRadius: BorderRadius.circular(14),
+                    dropdownColor: AppColors.surfaceVariant,
                     items: [
-                      for (final h in widget.helicopterTypes)
+                      for (final h in helis)
                         DropdownMenuItem(
                           value: h.id,
                           child: Text(h.code, overflow: TextOverflow.ellipsis),
@@ -2378,6 +2340,8 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
                             children: [
                               label('Elicottero'),
                               DropdownButton<int>(
+                                borderRadius: BorderRadius.circular(14),
+                                dropdownColor: AppColors.surfaceVariant,
                                 value: heliId,
                                 isExpanded: true,
                                 items: [
@@ -2402,6 +2366,8 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
                             children: [
                               label('Privilegio'),
                               DropdownButton<int?>(
+                                borderRadius: BorderRadius.circular(14),
+                                dropdownColor: AppColors.surfaceVariant,
                                 value: privId,
                                 isExpanded: true,
                                 items: [
@@ -2776,6 +2742,8 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
           ),
         ),
         DropdownButton<int?>(
+          borderRadius: BorderRadius.circular(14),
+          dropdownColor: AppColors.surfaceVariant,
           value: heliOptions.containsKey(_heliId) ? _heliId : null,
           items: [
             const DropdownMenuItem(value: null, child: Text('Ogni elicottero')),
@@ -2790,6 +2758,8 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 280),
           child: DropdownButton<int?>(
+            borderRadius: BorderRadius.circular(14),
+            dropdownColor: AppColors.surfaceVariant,
             value: privOptions.containsKey(_privId) ? _privId : null,
             isExpanded: true,
             items: [
@@ -2814,8 +2784,8 @@ class _ServiceRecordDialogState extends State<_ServiceRecordDialog> {
                 : '${_fmt(_period!.start)} – ${_fmt(_period!.end)}',
           ),
           onPressed: () async {
-            final r = await showDateRangePicker(
-              context: context,
+            final r = await showDateRangeDialog(
+              context,
               firstDate: DateTime(2000),
               lastDate: DateTime.now().add(const Duration(days: 365)),
               initialDateRange: _period,

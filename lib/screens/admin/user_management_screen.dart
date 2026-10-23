@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
@@ -291,7 +292,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                   validator: required,
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<int?>(
+                AppDropdown<int?>(
                   initialValue: unitId,
                   isExpanded: true,
                   decoration: const InputDecoration(
@@ -433,7 +434,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                           Row(
                             children: [
                               Expanded(
-                                child: DropdownButtonFormField<int?>(
+                                child: AppDropdown<int?>(
                                   key: ValueKey(_orgUnitId),
                                   initialValue: _orgUnitId,
                                   isExpanded: true,
@@ -462,7 +463,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: DropdownButtonFormField<String>(
+                                child: AppDropdown<String>(
                                   key: ValueKey(_approvalFilter),
                                   initialValue: _approvalFilter,
                                   isExpanded: true,
@@ -1027,11 +1028,13 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     final coupled =
         crewType == 'T' || _crewTypeForHelicopter(helicopterTypeId) == 'T';
     final ids = coupled
-        ? widget.service.tFamilyOf(helicopterTypeId).where(
-            (id) =>
-                id == helicopterTypeId ||
-                const {'T', 'NONE'}.contains(_crewTypeForHelicopter(id)),
-          )
+        ? widget.service
+              .tFamilyOf(helicopterTypeId)
+              .where(
+                (id) =>
+                    id == helicopterTypeId ||
+                    const {'T', 'NONE'}.contains(_crewTypeForHelicopter(id)),
+              )
         : [helicopterTypeId];
     for (final id in ids) {
       _setCrewTypeForOne(id, crewType);
@@ -1433,7 +1436,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                           ),
                         const SizedBox(height: 8),
                         // ponytail: niente "Nessuna": copyWith non azzera orgUnitId.
-                        DropdownButtonFormField<int>(
+                        AppDropdown<int>(
                           initialValue:
                               ref
                                   .watch(authProvider)
@@ -1741,7 +1744,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                       children: [
                                         if (widget.showMaintenanceSections) ...[
                                           const SizedBox(height: 8),
-                                          DropdownButtonFormField<int?>(
+                                          AppDropdown<int?>(
                                             key: ValueKey(
                                               'license_${helicopter.id}_$selectedLicenseId',
                                             ),
@@ -1865,7 +1868,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                           ),
                                           if (crewType == 'TOB') ...[
                                             const SizedBox(height: 12),
-                                            DropdownButtonFormField<String>(
+                                            AppDropdown<String>(
                                               key: ValueKey(
                                                 'tob_grade_${helicopter.id}_${_tobGrades[helicopter.id] ?? 'A'}',
                                               ),
@@ -1945,14 +1948,16 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                 onPressed: () async {
                                   final assignedIds = _assignedHelicopterIds()
                                       .toSet();
-                                  final available = widget.helicopterTypes
+                                  final available = ref
+                                      .read(authProvider)
+                                      .visibleHelicopters()
                                       .where((h) => !assignedIds.contains(h.id))
                                       .toList();
                                   if (available.isEmpty) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                          'Tutti gli elicotteri già assegnati.',
+                                          'Tutti gli elicotteri da mostrare sono già assegnati.',
                                         ),
                                       ),
                                     );
@@ -1965,7 +1970,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                       title: const Text('Aggiungi Elicottero'),
                                       content: StatefulBuilder(
                                         builder: (ctx, setD) =>
-                                            DropdownButtonFormField<int>(
+                                            AppDropdown<int>(
                                               decoration: const InputDecoration(
                                                 labelText: 'Elicottero',
                                               ),
