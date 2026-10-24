@@ -54,7 +54,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-24
-- 2026-10-24 (5): privilegi a selezione multipla + "Seleziona tutti" e label dentro il campo (`BoxInputBorder`, `a8e144a`); admin modifica attività in attesa (`e54f8bc`); dashboard utente compatta di default (`_CompactGrid`, `_Badge`, interruttore Profilo > Account, `bb0b79b`). Nota vault `AVES Corsi/Tecnici privilegi multipli label e modifica attività 2026-10-24.md`.
+- 2026-10-24 (7): dashboard compatta stile iOS: `_CompactHeader` con anello di stato sull'avatar, `_CurrencyCard` compatta con anello di progresso e countdown, `_HelicopterList` raggruppata (push alla scheda elicottero); `PrivilegeGridWidget` senza `compact`, `label()` pubblico (`4c5ad0b`). Nota vault `AVES Corsi/Tecnici dashboard compatta stile iOS 2026-10-24.md`.
 - 2026-10-24 (6): OJT con privilegi filtrati per tipo (`ojtOptions` in `currency_history.dart`, `33dc499`); dashboard compatta minimal, card GO piatte con stato grande (`6686673`). Nota vault `AVES Corsi/Tecnici OJT privilegi filtrati e dashboard minimal 2026-10-24.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
