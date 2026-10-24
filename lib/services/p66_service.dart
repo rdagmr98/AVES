@@ -1,4 +1,5 @@
 import '../models/activity_models.dart';
+import '../models/reference_models.dart';
 import '../models/user_models.dart';
 import 'gh_db_service.dart';
 import 'user_service.dart';
@@ -201,7 +202,12 @@ class P66Service {
       }
 
       final licenseTypes =
-          licenses.map((item) => item.licenseName).toSet().toList()..sort();
+          (licenses.toList()..sort(
+                (a, b) => compareLicenseCode(a.licenseCode, b.licenseCode),
+              ))
+              .map((item) => item.licenseName)
+              .toSet()
+              .toList();
       final coveredMonths = monthsInLast24(user.id);
       final monthCount = coveredMonths.length;
       final validSeminars = validSeminarTypesInLast24(user.id).toList()..sort();

@@ -1598,9 +1598,13 @@ class _AdminPrivilegesDashboardState
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              _joinDistinctLabels(
-                                licenses.map((item) => item.licenseName),
-                              ),
+                              // già nell'ordine categorie di getUserLicenses
+                              licenses.isEmpty
+                                  ? '-'
+                                  : licenses
+                                        .map((item) => item.licenseName)
+                                        .toSet()
+                                        .join(', '),
                               style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(fontWeight: FontWeight.w700),
                               softWrap: true,

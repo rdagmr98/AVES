@@ -538,9 +538,10 @@ class UserService {
   }
 
   Future<List<LicenseType>> getLicenseTypes() async {
-    // per codice: A1-A4, B1.1-B1.4, B2, C (gli id seguono l'ordine di inserimento)
     final items = _referenceList('licenseTypes')
-      ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
+      ..sort(
+        (a, b) => compareLicenseCode(a['code'] as String, b['code'] as String),
+      );
     return items.map(LicenseType.fromJson).toList();
   }
 
@@ -680,9 +681,9 @@ class UserService {
         )
         .toList();
     rows.sort(
-      (a, b) => ('${a.helicopterCode}|${a.licenseCode}').compareTo(
-        '${b.helicopterCode}|${b.licenseCode}',
-      ),
+      (a, b) => a.helicopterCode != b.helicopterCode
+          ? a.helicopterCode.compareTo(b.helicopterCode)
+          : compareLicenseCode(a.licenseCode, b.licenseCode),
     );
     return rows;
   }

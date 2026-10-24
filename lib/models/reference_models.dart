@@ -26,6 +26,13 @@ class HelicopterType {
   };
 }
 
+/// Ordine delle categorie: lettera decrescente, numero crescente
+/// (C, B1.1-B1.4, B2, A1-A4).
+int compareLicenseCode(String a, String b) {
+  final byLetter = (b.isEmpty ? '' : b[0]).compareTo(a.isEmpty ? '' : a[0]);
+  return byLetter != 0 ? byLetter : a.compareTo(b);
+}
+
 class LicenseType {
   final int id;
   final String code;
