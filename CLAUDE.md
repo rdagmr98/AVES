@@ -45,6 +45,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
+| `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin |
+| `view_prefs.dart` | preferenza vista dashboard (`compactDashboard`, default compatta, `shared_preferences`), caricata in `main()` prima di `runApp` |
 
 ## Modelli
 - `user_models.dart`: utente + abilitazioni
@@ -52,7 +54,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-24
-- 2026-10-24 (3): terza tornata completata (`e9cc7fe` → `7215453`): `showDateDialog` per le date admin, seminario per scadenza, `warning_days` in criteria.json, disattiva utente (`getAllUsers` esclude i disattivati), Valida = `_ValidationTable<T>`, "Currency scadute" con revoca e OJT, storico currency manutenzione e volo, corso volo (`registerFlightCourse`). Nota vault `AVES Corsi/Tecnici richieste OJT storico currency 2026-10-24.md`.
 - 2026-10-24 (4): partecipanti dei seminari per scadenza (`67b28d8`, `seminarExpiries`/`sortByExpiry` in `currency_history.dart`). Redesign mobile (`77d613d`): `widgets/form_parts.dart` (`FormHeader`, `LabeledField`, `SaveBar`) usato da `add_activity_screen` e `profile_screen`, con Salva/Invia fissi in basso e label sopra i campi. Nota vault `AVES Corsi/Tecnici redesign mobile e seminari per scadenza 2026-10-24.md`.
+- 2026-10-24 (5): privilegi a selezione multipla + "Seleziona tutti" e label dentro il campo (`BoxInputBorder`, `a8e144a`); admin modifica attività in attesa (`e54f8bc`); dashboard utente compatta di default (`_CompactGrid`, `_Badge`, interruttore Profilo > Account, `bb0b79b`). Nota vault `AVES Corsi/Tecnici privilegi multipli label e modifica attività 2026-10-24.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
