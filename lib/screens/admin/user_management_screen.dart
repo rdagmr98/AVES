@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../widgets/app_dropdown.dart';
+import '../../widgets/date_range_dialog.dart';
 import '../../app.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
@@ -1100,8 +1101,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
 
   Future<void> _pickFlightFitnessExpiry() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showDateDialog(
+      context,
       initialDate: _user.flightFitnessExpiry ?? now,
       firstDate: DateTime(now.year - 10),
       lastDate: DateTime(now.year + 20),

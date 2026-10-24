@@ -13,7 +13,18 @@ class CurrencyService {
   final _activityService = ActivityService();
   final _ptaService = PtaService();
 
-  static const int warningDays = 30;
+  /// Giorni di preavviso "in scadenza", unico per tutte le currency:
+  /// `warning_days` sul criterio MAINTENANCE (Impostazioni currency), default 30.
+  static int get warningDays {
+    for (final item in GhDbService().criteria) {
+      if (item['criteria_type'] == 'MAINTENANCE' &&
+          item['tob_capability_id'] == null) {
+        return item['warning_days'] as int? ?? 30;
+      }
+    }
+    return 30;
+  }
+
   static const String _adminPrivNotificationUserId = 'admin_priv_001';
 
   int _nextNotificationId(Iterable<Map<String, dynamic>> items) {
@@ -201,39 +212,11 @@ class CurrencyService {
       'min_hours': c.minHours,
       'min_count': c.minCount,
       'description': c.description,
+      'warning_days': c.warningDays,
       'updated_at': DateTime.now().toIso8601String(),
       'updated_by': updatedBy,
     };
     await _db.saveCriteria(criteria);
-  }
-
-  Future<CurrencyCriteria?> updateCriteriaById(
-    int id,
-    int periodDays,
-    int? periodDaysA,
-    int? periodDaysBC,
-    double? minHours,
-    String updatedBy,
-  ) async {
-    final criteria = await getAllCriteria();
-    final match = criteria.firstWhere(
-      (item) => item.id == id,
-      orElse: () => throw Exception('Criterio non trovato'),
-    );
-    final updated = CurrencyCriteria(
-      id: match.id,
-      criteriaType: match.criteriaType,
-      tobCapabilityId: match.tobCapabilityId,
-      periodDays: periodDays,
-      periodDaysA: periodDaysA,
-      periodDaysBC: periodDaysBC,
-      minHours: minHours,
-      minCount: match.minCount,
-      description: match.description,
-      tobCapabilityName: match.tobCapabilityName,
-    );
-    await updateCriteria(updated, updatedBy);
-    return updated;
   }
 
   CurrencyStatus _computeStatus({

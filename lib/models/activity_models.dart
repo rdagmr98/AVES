@@ -106,6 +106,8 @@ class CurrencyCriteria {
   final int? minCount;
   final String? description;
   final String? tobCapabilityName;
+  // Solo sul criterio MAINTENANCE: preavviso unico per tutte le currency.
+  final int? warningDays;
 
   const CurrencyCriteria({
     this.id,
@@ -118,6 +120,7 @@ class CurrencyCriteria {
     this.minCount,
     this.description,
     this.tobCapabilityName,
+    this.warningDays,
   });
 
   factory CurrencyCriteria.fromJson(Map<String, dynamic> j) => CurrencyCriteria(
@@ -132,6 +135,7 @@ class CurrencyCriteria {
     description: j['description'] as String?,
     tobCapabilityName:
         (j['tob_capabilities'] as Map<String, dynamic>?)?['name'] as String?,
+    warningDays: j['warning_days'] as int?,
   );
 
   /// Returns the effective period for the given fascia.

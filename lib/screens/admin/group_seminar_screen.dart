@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../widgets/app_dropdown.dart';
+import '../../widgets/date_range_dialog.dart';
 import '../../app.dart';
 import '../../models/user_models.dart';
 import '../../services/gh_db_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/aves_logo_widget.dart';
+import '../../widgets/currency_badge_widget.dart';
 
 class GroupSeminarScreen extends ConsumerStatefulWidget {
   const GroupSeminarScreen({super.key});
@@ -31,6 +33,10 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
   DateTime _selectedDate = DateTime.now();
   String _seminarType = 'NAM';
   String _search = '';
+  // false = scadenza seminario più vicina in cima (predefinito), true = A-Z
+  bool _sortByName = false;
+  // tecnico -> scadenza seminario (ultimo validato + 2 anni); assente = mai
+  Map<String, DateTime> _expiry = {};
 
   @override
   void initState() {
@@ -51,8 +57,19 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
     final approvedUsers = users.where((u) => u.isApprovedMaint).toList();
     approvedUsers.sort((a, b) => a.fullName.compareTo(b.fullName));
 
+    // Stessa regola di CurrencyService: ultimo seminario validato + 2 anni di calendario.
+    final expiry = <String, DateTime>{};
+    for (final s in _db.seminars) {
+      final id = s['user_id'] as String?;
+      final d = DateTime.tryParse(s['seminar_date'] as String? ?? '');
+      if (s['is_validated'] != true || id == null || d == null) continue;
+      final e = DateTime(d.year + 2, d.month, d.day);
+      if (expiry[id]?.isAfter(e) != true) expiry[id] = e;
+    }
+
     if (!mounted) return;
     setState(() {
+      _expiry = expiry;
       _allUsers = approvedUsers;
       _filteredUsers = approvedUsers;
       _loading = false;
@@ -144,9 +161,23 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
     }
   }
 
+  // Mai svolto in cima, poi chi scade prima; a pari data alfabetico.
+  int _byExpiry(UserProfile a, UserProfile b) {
+    final ea = _expiry[a.id], eb = _expiry[b.id];
+    if (ea == null || eb == null) {
+      if (ea != eb) return ea == null ? -1 : 1;
+      return a.fullName.compareTo(b.fullName);
+    }
+    final c = ea.compareTo(eb);
+    return c != 0 ? c : a.fullName.compareTo(b.fullName);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final visible = _sortByName
+        ? _filteredUsers
+        : ([..._filteredUsers]..sort(_byExpiry));
 
     return Scaffold(
       appBar: AppBar(
@@ -215,8 +246,8 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                                 ),
                                 trailing: const Icon(Icons.calendar_today),
                                 onTap: () async {
-                                  final picked = await showDatePicker(
-                                    context: context,
+                                  final picked = await showDateDialog(
+                                    context,
                                     initialDate: _selectedDate,
                                     firstDate: DateTime(2020),
                                     lastDate: DateTime.now(),
@@ -251,11 +282,40 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                                   Expanded(
                                     child: Text(
                                       'Partecipanti approvati (${_selectedUserIds.length}/${_filteredUsers.length})',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: Theme.of(
                                         context,
                                       ).textTheme.titleLarge,
                                     ),
                                   ),
+                                  SegmentedButton<bool>(
+                                    showSelectedIcon: false,
+                                    style: const ButtonStyle(
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    segments: const [
+                                      ButtonSegment(
+                                        value: false,
+                                        icon: Icon(Icons.event_busy, size: 18),
+                                        label: Text('Scadenza'),
+                                        tooltip: 'Prima chi scade prima',
+                                      ),
+                                      ButtonSegment(
+                                        value: true,
+                                        icon: Icon(
+                                          Icons.sort_by_alpha,
+                                          size: 18,
+                                        ),
+                                        label: Text('A-Z'),
+                                        tooltip: 'Ordine alfabetico',
+                                      ),
+                                    ],
+                                    selected: {_sortByName},
+                                    onSelectionChanged: (v) =>
+                                        setState(() => _sortByName = v.first),
+                                  ),
+                                  const SizedBox(width: 8),
                                   TextButton.icon(
                                     onPressed: _toggleSelectAll,
                                     icon: Icon(
@@ -290,16 +350,34 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                                 ),
                                 child: ListView.builder(
                                   shrinkWrap: true,
-                                  itemCount: _filteredUsers.length,
+                                  itemCount: visible.length,
                                   itemBuilder: (context, index) {
-                                    final user = _filteredUsers[index];
+                                    final user = visible[index];
                                     final isSelected = _selectedUserIds
                                         .contains(user.id);
+                                    final (badge, badgeColor) = expiryBadge(
+                                      _expiry[user.id],
+                                      never: 'Mai svolto',
+                                    );
                                     return CheckboxListTile(
                                       value: isSelected,
-                                      title: Text(user.fullName),
+                                      // casella a sinistra, scadenza a destra
+                                      controlAffinity:
+                                          ListTileControlAffinity.leading,
+                                      title: Text(
+                                        user.fullName,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                       subtitle: Text(
                                         '${user.orgUnitName}${user.numeroLicenza != null ? ' • ${user.numeroLicenza}' : ''}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      secondary: Text(
+                                        badge,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: badgeColor,
+                                        ),
                                       ),
                                       onChanged: (value) {
                                         setState(() {

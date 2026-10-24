@@ -2270,8 +2270,8 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
                       icon: const Icon(Icons.event, size: 18),
                       label: Text(_fmt(value)),
                       onPressed: () async {
-                        final d = await showDatePicker(
-                          context: c,
+                        final d = await showDateDialog(
+                          c,
                           initialDate: value ?? date,
                           firstDate: DateTime(2000),
                           lastDate: DateTime.now().add(

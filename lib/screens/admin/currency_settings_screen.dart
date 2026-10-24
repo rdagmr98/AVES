@@ -72,6 +72,10 @@ class _CurrencySettingsScreenState
     final periodBCCtrl = TextEditingController(
       text: criteria.periodDaysBC != null ? '${criteria.periodDaysBC}' : '',
     );
+    final isMaintenance = criteria.criteriaType == 'MAINTENANCE';
+    final warningCtrl = TextEditingController(
+      text: '${criteria.warningDays ?? 30}',
+    );
 
     await showDialog<void>(
       context: context,
@@ -109,6 +113,17 @@ class _CurrencySettingsScreenState
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: 'Poligoni annuali MDB',
+                    ),
+                  ),
+                ],
+                if (isMaintenance) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: warningCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Preavviso "in scadenza" (giorni)',
+                      helperText: 'Vale per tutte le currency, anche volo',
                     ),
                   ),
                 ],
@@ -174,7 +189,11 @@ class _CurrencySettingsScreenState
                   final count = countCtrl.text.trim().isEmpty
                       ? null
                       : int.tryParse(countCtrl.text.trim());
-                  if (period == null) return;
+                  final warning = int.tryParse(warningCtrl.text.trim());
+                  if (period == null ||
+                      (isMaintenance && (warning == null || warning < 0))) {
+                    return;
+                  }
                   await ref
                       .read(currencyProviderProv)
                       .updateCriteria(
@@ -187,6 +206,7 @@ class _CurrencySettingsScreenState
                           minCount: hasCountField ? count : null,
                           description: criteria.description,
                           tobCapabilityName: criteria.tobCapabilityName,
+                          warningDays: isMaintenance ? warning : null,
                         ),
                         userId,
                       );
@@ -214,6 +234,7 @@ class _CurrencySettingsScreenState
     countCtrl.dispose();
     periodACtrl.dispose();
     periodBCCtrl.dispose();
+    warningCtrl.dispose();
   }
 
   @override
@@ -313,6 +334,9 @@ class _CurrencySettingsScreenState
     }
     if (c.criteriaType == 'MDB_POLIGONO') {
       return 'Periodo: ${c.periodDays} gg · Poligoni minimi: ${c.minCount ?? '-'}';
+    }
+    if (c.criteriaType == 'MAINTENANCE') {
+      return 'Periodo: ${c.periodDays} giorni · Preavviso: ${c.warningDays ?? 30} gg';
     }
     return 'Periodo: ${c.periodDays} giorni';
   }

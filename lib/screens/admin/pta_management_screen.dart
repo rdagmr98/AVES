@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../widgets/app_dropdown.dart';
+import '../../widgets/date_range_dialog.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
@@ -441,8 +442,8 @@ class _CreatePtaDialogState extends ConsumerState<_CreatePtaDialog> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showDateDialog(
+      context,
       initialDate: _issueDate,
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365)),

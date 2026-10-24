@@ -16,6 +16,7 @@ import '../../services/gh_db_service.dart';
 import '../../services/hours_format.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/filter_panel.dart';
 import '../../widgets/hours_field.dart';
 import '../../widgets/user_avatar.dart';
@@ -191,8 +192,8 @@ class _InsertActivityAdminScreenState
   }
 
   Future<void> _pickDate(ValueSetter<DateTime> onSet, DateTime current) async {
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showDateDialog(
+      context,
       initialDate: current,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
@@ -1700,21 +1701,6 @@ class _TeamSection extends StatelessWidget {
   final Set<String> selected;
   final VoidCallback onChanged;
 
-  static final _fmt = DateFormat('dd/MM/yy');
-
-  static (String, Color) _badge(DateTime? d) {
-    if (d == null) return ('Mai svolta', AppColors.currencyExpired);
-    final days = d.difference(DateTime.now()).inDays;
-    return (
-      'Scad. ${_fmt.format(d)}',
-      days < 0
-          ? AppColors.currencyExpired
-          : days <= CurrencyService.warningDays
-          ? AppColors.currencyWarning
-          : AppColors.currencyValid,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final q = query.trim().toLowerCase();
@@ -1797,7 +1783,7 @@ class _TeamSection extends StatelessWidget {
                   for (final u in visible)
                     _TechTile(
                       user: u,
-                      expiry: expiry == null ? null : _badge(expiry![u.id]),
+                      expiry: expiry == null ? null : expiryBadge(expiry![u.id]),
                       selected: selected.contains(u.id),
                       onTap: () {
                         if (!selected.remove(u.id)) selected.add(u.id);

@@ -36,8 +36,6 @@ class AppStrings {
   static const String currencyWarning = 'IN SCADENZA';
   static const String currencyExpired = 'SCADUTA';
 
-  static const int warningDays = 30;
-
   static const String roleUser = 'user';
   static const String roleAdminPriv = 'admin_priv';
   static const String roleAdminCrew = 'admin_crew';

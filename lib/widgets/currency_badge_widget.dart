@@ -1,7 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../constants/app_constants.dart';
 import '../models/activity_models.dart';
+import '../services/currency_service.dart';
+
+final _expiryFmt = DateFormat('dd/MM/yy');
+
+/// Testo e colore della scadenza (null = mai svolta) per liste di tecnici.
+(String, Color) expiryBadge(DateTime? d, {String never = 'Mai svolta'}) {
+  if (d == null) return (never, AppColors.currencyExpired);
+  final days = d.difference(DateTime.now()).inDays;
+  return (
+    'Scad. ${_expiryFmt.format(d)}',
+    days < 0
+        ? AppColors.currencyExpired
+        : days <= CurrencyService.warningDays
+        ? AppColors.currencyWarning
+        : AppColors.currencyValid,
+  );
+}
 
 class CurrencyBadgeWidget extends StatelessWidget {
   const CurrencyBadgeWidget({super.key, required this.status});
