@@ -7,6 +7,7 @@ import '../../widgets/app_dropdown.dart';
 import '../../widgets/date_range_dialog.dart';
 import '../../app.dart';
 import '../../models/user_models.dart';
+import '../../services/currency_history.dart';
 import '../../services/gh_db_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/aves_logo_widget.dart';
@@ -57,15 +58,7 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
     final approvedUsers = users.where((u) => u.isApprovedMaint).toList();
     approvedUsers.sort((a, b) => a.fullName.compareTo(b.fullName));
 
-    // Stessa regola di CurrencyService: ultimo seminario validato + 2 anni di calendario.
-    final expiry = <String, DateTime>{};
-    for (final s in _db.seminars) {
-      final id = s['user_id'] as String?;
-      final d = DateTime.tryParse(s['seminar_date'] as String? ?? '');
-      if (s['is_validated'] != true || id == null || d == null) continue;
-      final e = DateTime(d.year + 2, d.month, d.day);
-      if (expiry[id]?.isAfter(e) != true) expiry[id] = e;
-    }
+    final expiry = seminarExpiries(_db.seminars);
 
     if (!mounted) return;
     setState(() {
@@ -161,23 +154,11 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
     }
   }
 
-  // Mai svolto in cima, poi chi scade prima; a pari data alfabetico.
-  int _byExpiry(UserProfile a, UserProfile b) {
-    final ea = _expiry[a.id], eb = _expiry[b.id];
-    if (ea == null || eb == null) {
-      if (ea != eb) return ea == null ? -1 : 1;
-      return a.fullName.compareTo(b.fullName);
-    }
-    final c = ea.compareTo(eb);
-    return c != 0 ? c : a.fullName.compareTo(b.fullName);
-  }
-
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
-    final visible = _sortByName
-        ? _filteredUsers
-        : ([..._filteredUsers]..sort(_byExpiry));
+    final visible = [..._filteredUsers];
+    if (!_sortByName) sortByExpiry(visible, _expiry);
 
     return Scaffold(
       appBar: AppBar(

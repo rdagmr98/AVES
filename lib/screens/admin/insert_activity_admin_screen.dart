@@ -11,6 +11,7 @@ import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/currency_history.dart';
 import '../../services/currency_service.dart';
 import '../../services/gh_db_service.dart';
 import '../../services/hours_format.dart';
@@ -557,20 +558,36 @@ class _InsertActivityAdminScreenState
       (expiry[privId] ??= {})[user.id] = last?.add(Duration(days: _periodDays));
     }
     for (final MapEntry(key: privId, value: users) in result.entries) {
-      final exp = expiry[privId]!;
-      users.sort((a, b) {
-        if (!_sortByName) {
-          final ea = exp[a.id], eb = exp[b.id];
-          final c = ea == null
-              ? (eb == null ? 0 : -1)
-              : (eb == null ? 1 : ea.compareTo(eb));
-          if (c != 0) return c;
-        }
-        return a.fullName.compareTo(b.fullName);
-      });
+      _sortUsers(users, expiry[privId]!);
     }
     return result;
   }
+
+  void _sortUsers(List<UserProfile> users, Map<String, DateTime?> expiry) =>
+      _sortByName
+      ? users.sort((a, b) => a.fullName.compareTo(b.fullName))
+      : sortByExpiry(users, expiry);
+
+  Widget _sortToggle() => SegmentedButton<bool>(
+    showSelectedIcon: false,
+    style: const ButtonStyle(visualDensity: VisualDensity.compact),
+    segments: const [
+      ButtonSegment(
+        value: false,
+        icon: Icon(Icons.event_busy, size: 18),
+        label: Text('Scadenza'),
+        tooltip: 'Prima chi scade prima',
+      ),
+      ButtonSegment(
+        value: true,
+        icon: Icon(Icons.sort_by_alpha, size: 18),
+        label: Text('A-Z'),
+        tooltip: 'Ordine alfabetico',
+      ),
+    ],
+    selected: {_sortByName},
+    onSelectionChanged: (v) => setState(() => _sortByName = v.first),
+  );
 
   int _teamRows(Map<int, Set<String>> team) =>
       team.values.fold(0, (n, ids) => n + ids.length);
@@ -726,26 +743,7 @@ class _InsertActivityAdminScreenState
         search,
         'Cerca tecnico',
         onSearch,
-        trailing: SegmentedButton<bool>(
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          segments: const [
-            ButtonSegment(
-              value: false,
-              icon: Icon(Icons.event_busy, size: 18),
-              label: Text('Scadenza'),
-              tooltip: 'Prima chi scade prima',
-            ),
-            ButtonSegment(
-              value: true,
-              icon: Icon(Icons.sort_by_alpha, size: 18),
-              label: Text('A-Z'),
-              tooltip: 'Ordine alfabetico',
-            ),
-          ],
-          selected: {_sortByName},
-          onSelectionChanged: (v) => setState(() => _sortByName = v.first),
-        ),
+        trailing: _sortToggle(),
       ),
       sections: [
         if (team.isEmpty)
@@ -860,6 +858,9 @@ class _InsertActivityAdminScreenState
   }
 
   Widget _buildSeminarTab() {
+    final expiry = seminarExpiries(GhDbService().seminars);
+    final users = [..._users];
+    _sortUsers(users, expiry);
     return _TwoPane(
       left: [
         AppDropdown<String>(
@@ -898,11 +899,14 @@ class _InsertActivityAdminScreenState
         _seminarUserSearch,
         'Cerca partecipante',
         (v) => setState(() => _seminarUserSearch = v),
+        trailing: _sortToggle(),
       ),
       sections: [
         _TeamSection(
           title: 'Partecipanti',
-          users: _users,
+          subtitle: 'scadenza seminario',
+          users: users,
+          expiry: expiry,
           query: _seminarUserSearch,
           selected: _seminarUserIds,
           onChanged: () => setState(() {}),
@@ -1783,7 +1787,9 @@ class _TeamSection extends StatelessWidget {
                   for (final u in visible)
                     _TechTile(
                       user: u,
-                      expiry: expiry == null ? null : expiryBadge(expiry![u.id]),
+                      expiry: expiry == null
+                          ? null
+                          : expiryBadge(expiry![u.id]),
                       selected: selected.contains(u.id),
                       onTap: () {
                         if (!selected.remove(u.id)) selected.add(u.id);

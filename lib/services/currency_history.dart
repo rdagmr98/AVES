@@ -1,3 +1,5 @@
+import '../models/user_models.dart';
+
 enum CurrencyEventKind { assigned, revoked, restored, lost }
 
 /// Evento dello storico currency di un utente (timeline della scheda).
@@ -30,3 +32,28 @@ List<({DateTime lost, DateTime? regained})> currencyLosses(
         ),
   ];
 }
+
+/// Scadenza seminario per tecnico: ultimo seminario validato + 2 anni di
+/// calendario (stessa regola del calcolo currency). Assente = mai svolto.
+Map<String, DateTime> seminarExpiries(Iterable<Map<String, dynamic>> seminars) {
+  final expiry = <String, DateTime>{};
+  for (final s in seminars) {
+    final id = s['user_id'] as String?;
+    final d = DateTime.tryParse(s['seminar_date'] as String? ?? '');
+    if (s['is_validated'] != true || id == null || d == null) continue;
+    final e = DateTime(d.year + 2, d.month, d.day);
+    if (expiry[id]?.isAfter(e) != true) expiry[id] = e;
+  }
+  return expiry;
+}
+
+/// Mai svolto (assente o null) in cima, poi chi scade prima; a pari data
+/// alfabetico.
+void sortByExpiry(List<UserProfile> users, Map<String, DateTime?> expiry) =>
+    users.sort((a, b) {
+      final ea = expiry[a.id], eb = expiry[b.id];
+      final c = ea == null
+          ? (eb == null ? 0 : -1)
+          : (eb == null ? 1 : ea.compareTo(eb));
+      return c != 0 ? c : a.fullName.compareTo(b.fullName);
+    });
