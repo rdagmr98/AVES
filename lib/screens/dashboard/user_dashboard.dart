@@ -616,7 +616,11 @@ class _UserHeaderCard extends StatelessWidget {
       // Compatta: superficie piatta, la gerarchia la fanno spazio e tipografia.
       decoration: compact
           ? BoxDecoration(
-              color: AppColors.surface,
+              gradient: const LinearGradient(
+                colors: [AppColors.surfaceVariant, AppColors.surface],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(24),
             )
           : BoxDecoration(
@@ -830,55 +834,58 @@ class _CurrencyCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: textTheme.titleSmall?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+        child: Ink(
+          decoration: BoxDecoration(gradient: decoration.gradient),
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    subtitle,
-                    style: secondary,
+                    title,
+                    style: textTheme.titleSmall?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ],
-                const Spacer(),
-                const SizedBox(height: 18),
-                Text(
-                  goText,
-                  style: TextStyle(
-                    color: currentStatus.color,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
-                    height: 1.05,
-                  ),
-                ),
-                if (expiryText.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: secondary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const Spacer(),
+                  const SizedBox(height: 18),
                   Text(
-                    expiryText,
-                    style: secondary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    goText,
+                    style: TextStyle(
+                      color: currentStatus.color,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
+                      height: 1.05,
+                    ),
                   ),
+                  if (expiryText.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      expiryText,
+                      style: secondary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
