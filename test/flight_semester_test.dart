@@ -86,4 +86,34 @@ void main() {
     expect(s.label, '1/2026');
     expect(s.deadline, DateTime(2026, 6, 30));
   });
+
+  group('flightSemesterLosses', () {
+    test('semestre chiuso sotto il minimo: persa a fine semestre, ripresa '
+        'al volo che riporta il semestre a 3 h', () {
+      final out = flightSemesterLosses(
+        [
+          _a('2025-08-01', 3),
+          _a('2026-02-01', 1),
+          _a('2026-09-01', 2),
+          _a('2026-10-01', 1.5),
+        ],
+        3,
+        now,
+      );
+      expect(out, [
+        (lost: DateTime(2026, 6, 30), regained: DateTime(2026, 10, 1)),
+      ]);
+    });
+
+    test('ancora persa: nessun recupero nel semestre in corso', () {
+      expect(flightSemesterLosses([_a('2025-08-01', 3)], 3, now), [
+        (lost: DateTime(2026, 6, 30), regained: null),
+      ]);
+    });
+
+    test('semestre in corso non chiuso e nessun volo = nessuna perdita', () {
+      expect(flightSemesterLosses([_a('2026-08-01', 1)], 3, now), isEmpty);
+      expect(flightSemesterLosses([], 3, now), isEmpty);
+    });
+  });
 }

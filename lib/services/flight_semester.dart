@@ -24,6 +24,50 @@ DateTime _semEnd(DateTime start) => start.month == 1
 DateTime _prevStart(DateTime start) => start.month == 1
     ? DateTime(start.year - 1, 7, 1)
     : DateTime(start.year, 1, 1);
+DateTime _nextStart(DateTime start) => start.month == 1
+    ? DateTime(start.year, 7, 1)
+    : DateTime(start.year + 1, 1, 1);
+
+/// Perdite currency T per lo storico: un semestre chiuso entro [end] sotto
+/// [minHours] la fa perdere a fine semestre (la scadenza di
+/// [flightSemesterState]); `regained` è il volo che in un semestre successivo
+/// porta le ore del semestre al minimo (null = ancora persa a [end]).
+List<({DateTime lost, DateTime? regained})> flightSemesterLosses(
+  Iterable<FlightAct> acts,
+  double minHours,
+  DateTime end,
+) {
+  final sorted = acts.where((a) => !a.date.isAfter(end)).toList()
+    ..sort((a, b) => a.date.compareTo(b.date));
+  final out = <({DateTime lost, DateTime? regained})>[];
+  if (sorted.isEmpty) return out;
+  DateTime? lost;
+  for (
+    var s = _semStart(sorted.first.date);
+    !s.isAfter(end);
+    s = _nextStart(s)
+  ) {
+    var hours = 0.0;
+    DateTime? reached;
+    for (final a in sorted) {
+      if (a.date.isBefore(s) || a.date.isAfter(_semEnd(s))) continue;
+      hours += a.hours;
+      if (hours >= minHours) {
+        reached = a.date;
+        break;
+      }
+    }
+    if (lost != null && reached != null) {
+      out.add((lost: lost, regained: reached));
+      lost = null;
+    }
+    if (lost == null && reached == null && !_nextStart(s).isAfter(end)) {
+      lost = _semEnd(s);
+    }
+  }
+  if (lost != null) out.add((lost: lost, regained: null));
+  return out;
+}
 
 FlightSemesterState flightSemesterState(
   Iterable<FlightAct> acts,
@@ -44,9 +88,7 @@ FlightSemesterState flightSemesterState(
   DateTime? deadline;
   if (hours >= minHours) {
     // Semestre in corso a posto: prossima scadenza a fine semestre successivo.
-    deadline = _semEnd(
-      cur.month == 1 ? DateTime(cur.year, 7, 1) : DateTime(cur.year + 1, 1, 1),
-    );
+    deadline = _semEnd(_nextStart(cur));
   } else if (prevHours >= minHours || (acts.isNotEmpty && !hasPrior)) {
     // Semestre precedente a posto (o primo semestre di attività): si può
     // ancora recuperare fino a fine semestre in corso.

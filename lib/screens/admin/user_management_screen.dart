@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/date_range_dialog.dart';
+import '../../widgets/flight_course_dialog.dart';
 import '../../app.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
@@ -948,6 +949,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Set<int> _mdbCrewHelicopters = <int>{};
   final Set<int> _addedHelicopters = <int>{};
   Set<String> _tobCapabilityKeys = <String>{};
+  // Già assegnate all'ultimo caricamento/salvataggio: le nuove chiedono il corso.
+  Set<int> _savedT = <int>{};
+  Set<String> _savedCaps = <String>{};
   Map<int, String> _tobGrades = <int, String>{};
 
   @override
@@ -999,6 +1003,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       _tobCapabilityKeys = tobCaps
           .map((i) => '${i.helicopterTypeId}:${i.tobCapabilityId}')
           .toSet();
+      _savedT = {..._tCrewHelicopters};
+      _savedCaps = {..._tobCapabilityKeys};
       _addedHelicopters.clear();
       _loading = false;
     });
@@ -1255,6 +1261,25 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ruoli e assegnazioni salvati.')),
       );
+      // T e capacità nuove si acquisiscono con un corso: per la T i voli del
+      // corso contano per il semestre. Annulla = assegnata senza corso.
+      for (final id in _tCrewHelicopters.difference(_savedT)) {
+        if (!mounted) return;
+        await registerFlightCourse(context, ref, _user, heliId: id, t: true);
+      }
+      for (final k in _tobCapabilityKeys.difference(_savedCaps)) {
+        if (!mounted) return;
+        final p = k.split(':');
+        await registerFlightCourse(
+          context,
+          ref,
+          _user,
+          heliId: int.parse(p[0]),
+          capId: int.parse(p[1]),
+        );
+      }
+      _savedT = {..._tCrewHelicopters};
+      _savedCaps = {..._tobCapabilityKeys};
       widget.onSaved?.call();
     } catch (e) {
       if (!mounted) return;

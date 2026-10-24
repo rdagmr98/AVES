@@ -16,7 +16,9 @@ import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
+import '../../widgets/currency_event_tile.dart';
 import '../../widgets/filter_panel.dart';
+import '../../widgets/flight_course_dialog.dart';
 import '../../widgets/user_avatar.dart';
 
 enum _CrewSortMode { status, alphabetical, lastModified, lastActivity }
@@ -330,12 +332,13 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   }
 
   Future<void> _showUserDetail(_CrewUserRow row) async {
+    final history = _currencyService.getFlightCurrencyHistory(row.user.id);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(row.user.fullName, textAlign: TextAlign.center),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
+        content: SizedBox(
+          width: 600,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -378,11 +381,49 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Storico currency volo',
+                    style: Theme.of(dialogContext).textTheme.titleSmall,
+                  ),
+                ),
+                FutureBuilder(
+                  future: history,
+                  builder: (_, snap) => switch (snap.data) {
+                    null => const LinearProgressIndicator(),
+                    [] => const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Nessun evento.',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    final events => Column(
+                      children: [for (final e in events) CurrencyEventTile(e)],
+                    ),
+                  },
+                ),
               ],
             ),
           ),
         ),
         actions: [
+          TextButton.icon(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              if (await registerFlightCourse(context, ref, row.user) &&
+                  mounted) {
+                _loadData();
+              }
+            },
+            icon: const Icon(Icons.school_outlined),
+            label: const Text('Corso'),
+          ),
           if (row.user.email != null && row.user.email!.trim().isNotEmpty)
             TextButton.icon(
               onPressed: () => _launchCrewEmail([row]),
@@ -447,9 +488,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Center(
-                      child: UserAvatar.fill(user: row.user),
-                    ),
+                    child: Center(child: UserAvatar.fill(user: row.user)),
                   ),
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -899,12 +938,12 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                               for (final item in row.assignments) {
                                 if (item.helicopterTypeId == id) {
                                   return item.helicopterCode;
-                                  }
                                 }
-                                for (final item in row.tobCapabilities) {
-                                  if (item.helicopterTypeId == id) {
-                                    return item.helicopterCode;
-                                  }
+                              }
+                              for (final item in row.tobCapabilities) {
+                                if (item.helicopterTypeId == id) {
+                                  return item.helicopterCode;
+                                }
                               }
                               return '$id';
                             }

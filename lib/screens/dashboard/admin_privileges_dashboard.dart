@@ -21,6 +21,7 @@ import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
+import '../../widgets/currency_event_tile.dart';
 import '../../widgets/date_range_dialog.dart';
 import '../../widgets/filter_panel.dart';
 import '../../widgets/user_avatar.dart';
@@ -2971,38 +2972,8 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
               color: AppColors.textSecondary,
             ),
           ),
-        for (final e in _history) _eventTile(e),
+        for (final e in _history) CurrencyEventTile(e),
       ],
-    );
-  }
-
-  Widget _eventTile(CurrencyEvent e) {
-    final (icon, color) = switch (e.kind) {
-      CurrencyEventKind.assigned => (
-        Icons.add_circle_outline,
-        AppColors.primary,
-      ),
-      CurrencyEventKind.revoked => (
-        Icons.remove_circle_outline,
-        AppColors.textSecondary,
-      ),
-      CurrencyEventKind.restored => (
-        Icons.how_to_reg_outlined,
-        AppColors.currencyValid,
-      ),
-      CurrencyEventKind.lost => (
-        Icons.event_busy_outlined,
-        AppColors.currencyExpired,
-      ),
-    };
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color, size: 20),
-      title: Text(e.title),
-      subtitle: Text(
-        [_fmt(e.date), if ((e.note ?? '').isNotEmpty) e.note!].join('  ·  '),
-      ),
     );
   }
 

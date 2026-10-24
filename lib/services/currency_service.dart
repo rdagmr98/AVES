@@ -467,6 +467,221 @@ class CurrencyService {
     return events..sort((a, b) => b.date.compareTo(a.date));
   }
 
+  /// Storico currency volo di [userId], dal più recente: qualifiche (T/TOB/MTB)
+  /// e capacità TOB assegnate/revocate, corsi (`activity_type` "Corso ...") e
+  /// perdite ricavate dalle attività validate con le regole dei calcoli
+  /// currency volo (T a semestri, TOB base, capacità, poligono MTB).
+  Future<List<CurrencyEvent>> getFlightCurrencyHistory(String userId) async {
+    final now = DateTime.now();
+    String heli(Object? h) =>
+        '${_findReference('helicopterTypes', h)?['code'] ?? '?'}';
+    String cap(Object? c) => '${_findCapability(c as int?)?['name'] ?? '?'}';
+    DateTime day(Map<String, dynamic> a) {
+      final d = DateTime.parse(a['activity_date'] as String);
+      return DateTime(d.year, d.month, d.day);
+    }
+
+    bool isCourse(Map<String, dynamic> a) =>
+        (a['activity_type'] as String? ?? '').startsWith('Corso');
+    final flights = _db.flightActs
+        .where((a) => a['user_id'] == userId && a['is_validated'] == true)
+        .toList();
+    final tobActs = _db.tobActs
+        .where((a) => a['user_id'] == userId && a['is_validated'] == true)
+        .toList();
+    final crew = _db.crew.where((r) => r['user_id'] == userId).toList();
+    final caps = _db.tobUserCaps.where((r) => r['user_id'] == userId).toList();
+    final courseFlights = {for (final a in flights.where(isCourse)) day(a)};
+
+    final events = <CurrencyEvent>[
+      for (final a in flights.where(isCourse))
+        (
+          date: day(a),
+          kind: CurrencyEventKind.restored,
+          title: '${a['activity_type']}: ${heli(a['helicopter_type_id'])} · T',
+          note: [
+            'volo ${formatHours((a['flight_hours'] as num).toDouble())} h',
+            if ((a['description'] as String? ?? '').isNotEmpty)
+              a['description'],
+          ].join(' · '),
+        ),
+      for (final a in tobActs.where(isCourse))
+        (
+          date: day(a),
+          kind: CurrencyEventKind.restored,
+          title:
+              '${a['activity_type']}: ${heli(a['helicopter_type_id'])} · '
+              '${cap(a['tob_capability_id'])}',
+          note: a['description'] as String?,
+        ),
+    ];
+    void rowEvents(
+      Iterable<Map<String, dynamic>> rows,
+      String noun,
+      String Function(Map<String, dynamic>) what,
+    ) {
+      for (final r in rows) {
+        final created = DateTime.tryParse(r['created_at'] as String? ?? '');
+        if (created != null) {
+          events.add((
+            date: created,
+            kind: CurrencyEventKind.assigned,
+            title: '$noun assegnata: ${what(r)}',
+            note: null,
+          ));
+        }
+        if (r['active'] == false) {
+          events.add((
+            date: DateTime.tryParse(r['updated_at'] as String? ?? '') ?? now,
+            kind: CurrencyEventKind.revoked,
+            title: '$noun revocata: ${what(r)}',
+            note: null,
+          ));
+        }
+      }
+    }
+
+    rowEvents(
+      crew,
+      'Qualifica',
+      (r) => '${heli(r['helicopter_type_id'])} · ${r['crew_type']}',
+    );
+    rowEvents(
+      caps,
+      'Capacità',
+      (r) =>
+          '${heli(r['helicopter_type_id'])} · ${cap(r['tob_capability_id'])}',
+    );
+
+    // Fine conteggio perdite: oggi se una riga è attiva, sennò l'ultima revoca;
+    // null = mai assegnata.
+    DateTime? endOf(Iterable<Map<String, dynamic>> rows) {
+      DateTime? end;
+      for (final r in rows) {
+        final e = r['active'] == false
+            ? DateTime.tryParse(r['updated_at'] as String? ?? '') ?? now
+            : now;
+        if (end == null || e.isAfter(end)) end = e;
+      }
+      return end;
+    }
+
+    void addLosses(
+      String what,
+      List<({DateTime lost, DateTime? regained})> losses,
+      String note,
+      Set<DateTime> courseDates,
+    ) {
+      for (final l in losses) {
+        events.add((
+          date: l.lost,
+          kind: CurrencyEventKind.lost,
+          title: 'Currency persa: $what',
+          note: note,
+        ));
+        final r = l.regained;
+        if (r != null && !courseDates.contains(r)) {
+          events.add((
+            date: r,
+            kind: CurrencyEventKind.restored,
+            title: 'Currency riacquisita: $what',
+            note: 'con attività validata',
+          ));
+        }
+      }
+    }
+
+    Iterable<Map<String, dynamic>> crewOf(String type) =>
+        crew.where((r) => r['crew_type'] == type);
+
+    final tEnd = endOf(crewOf('T'));
+    if (tEnd != null) {
+      final minHours = (await getFlightTCriteria())?.minHours ?? 3.0;
+      addLosses(
+        'Volo T',
+        flightSemesterLosses(
+          [
+            for (final a in flights)
+              (date: day(a), hours: (a['flight_hours'] as num).toDouble()),
+          ],
+          minHours,
+          tEnd,
+        ),
+        'meno di ${formatHours(minHours)} h nel semestre',
+        courseFlights,
+      );
+    }
+
+    final tobRows = crewOf('TOB').toList();
+    final tobEnd = endOf(tobRows);
+    // ponytail: fascia della prima riga TOB attiva (come getFullCurrency) per
+    // tutto lo storico, non quella in vigore alla data della perdita.
+    final fascia =
+        (tobRows.where((r) => r['active'] != false).firstOrNull ??
+                tobRows.lastOrNull)?['tob_grade']
+            as String?;
+    if (tobEnd != null) {
+      final period =
+          (await getTobBaseCriteria())?.periodForFascia(fascia) ??
+          (fascia == 'A' ? 90 : 120);
+      addLosses(
+        'Base TOB',
+        currencyLosses(flights.map(day), period, tobEnd),
+        'nessun volo validato da $period giorni',
+        courseFlights,
+      );
+    }
+
+    final capEnds = <(Object?, Object?), DateTime>{};
+    for (final r in caps) {
+      final key = (r['helicopter_type_id'], r['tob_capability_id']);
+      final end = endOf([r])!;
+      if (capEnds[key]?.isAfter(end) != true) capEnds[key] = end;
+    }
+    for (final MapEntry(key: (h, c), value: end) in capEnds.entries) {
+      final criteria = await getTobCapabilityCriteria(c as int);
+      if (fascia != null && (criteria?.isNAForFascia(fascia) ?? false)) {
+        continue;
+      }
+      final period =
+          criteria?.periodForFascia(fascia) ?? criteria?.periodDays ?? 90;
+      final mine = tobActs.where(
+        (a) => a['helicopter_type_id'] == h && a['tob_capability_id'] == c,
+      );
+      addLosses(
+        '${heli(h)} · ${cap(c)}',
+        currencyLosses(mine.map(day), period, end),
+        'nessuna attività validata da $period giorni',
+        {for (final a in mine.where(isCourse)) day(a)},
+      );
+    }
+
+    final mtbEnd = endOf(crewOf('MTB'));
+    if (mtbEnd != null) {
+      final isTi =
+          _db.users.firstWhere(
+                (u) => u['id'] == userId,
+                orElse: () => <String, dynamic>{},
+              )['is_ti']
+              as bool? ??
+          false;
+      final period = isTi
+          ? 730
+          : (await getMtbPoligonoCriteria())?.periodDays ?? 1095;
+      addLosses(
+        'Poligono MTB',
+        currencyLosses(
+          flights.where((a) => a['is_poligono'] == true).map(day),
+          period,
+          mtbEnd,
+        ),
+        'nessun poligono validato da $period giorni',
+        courseFlights,
+      );
+    }
+    return events..sort((a, b) => b.date.compareTo(a.date));
+  }
+
   Future<List<PrivilegeCurrencyStatus>> getPerPrivilegeCurrency(
     String userId, {
     Set<int>? helicopterTypeIds,

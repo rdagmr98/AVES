@@ -289,6 +289,9 @@ class FlightActivity {
   final double flightHours;
   final String? description;
   final bool isPoligono;
+
+  /// "Corso iniziale" / "Corso di ripristino": voli del corso (storico).
+  final String? activityType;
   final bool isValidated;
   final String? validatedBy;
   final DateTime? validatedAt;
@@ -307,6 +310,7 @@ class FlightActivity {
     required this.flightHours,
     this.description,
     this.isPoligono = false,
+    this.activityType,
     this.isValidated = false,
     this.validatedBy,
     this.validatedAt,
@@ -325,6 +329,7 @@ class FlightActivity {
     flightHours: (j['flight_hours'] as num).toDouble(),
     description: j['description'] as String?,
     isPoligono: j['is_poligono'] as bool? ?? false,
+    activityType: j['activity_type'] as String?,
     isValidated: j['is_validated'] as bool? ?? false,
     validatedBy: j['validated_by'] as String?,
     validatedAt: j['validated_at'] != null
@@ -356,6 +361,7 @@ class FlightActivity {
     'description': description,
     'is_poligono': isPoligono,
     'submitted_by': submittedBy,
+    if (activityType != null) 'activity_type': activityType,
   };
 
   String get status => isValidated ? 'validated' : 'pending';
@@ -368,6 +374,9 @@ class TobActivity {
   final int tobCapabilityId;
   final DateTime activityDate;
   final String? description;
+
+  /// "Corso iniziale" / "Corso di ripristino" (storico).
+  final String? activityType;
   final bool isValidated;
   final String? validatedBy;
   final DateTime? validatedAt;
@@ -386,6 +395,7 @@ class TobActivity {
     required this.tobCapabilityId,
     required this.activityDate,
     this.description,
+    this.activityType,
     this.isValidated = false,
     this.validatedBy,
     this.validatedAt,
@@ -404,6 +414,7 @@ class TobActivity {
     tobCapabilityId: j['tob_capability_id'] as int,
     activityDate: DateTime.parse(j['activity_date'] as String),
     description: j['description'] as String?,
+    activityType: j['activity_type'] as String?,
     isValidated: j['is_validated'] as bool? ?? false,
     validatedBy: j['validated_by'] as String?,
     validatedAt: j['validated_at'] != null
@@ -437,6 +448,7 @@ class TobActivity {
     'activity_date': activityDate.toIso8601String().split('T').first,
     'description': description,
     'submitted_by': submittedBy,
+    if (activityType != null) 'activity_type': activityType,
   };
 
   String get status => isValidated ? 'validated' : 'pending';
