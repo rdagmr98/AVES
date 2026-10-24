@@ -198,7 +198,6 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                                 initialValue: _seminarType,
                                 decoration: const InputDecoration(
                                   labelText: 'Tipo Seminario',
-                                  border: OutlineInputBorder(),
                                 ),
                                 items: const [
                                   DropdownMenuItem(
@@ -244,7 +243,6 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                                 maxLines: 3,
                                 decoration: const InputDecoration(
                                   labelText: 'Note (opzionale)',
-                                  border: OutlineInputBorder(),
                                 ),
                               ),
                             ],
@@ -320,7 +318,6 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                                 decoration: const InputDecoration(
                                   labelText: 'Cerca partecipante',
                                   prefixIcon: Icon(Icons.search),
-                                  border: OutlineInputBorder(),
                                 ),
                                 onChanged: _updateSearch,
                               ),

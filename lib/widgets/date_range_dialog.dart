@@ -109,29 +109,19 @@ Future<DateTimeRange?> showDateRangeDialog(
   return showDialog<DateTimeRange>(
     context: context,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setDialogState) => _dialog(
-        ctx,
-        [
-          _pane(
-            'Dal',
-            start,
-            firstDate,
-            lastDate,
-            (d) => setDialogState(() {
-              start = d;
-              if (end.isBefore(d)) end = d;
-            }),
-          ),
-          _pane(
-            'Al',
-            end,
-            start,
-            lastDate,
-            (d) => setDialogState(() => end = d),
-          ),
-        ],
-        () => Navigator.of(ctx).pop(DateTimeRange(start: start, end: end)),
-      ),
+      builder: (ctx, setDialogState) => _dialog(ctx, [
+        _pane(
+          'Dal',
+          start,
+          firstDate,
+          lastDate,
+          (d) => setDialogState(() {
+            start = d;
+            if (end.isBefore(d)) end = d;
+          }),
+        ),
+        _pane('Al', end, start, lastDate, (d) => setDialogState(() => end = d)),
+      ], () => Navigator.of(ctx).pop(DateTimeRange(start: start, end: end))),
     ),
   );
 }

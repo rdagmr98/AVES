@@ -6,7 +6,6 @@ class PtaService {
   final _db = GhDbService();
   final _notifications = NotificationService();
 
-
   // ── helpers ─────────────────────────────────────────────────────────────
 
   int _nextId(Iterable<Map<String, dynamic>> items) {

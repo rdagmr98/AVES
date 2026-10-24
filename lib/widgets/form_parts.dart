@@ -98,6 +98,55 @@ class LabeledField extends StatelessWidget {
   }
 }
 
+/// Lista di checkbox con "Seleziona tutti" in testa (privilegi e simili).
+class MultiCheckList<T> extends StatelessWidget {
+  const MultiCheckList({
+    super.key,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Map<T, String> options;
+  final Set<T> selected;
+  final ValueChanged<Set<T>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final picked = selected.where(options.containsKey).length;
+    final all = options.isNotEmpty && picked == options.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (options.length > 1)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            tristate: true,
+            value: all ? true : (picked == 0 ? false : null),
+            title: const Text(
+              'Seleziona tutti',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            onChanged: (_) => onChanged(all ? {} : options.keys.toSet()),
+          ),
+        for (final MapEntry(:key, :value) in options.entries)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: selected.contains(key),
+            title: Text(value, softWrap: true),
+            onChanged: (on) => onChanged(
+              on == true ? {...selected, key} : ({...selected}..remove(key)),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Barra fissa in basso con l'azione principale del form (pollice su mobile).
 class SaveBar extends StatelessWidget {
   const SaveBar({

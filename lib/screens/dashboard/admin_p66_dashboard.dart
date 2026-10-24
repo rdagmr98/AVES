@@ -215,9 +215,7 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Center(
-                      child: UserAvatar.fill(user: row.user),
-                    ),
+                    child: Center(child: UserAvatar.fill(user: row.user)),
                   ),
                   Text(
                     row.user.nome,

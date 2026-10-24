@@ -72,7 +72,8 @@ class GhDbService {
         f,
       ) async {
         final entry = await _fetchFile(f);
-        if (!busy(f)) _cache[f] = entry; // una scrittura può partire durante il fetch
+        if (!busy(f))
+          _cache[f] = entry; // una scrittura può partire durante il fetch
       }),
     );
   }
@@ -202,7 +203,10 @@ class GhDbService {
 
   /// Payload spedito a GitHub (users.json: cache in chiaro, scrittura cifrata).
   dynamic _wireFor(String fileName, dynamic data) => fileName == 'users.json'
-      ? [for (final u in data as List) _encryptUser(Map<String, dynamic>.from(u))]
+      ? [
+          for (final u in data as List)
+            _encryptUser(Map<String, dynamic>.from(u)),
+        ]
       : data;
 
   /// Ultima versione nota del server, record per record (id → json): serve
@@ -242,7 +246,8 @@ class GhDbService {
           else if (remoteById.containsKey(r['id']))
             remoteById[r['id']],
         for (final r in remoteList)
-          if (!base.containsKey((r as Map)['id']) && !localIds.contains(r['id']))
+          if (!base.containsKey((r as Map)['id']) &&
+              !localIds.contains(r['id']))
             r,
       ];
     }
@@ -478,7 +483,11 @@ class GhDbService {
       );
 
   Future<void> savePushSubscriptions(List<Map<String, dynamic>> data) =>
-      _writeFile('push_subscriptions.json', data, 'aggiornamento sottoscrizioni push');
+      _writeFile(
+        'push_subscriptions.json',
+        data,
+        'aggiornamento sottoscrizioni push',
+      );
 
   List<Map<String, dynamic>> get pta =>
       List<Map<String, dynamic>>.from(_getData('pta.json') as List? ?? []);

@@ -72,7 +72,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
   late int _type = widget.initialTab.clamp(0, 3);
 
   int? _maintenanceHelicopterId;
-  int? _maintenancePrivilegeId;
+  Set<int> _maintenancePrivilegeIds = {};
   DateTime _maintenanceDate = DateTime.now();
   bool _maintenanceIsWorkOrder = false;
   DateTime? _maintenanceDateFrom;
@@ -125,13 +125,11 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
       _showMessage('Seleziona l\'elicottero.');
       return;
     }
+    if (_maintenancePrivilegeIds.isEmpty) {
+      _showMessage('Seleziona almeno un privilegio esercitato.');
+      return;
+    }
     if (_maintenanceIsWorkOrder) {
-      if (_maintenancePrivilegeId == null) {
-        _showMessage(
-          'Seleziona il privilegio esercitato per l\'ordine di lavoro.',
-        );
-        return;
-      }
       if (_maintenanceDateFrom == null || _maintenanceDateTo == null) {
         _showMessage(
           'Inserisci entrambe le date (Dal / Al) per l\'ordine di lavoro.',
@@ -149,32 +147,35 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     }
     setState(() => _saving = true);
     try {
-      await _service.addMaintenanceActivity(
-        MaintenanceActivity(
-          userId: user.id,
-          helicopterTypeId: _maintenanceHelicopterId!,
-          privilegeTypeId: _maintenancePrivilegeId,
-          activityDate: _maintenanceIsWorkOrder
-              ? (_maintenanceDateTo ?? _maintenanceDate)
-              : _maintenanceDate,
-          dateFrom: _maintenanceIsWorkOrder ? _maintenanceDateFrom : null,
-          dateTo: _maintenanceIsWorkOrder ? _maintenanceDateTo : null,
-          description: _maintenanceDescCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceDescCtrl.text.trim(),
-          activityType: null,
-          matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceMatricolaCtrl.text.trim(),
-          numeroCorrozzella: _maintenanceNumCarrCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceNumCarrCtrl.text.trim(),
-          ordineLavoro: _maintenanceOrdLavCtrl.text.trim().isEmpty
-              ? null
-              : _maintenanceOrdLavCtrl.text.trim(),
-          submittedBy: user.id,
-        ),
-      );
+      // Un'attività per privilegio: la currency è calcolata per privilegio.
+      for (final privilegeId in _maintenancePrivilegeIds) {
+        await _service.addMaintenanceActivity(
+          MaintenanceActivity(
+            userId: user.id,
+            helicopterTypeId: _maintenanceHelicopterId!,
+            privilegeTypeId: privilegeId,
+            activityDate: _maintenanceIsWorkOrder
+                ? (_maintenanceDateTo ?? _maintenanceDate)
+                : _maintenanceDate,
+            dateFrom: _maintenanceIsWorkOrder ? _maintenanceDateFrom : null,
+            dateTo: _maintenanceIsWorkOrder ? _maintenanceDateTo : null,
+            description: _maintenanceDescCtrl.text.trim().isEmpty
+                ? null
+                : _maintenanceDescCtrl.text.trim(),
+            activityType: null,
+            matricolaMilitare: _maintenanceMatricolaCtrl.text.trim().isEmpty
+                ? null
+                : _maintenanceMatricolaCtrl.text.trim(),
+            numeroCorrozzella: _maintenanceNumCarrCtrl.text.trim().isEmpty
+                ? null
+                : _maintenanceNumCarrCtrl.text.trim(),
+            ordineLavoro: _maintenanceOrdLavCtrl.text.trim().isEmpty
+                ? null
+                : _maintenanceOrdLavCtrl.text.trim(),
+            submittedBy: user.id,
+          ),
+        );
+      }
       _finishSubmit();
     } catch (e) {
       if (mounted) {
@@ -357,10 +358,11 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     final filteredPrivileges = maintenancePrivileges
         .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
         .toList();
-    if (!filteredPrivileges.any(
-      (item) => item.privilegeTypeId == _maintenancePrivilegeId,
-    )) {
-      _maintenancePrivilegeId = null;
+    _maintenancePrivilegeIds.retainWhere(
+      (id) => filteredPrivileges.any((item) => item.privilegeTypeId == id),
+    );
+    if (filteredPrivileges.length == 1) {
+      _maintenancePrivilegeIds = {filteredPrivileges.single.privilegeTypeId};
     }
     _flightHelicopterId = _keepOrOnly(
       _flightHelicopterId,
@@ -393,31 +395,23 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
           ),
         ),
         LabeledField(
-          label: 'Tipo attività (privilegio)',
-          optional: !_maintenanceIsWorkOrder,
-          child: AppDropdown<int?>(
-            initialValue: _maintenancePrivilegeId,
-            menuMaxHeight: 300,
-            decoration: InputDecoration(
-              helperText: _maintenanceIsWorkOrder
-                  ? 'Obbligatorio per ordine di lavoro'
-                  : 'Opzionale per compatibilità con attività legacy',
-            ),
-            items: [
-              const DropdownMenuItem<int?>(
-                value: null,
-                child: Text('Tutti i privilegi / legacy'),
-              ),
-              ...filteredPrivileges.map(
-                (item) => DropdownMenuItem<int?>(
-                  value: item.privilegeTypeId,
-                  child: Text(item.privilegeName),
+          label: 'Privilegi esercitati',
+          child: filteredPrivileges.isEmpty
+              ? Text(
+                  _maintenanceHelicopterId == null
+                      ? 'Scegli prima l\'elicottero.'
+                      : 'Nessun privilegio assegnato su questo elicottero.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              : MultiCheckList<int>(
+                  options: {
+                    for (final item in filteredPrivileges)
+                      item.privilegeTypeId: item.privilegeName,
+                  },
+                  selected: _maintenancePrivilegeIds,
+                  onChanged: (ids) =>
+                      setState(() => _maintenancePrivilegeIds = ids),
                 ),
-              ),
-            ],
-            onChanged: (value) =>
-                setState(() => _maintenancePrivilegeId = value),
-          ),
         ),
         LabeledField(
           label: 'Modalità',

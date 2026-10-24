@@ -161,24 +161,19 @@ class AppTheme {
         hintStyle: const TextStyle(color: AppColors.textHint),
         prefixIconColor: AppColors.textSecondary,
         suffixIconColor: AppColors.textSecondary,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+        border: BoxInputBorder(
           borderSide: const BorderSide(color: AppColors.border),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+        enabledBorder: BoxInputBorder(
           borderSide: const BorderSide(color: AppColors.border),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+        focusedBorder: BoxInputBorder(
           borderSide: const BorderSide(color: AppColors.accentGlow, width: 1.6),
         ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+        errorBorder: BoxInputBorder(
           borderSide: const BorderSide(color: AppColors.currencyExpired),
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+        focusedErrorBorder: BoxInputBorder(
           borderSide: const BorderSide(
             color: AppColors.currencyExpired,
             width: 1.4,
@@ -281,4 +276,60 @@ class AppTheme {
       ),
     );
   }
+}
+
+/// Bordo arrotondato con la label flottante DENTRO il campo (`isOutline` false).
+/// Con `OutlineInputBorder` la label sta a cavallo del bordo superiore e viene
+/// tagliata a metà quando il campo è il primo di un dialog o di una lista.
+class BoxInputBorder extends InputBorder {
+  const BoxInputBorder({super.borderSide = const BorderSide()});
+
+  static const _radius = Radius.circular(16);
+
+  @override
+  bool get isOutline => false;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.all(borderSide.width);
+
+  @override
+  BoxInputBorder copyWith({BorderSide? borderSide}) =>
+      BoxInputBorder(borderSide: borderSide ?? this.borderSide);
+
+  @override
+  ShapeBorder scale(double t) =>
+      BoxInputBorder(borderSide: borderSide.scale(t));
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()
+    ..addRRect(
+      RRect.fromRectAndRadius(rect, _radius).deflate(borderSide.width),
+    );
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
+      Path()..addRRect(RRect.fromRectAndRadius(rect, _radius));
+
+  @override
+  void paint(
+    Canvas canvas,
+    Rect rect, {
+    double? gapStart,
+    double gapExtent = 0.0,
+    double gapPercentage = 0.0,
+    TextDirection? textDirection,
+  }) {
+    if (borderSide.style == BorderStyle.none) return;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, _radius).deflate(borderSide.width / 2),
+      borderSide.toPaint(),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is BoxInputBorder && other.borderSide == borderSide;
+
+  @override
+  int get hashCode => borderSide.hashCode;
 }

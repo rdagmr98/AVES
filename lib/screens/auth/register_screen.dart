@@ -8,6 +8,7 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../services/user_service.dart';
+import '../../widgets/form_parts.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -436,19 +437,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
-              ...privilegeTypes.map(
-                (pt) => CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(pt.name),
-                  value: selectedPrivilegeIds.contains(pt.id),
-                  onChanged: (_) => setDialogState(() {
-                    if (selectedPrivilegeIds.contains(pt.id)) {
-                      selectedPrivilegeIds.remove(pt.id);
-                    } else {
-                      selectedPrivilegeIds.add(pt.id);
-                    }
-                  }),
+              MultiCheckList<int>(
+                options: {for (final pt in privilegeTypes) pt.id: pt.name},
+                selected: selectedPrivilegeIds,
+                onChanged: (ids) => setDialogState(
+                  () => selectedPrivilegeIds
+                    ..clear()
+                    ..addAll(ids),
                 ),
               ),
             ]),

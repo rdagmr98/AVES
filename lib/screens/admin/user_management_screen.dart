@@ -1470,7 +1470,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                               labelText: 'Numero licenza (login)',
                               helperText:
                                   'Admin CSL può aggiornarlo: la password resta invariata',
-                              border: OutlineInputBorder(),
                               isDense: true,
                             ),
                           )
@@ -1493,7 +1492,6 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Unità organizzativa',
-                            border: OutlineInputBorder(),
                             isDense: true,
                           ),
                           items: [

@@ -466,19 +466,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         style: Theme.of(ctx).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
-                      ...privilegeTypes.map(
-                        (item) => CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: selectedPrivilegeIds.contains(item.id),
-                          title: Text(item.name, softWrap: true),
-                          onChanged: (_) => setDialogState(() {
-                            if (selectedPrivilegeIds.contains(item.id)) {
-                              selectedPrivilegeIds.remove(item.id);
-                            } else {
-                              selectedPrivilegeIds.add(item.id);
-                            }
-                          }),
+                      MultiCheckList<int>(
+                        options: {
+                          for (final item in privilegeTypes) item.id: item.name,
+                        },
+                        selected: selectedPrivilegeIds,
+                        onChanged: (ids) => setDialogState(
+                          () => selectedPrivilegeIds
+                            ..clear()
+                            ..addAll(ids),
                         ),
                       ),
                     ],

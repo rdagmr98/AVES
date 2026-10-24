@@ -73,10 +73,7 @@ pw.Widget _matrixDataCell(
 }
 
 pw.Widget _matrixFilledCell() {
-  return pw.Container(
-    color: PdfColors.black,
-    alignment: pw.Alignment.center,
-  );
+  return pw.Container(color: PdfColors.black, alignment: pw.Alignment.center);
 }
 
 pw.Widget _matrixEmptyCell() {
@@ -298,8 +295,12 @@ class ReportService {
       // Keep if user has a license OR privilege for one of the filtered helicopters
       if (helicopterTypeIds != null &&
           helicopterTypeIds.isNotEmpty &&
-          !licenses.any((l) => helicopterTypeIds.contains(l.helicopterTypeId)) &&
-          !privileges.any((p) => helicopterTypeIds.contains(p.helicopterTypeId))) {
+          !licenses.any(
+            (l) => helicopterTypeIds.contains(l.helicopterTypeId),
+          ) &&
+          !privileges.any(
+            (p) => helicopterTypeIds.contains(p.helicopterTypeId),
+          )) {
         continue;
       }
       // GO status per (helicopter, privilege) — the matrix cell must reflect
@@ -356,10 +357,7 @@ class ReportService {
           final widgets = <pw.Widget>[
             pw.Text(
               'Matrice Privilegi CSL',
-              style: pw.TextStyle(
-                fontSize: 18,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 8),
             pw.Text('Generato il $generatedAt'),
@@ -418,7 +416,9 @@ class ReportService {
                   horizontal: 6,
                   vertical: 5,
                 ),
-                decoration: const pw.BoxDecoration(color: PdfColors.blueGrey900),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.blueGrey900,
+                ),
                 child: pw.Text(
                   'Elicottero: $heliCode',
                   style: pw.TextStyle(
@@ -490,8 +490,7 @@ class ReportService {
                         _matrixDataCell(row.license),
                         _matrixDataCell(row.licenseNumber),
                         ...allPrivilegeTypes.map(
-                          (pt) =>
-                              row.goPrivilegeIds.contains(pt.id)
+                          (pt) => row.goPrivilegeIds.contains(pt.id)
                               ? _matrixFilledCell()
                               : _matrixEmptyCell(),
                         ),
@@ -506,9 +505,7 @@ class ReportService {
 
           if (sortedHelicopterIds.isEmpty) {
             widgets.add(
-              pw.Text(
-                'Nessun dato disponibile per i filtri selezionati.',
-              ),
+              pw.Text('Nessun dato disponibile per i filtri selezionati.'),
             );
           }
 
