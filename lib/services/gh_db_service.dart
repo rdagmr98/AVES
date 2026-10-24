@@ -72,8 +72,8 @@ class GhDbService {
         f,
       ) async {
         final entry = await _fetchFile(f);
-        if (!busy(f))
-          _cache[f] = entry; // una scrittura può partire durante il fetch
+        // una scrittura può partire durante il fetch
+        if (!busy(f)) _cache[f] = entry;
       }),
     );
   }

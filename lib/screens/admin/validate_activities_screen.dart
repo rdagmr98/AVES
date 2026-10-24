@@ -8,6 +8,7 @@ import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/hours_format.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/activity_edit_dialog.dart';
 import '../../widgets/app_dropdown.dart';
 
 class ValidateActivitiesScreen extends ConsumerStatefulWidget {
@@ -147,6 +148,7 @@ class _ValidateActivitiesScreenState
               _service.validateMaintenanceActivity(i.id!, _adminId),
           reject: (i, r) =>
               _service.rejectMaintenanceActivity(i.id!, reason: r),
+          edit: editMaintenanceActivity,
           onDone: _load,
         );
       case _ValidationTabType.seminar:
@@ -157,6 +159,7 @@ class _ValidateActivitiesScreenState
               (i.userFullName, '', i.seminarType, i.description, i.seminarDate),
           validate: (i) => _service.validateSeminarActivity(i.id!, _adminId),
           reject: (i, r) => _service.rejectSeminarActivity(i.id!, reason: r),
+          edit: editSeminarActivity,
           onDone: _load,
         );
       case _ValidationTabType.flight:
@@ -172,6 +175,7 @@ class _ValidateActivitiesScreenState
           ),
           validate: (i) => _service.validateFlightActivity(i.id!, _adminId),
           reject: (i, r) => _service.rejectFlightActivity(i.id!, reason: r),
+          edit: editFlightActivity,
           onDone: _load,
         );
       case _ValidationTabType.tob:
@@ -187,6 +191,7 @@ class _ValidateActivitiesScreenState
           ),
           validate: (i) => _service.validateTobActivity(i.id!, _adminId),
           reject: (i, r) => _service.rejectTobActivity(i.id!, reason: r),
+          edit: editTobActivity,
           onDone: _load,
         );
     }
@@ -205,6 +210,7 @@ class _ValidationTable<T> extends StatefulWidget {
     required this.row,
     required this.validate,
     required this.reject,
+    required this.edit,
     required this.onDone,
   });
 
@@ -213,6 +219,7 @@ class _ValidationTable<T> extends StatefulWidget {
   final _Row Function(T item) row;
   final Future<void> Function(T item) validate;
   final Future<void> Function(T item, String? reason) reject;
+  final Future<bool> Function(BuildContext context, T item) edit;
   final Future<void> Function() onDone;
 
   @override
@@ -260,6 +267,17 @@ class _ValidationTableState<T> extends State<_ValidationTable<T>> {
       ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _edit(T item) async {
+    try {
+      if (await widget.edit(context, item)) await widget.onDone();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -486,6 +504,11 @@ class _ValidationTableState<T> extends State<_ValidationTable<T>> {
               onPressed: _busy
                   ? null
                   : () => _run([item], widget.validate, 'attività validate'),
+            ),
+            IconButton(
+              tooltip: 'Modifica',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _busy ? null : () => _edit(item),
             ),
             IconButton(
               tooltip: 'Rifiuta',

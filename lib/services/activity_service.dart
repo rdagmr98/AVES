@@ -208,17 +208,30 @@ class ActivityService {
 
   /// Aggiorna i campi modificabili (null = azzera il campo); id, utente e
   /// stato di validazione restano invariati.
-  Future<void> updateMaintenanceActivity(
+  Future<void> updateMaintenanceActivity(int id, Map<String, dynamic> fields) =>
+      _update(_db.maintenanceActs, _db.saveMaintenanceActs, id, fields);
+
+  Future<void> updateFlightActivity(int id, Map<String, dynamic> fields) =>
+      _update(_db.flightActs, _db.saveFlightActs, id, fields);
+
+  Future<void> updateTobActivity(int id, Map<String, dynamic> fields) =>
+      _update(_db.tobActs, _db.saveTobActs, id, fields);
+
+  Future<void> updateSeminarActivity(int id, Map<String, dynamic> fields) =>
+      _update(_db.seminars, _db.saveSeminars, id, fields);
+
+  Future<void> _update(
+    List<Map<String, dynamic>> rows,
+    Future<void> Function(List<Map<String, dynamic>>) save,
     int id,
     Map<String, dynamic> fields,
   ) async {
-    final rows = _db.maintenanceActs;
     final index = rows.indexWhere((item) => item['id'] == id);
     if (index == -1) {
-      throw Exception('Attività manutentiva non trovata');
+      throw Exception('Attività non trovata');
     }
     rows[index] = {...rows[index], ...fields};
-    await _db.saveMaintenanceActs(rows);
+    await save(rows);
   }
 
   Future<List<MaintenanceActivity>> getUserMaintenanceActivities(
