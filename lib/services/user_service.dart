@@ -3,6 +3,7 @@ import '../models/user_models.dart';
 import 'gh_db_service.dart';
 import 'name_format.dart';
 import 'notification_service.dart';
+import 'merge_user_rows.dart';
 
 class UserService {
   final _db = GhDbService();
@@ -685,55 +686,21 @@ class UserService {
     return rows;
   }
 
-  /// Righe di partenza per i setter: senza [append] quelle di [userId] vengono
-  /// sostituite; con [append] (registrazione o presa di possesso di un account
-  /// pre-registrato) restano e si aggiungono solo le righe nuove.
-  List<Map<String, dynamic>> _baseRows(
-    List<Map<String, dynamic>> all,
-    String userId,
-    bool append,
-  ) => all.where((r) => append || r['user_id'] != userId).toList();
-
-  bool _hasRow(
-    List<Map<String, dynamic>> rows,
-    String userId,
-    Map<String, dynamic> item,
-    List<String> keys,
-  ) => rows.any(
-    (r) =>
-        r['user_id'] == userId &&
-        r['active'] != false &&
-        keys.every((k) => r[k] == item[k]),
-  );
-
   Future<void> setUserLicenses(
     String userId,
     List<Map<String, dynamic>> licenses, {
     bool append = false,
-  }) async {
-    final now = DateTime.now().toIso8601String();
-    final updated = _baseRows(_db.licenses, userId, append);
-    for (final item in licenses) {
-      if (_hasRow(updated, userId, item, const [
-        'helicopter_type_id',
-        'license_type_id',
-      ])) {
-        continue;
-      }
-      updated.add({
-        'id': _nextId(updated),
-        'user_id': userId,
-        'helicopter_type_id': item['helicopter_type_id'],
-        'license_type_id': item['license_type_id'],
-        'license_number': item['license_number'],
-        'expiry_date': item['expiry_date'],
-        'active': true,
-        'created_at': now,
-        'updated_at': now,
-      });
-    }
-    await _db.saveLicenses(updated);
-  }
+  }) => _db.saveLicenses(
+    mergeUserRows(
+      _db.licenses,
+      userId,
+      licenses,
+      const ['helicopter_type_id', 'license_type_id'],
+      const ['license_number', 'expiry_date'],
+      append: append,
+      nextId: _nextId,
+    ),
+  );
 
   Future<List<UserPrivilege>> getUserPrivileges(String userId) async {
     final rows = _db.privileges
@@ -764,29 +731,17 @@ class UserService {
     String userId,
     List<Map<String, dynamic>> privileges, {
     bool append = false,
-  }) async {
-    final now = DateTime.now().toIso8601String();
-    final updated = _baseRows(_db.privileges, userId, append);
-    for (final item in privileges) {
-      if (_hasRow(updated, userId, item, const [
-        'helicopter_type_id',
-        'privilege_type_id',
-      ])) {
-        continue;
-      }
-      updated.add({
-        'id': _nextId(updated),
-        'user_id': userId,
-        'helicopter_type_id': item['helicopter_type_id'],
-        'privilege_type_id': item['privilege_type_id'],
-        'expiry_date': item['expiry_date'],
-        'active': true,
-        'created_at': now,
-        'updated_at': now,
-      });
-    }
-    await _db.savePrivileges(updated);
-  }
+  }) => _db.savePrivileges(
+    mergeUserRows(
+      _db.privileges,
+      userId,
+      privileges,
+      const ['helicopter_type_id', 'privilege_type_id'],
+      const ['expiry_date'],
+      append: append,
+      nextId: _nextId,
+    ),
+  );
 
   /// Elicotteri su cui un T vale insieme: la famiglia 169 (UH169B/UH169D),
   /// altrimenti solo l'elicottero stesso.
@@ -838,29 +793,17 @@ class UserService {
     String userId,
     List<Map<String, dynamic>> assignments, {
     bool append = false,
-  }) async {
-    final now = DateTime.now().toIso8601String();
-    final updated = _baseRows(_db.crew, userId, append);
-    for (final item in assignments) {
-      if (_hasRow(updated, userId, item, const [
-        'helicopter_type_id',
-        'crew_type',
-      ])) {
-        continue;
-      }
-      updated.add({
-        'id': _nextId(updated),
-        'user_id': userId,
-        'helicopter_type_id': item['helicopter_type_id'],
-        'crew_type': item['crew_type'],
-        'tob_grade': item['tob_grade'],
-        'active': true,
-        'created_at': now,
-        'updated_at': now,
-      });
-    }
-    await _db.saveCrew(updated);
-  }
+  }) => _db.saveCrew(
+    mergeUserRows(
+      _db.crew,
+      userId,
+      assignments,
+      const ['helicopter_type_id', 'crew_type'],
+      const ['tob_grade'],
+      append: append,
+      nextId: _nextId,
+    ),
+  );
 
   Future<List<UserTobCapability>> getUserTobCapabilities(String userId) async {
     final rows = _db.tobUserCaps
@@ -891,29 +834,17 @@ class UserService {
     String userId,
     List<Map<String, dynamic>> caps, {
     bool append = false,
-  }) async {
-    final now = DateTime.now().toIso8601String();
-    final updated = _baseRows(_db.tobUserCaps, userId, append);
-    for (final item in caps) {
-      if (_hasRow(updated, userId, item, const [
-        'helicopter_type_id',
-        'tob_capability_id',
-      ])) {
-        continue;
-      }
-      updated.add({
-        'id': _nextId(updated),
-        'user_id': userId,
-        'helicopter_type_id': item['helicopter_type_id'],
-        'tob_capability_id': item['tob_capability_id'],
-        'expiry_date': item['expiry_date'],
-        'active': true,
-        'created_at': now,
-        'updated_at': now,
-      });
-    }
-    await _db.saveTobUserCaps(updated);
-  }
+  }) => _db.saveTobUserCaps(
+    mergeUserRows(
+      _db.tobUserCaps,
+      userId,
+      caps,
+      const ['helicopter_type_id', 'tob_capability_id'],
+      const ['expiry_date'],
+      append: append,
+      nextId: _nextId,
+    ),
+  );
 
   Future<void> addUserLicense(UserLicense lic) async {
     final licenses = _db.licenses;

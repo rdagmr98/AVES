@@ -17,6 +17,7 @@ import '../../services/pta_service.dart';
 import '../../services/report_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/app_dropdown.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/date_range_dialog.dart';
@@ -597,6 +598,150 @@ class _AdminPrivilegesDashboardState
     );
   }
 
+  /// Privilegi scaduti: togli o riabilita con OJT. In coda gli utenti NO GO
+  /// per altri motivi (seminario, ...), che si gestiscono dalla scheda.
+  Future<void> _showExpired() async {
+    final df = DateFormat('dd/MM/yyyy');
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) {
+          final privs =
+              [
+                for (final r in _rows)
+                  for (final ps in r.perPrivilegeCurrency)
+                    if (ps.status.isExpired) (r, ps),
+              ]..sort(
+                (a, b) => (a.$2.status.expiryDate ?? DateTime(0)).compareTo(
+                  b.$2.status.expiryDate ?? DateTime(0),
+                ),
+              );
+          final others = _rows.where(
+            (r) =>
+                r.status.isExpired &&
+                !r.perPrivilegeCurrency.any((ps) => ps.status.isExpired),
+          );
+          Future<void> after(bool changed) async {
+            if (!changed) return;
+            await _loadData();
+            if (c.mounted) setD(() {});
+          }
+
+          Future<void> open(_MaintenanceUserRow r) async {
+            await _showUserDetail(r);
+            if (c.mounted) setD(() {});
+          }
+
+          DataCell cell(String text, double width) => DataCell(
+            SizedBox(
+              width: width,
+              child: Text(text, overflow: TextOverflow.ellipsis),
+            ),
+          );
+          DataCell user(_MaintenanceUserRow r) => DataCell(
+            SizedBox(
+              width: 200,
+              child: Text(r.user.fullName, overflow: TextOverflow.ellipsis),
+            ),
+            onTap: () => open(r),
+          );
+          return AlertDialog(
+            title: Text('Currency scadute (${privs.length + others.length})'),
+            content: SizedBox(
+              width: 920,
+              child: privs.isEmpty && others.isEmpty
+                  ? const Text('Nessuna currency scaduta.')
+                  : SingleChildScrollView(
+                      child: DataTable(
+                        headingRowHeight: 36,
+                        dataRowMinHeight: 36,
+                        dataRowMaxHeight: 44,
+                        columnSpacing: 16,
+                        columns: const [
+                          DataColumn(label: Text('Utente')),
+                          DataColumn(label: Text('Elicottero')),
+                          DataColumn(label: Text('Privilegio')),
+                          DataColumn(label: Text('Scadenza')),
+                          DataColumn(label: Text('')),
+                        ],
+                        rows: [
+                          for (final (r, ps) in privs)
+                            DataRow(
+                              cells: [
+                                user(r),
+                                DataCell(Text(ps.helicopterCode)),
+                                cell(ps.privilegeName, 220),
+                                DataCell(
+                                  Text(
+                                    ps.status.expiryDate == null
+                                        ? 'mai svolto'
+                                        : df.format(ps.status.expiryDate!),
+                                  ),
+                                ),
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TextButton(
+                                        onPressed: () async => after(
+                                          await _revokePrivilege(c, r.user, ps),
+                                        ),
+                                        child: const Text('Togli'),
+                                      ),
+                                      FilledButton.tonal(
+                                        onPressed: () async => after(
+                                          await _registerOjt(
+                                            c,
+                                            ref,
+                                            r.user,
+                                            heliId: ps.helicopterTypeId,
+                                            privId: ps.privilegeTypeId,
+                                          ),
+                                        ),
+                                        child: const Text('Riabilita (OJT)'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          for (final r in others)
+                            DataRow(
+                              cells: [
+                                user(r),
+                                const DataCell(Text('-')),
+                                cell(r.status.label, 220),
+                                DataCell(
+                                  Text(
+                                    r.status.expiryDate == null
+                                        ? '-'
+                                        : df.format(r.status.expiryDate!),
+                                  ),
+                                ),
+                                DataCell(
+                                  TextButton(
+                                    onPressed: () => open(r),
+                                    child: const Text('Apri scheda'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(),
+                child: const Text('Chiudi'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildUserGrid(List<_MaintenanceUserRow> filteredRows) {
     return GridView.builder(
       shrinkWrap: true,
@@ -1048,7 +1193,7 @@ class _AdminPrivilegesDashboardState
         title: 'Currency scadute',
         value: '$expiredCount',
         icon: Icons.warning_amber_rounded,
-        onTap: () => setState(() => _sortMode = _MaintenanceSortMode.status),
+        onTap: _showExpired,
       ),
       _StatCardData(
         title: 'PTA attive',
@@ -1828,6 +1973,195 @@ class _StatCardData {
   final VoidCallback? onTap;
 }
 
+const _ojtTypes = ['OJT iniziale', 'OJT di ripristino', 'OJT nuovo privilegio'];
+
+Future<bool> _confirmAction(
+  BuildContext context,
+  String title,
+  String message,
+  String action,
+) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    ) ==
+    true;
+
+/// Revoca con conferma: la riga passa ad `active: false` e resta nello storico.
+Future<bool> _revokePrivilege(
+  BuildContext context,
+  UserProfile user,
+  PrivilegeCurrencyStatus ps,
+) async {
+  final ok = await _confirmAction(
+    context,
+    'Togli privilegio',
+    'Togliere il privilegio ${ps.privilegeName} su ${ps.helicopterCode} a ${user.fullName}? Resta nello storico currency; l\'utente torna GO se era l\'unico privilegio scaduto.',
+    'Togli',
+  );
+  if (!ok) return false;
+  await UserService().removePrivilege(
+    user.id,
+    ps.helicopterTypeId,
+    ps.privilegeTypeId,
+  );
+  return true;
+}
+
+/// OJT di manutenzione: assegna il privilegio se manca e lo registra come
+/// attività validata alla data dell'OJT, da cui la currency riparte.
+Future<bool> _registerOjt(
+  BuildContext context,
+  WidgetRef ref,
+  UserProfile user, {
+  int? heliId,
+  int? privId,
+}) async {
+  final auth = ref.read(authProvider);
+  final adminId = auth.userProfile?.id;
+  final helis = auth.visibleHelicopters(keep: heliId);
+  final privs = auth.privilegeTypes;
+  var type = _ojtTypes[privId == null ? 0 : 1];
+  var date = DateTime.now();
+  var heli = heliId ?? helis.firstOrNull?.id;
+  var priv = privId ?? privs.firstOrNull?.id;
+  // ponytail: controller non disposto, come in _editActivity.
+  final notes = TextEditingController();
+  Widget label(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 4, top: 12),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+    ),
+  );
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setD) => AlertDialog(
+        title: Text(
+          'OJT  ·  ${user.fullName}',
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                label('Tipo'),
+                AppDropdown<String>(
+                  initialValue: type,
+                  isDense: true,
+                  items: [
+                    for (final t in _ojtTypes)
+                      DropdownMenuItem(value: t, child: Text(t)),
+                  ],
+                  onChanged: (v) => type = v ?? type,
+                ),
+                label('Data OJT'),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.event, size: 18),
+                  label: Text(DateFormat('dd/MM/yyyy').format(date)),
+                  onPressed: () async {
+                    final d = await showDateDialog(
+                      c,
+                      initialDate: date,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (d != null) setD(() => date = d);
+                  },
+                ),
+                label('Elicottero'),
+                AppDropdown<int>(
+                  initialValue: heli,
+                  isDense: true,
+                  items: [
+                    for (final h in helis)
+                      DropdownMenuItem(
+                        value: h.id,
+                        child: Text(h.code, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: heliId != null ? null : (v) => heli = v,
+                ),
+                label('Privilegio'),
+                AppDropdown<int>(
+                  initialValue: priv,
+                  isDense: true,
+                  items: [
+                    for (final p in privs)
+                      DropdownMenuItem(
+                        value: p.id,
+                        child: Text(p.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: privId != null ? null : (v) => priv = v,
+                ),
+                label('Note'),
+                TextField(
+                  controller: notes,
+                  maxLines: 2,
+                  decoration: const InputDecoration(isDense: true),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('Registra OJT'),
+          ),
+        ],
+      ),
+    ),
+  );
+  final h = heli, p = priv;
+  if (ok != true || h == null || p == null || adminId == null) return false;
+  final users = UserService();
+  final assigned = (await users.getUserPrivileges(
+    user.id,
+  )).any((x) => x.helicopterTypeId == h && x.privilegeTypeId == p);
+  if (!assigned) {
+    await users.setUserPrivileges(user.id, [
+      {'helicopter_type_id': h, 'privilege_type_id': p},
+    ], append: true);
+  }
+  final note = notes.text.trim();
+  await ActivityService().addMaintenanceActivityValidated(
+    MaintenanceActivity(
+      userId: user.id,
+      helicopterTypeId: h,
+      privilegeTypeId: p,
+      activityDate: date,
+      activityType: type,
+      description: note.isEmpty ? null : note,
+      submittedBy: adminId,
+    ),
+    adminId,
+  );
+  return true;
+}
+
 class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.title,
@@ -2059,40 +2393,22 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     }).toList();
   }
 
-  Future<bool> _confirm(String title, String message, String action) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(c).pop(false),
-            child: const Text('Annulla'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(c).pop(true),
-            child: Text(action),
-          ),
-        ],
-      ),
-    );
-    return ok == true;
-  }
+  Future<bool> _confirm(String title, String message, String action) =>
+      _confirmAction(context, title, message, action);
 
   Future<void> _removePrivilege(PrivilegeCurrencyStatus ps) async {
-    final ok = await _confirm(
-      'Conferma rimozione',
-      'Vuoi rimuovere il privilegio ${ps.privilegeName} su ${ps.helicopterCode} dall\'utente ${_row.user.fullName}? L\'utente tornerà GO se questo era l\'unico privilegio scaduto.',
-      'Rimuovi',
+    if (await _revokePrivilege(context, _row.user, ps)) await _afterChange();
+  }
+
+  Future<void> _ojt([PrivilegeCurrencyStatus? ps]) async {
+    final ok = await _registerOjt(
+      context,
+      ref,
+      _row.user,
+      heliId: ps?.helicopterTypeId,
+      privId: ps?.privilegeTypeId,
     );
-    if (!ok) return;
-    await _userService.removePrivilege(
-      _row.user.id,
-      ps.helicopterTypeId,
-      ps.privilegeTypeId,
-    );
-    await _afterChange();
+    if (ok) await _afterChange();
   }
 
   /// Assegna/toglie privilegi su un elicottero (heliId null = da scegliere).
@@ -2557,6 +2873,12 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
                         ],
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Registra OJT',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.how_to_reg_outlined, size: 18),
+                      onPressed: () => _ojt(ps),
+                    ),
                     if (ps.status.isExpired)
                       IconButton(
                         tooltip: 'Rimuovi privilegio scaduto',
@@ -2589,6 +2911,11 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
         Row(
           children: [
             Expanded(child: _sectionTitle('Licenze e privilegi')),
+            TextButton.icon(
+              onPressed: _ojt,
+              icon: const Icon(Icons.how_to_reg_outlined, size: 18),
+              label: const Text('OJT'),
+            ),
             TextButton.icon(
               onPressed: _editPrivileges,
               icon: const Icon(Icons.add, size: 18),
@@ -2662,7 +2989,11 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${a.helicopterCode}  ·  ${a.privilegeName}',
+                    [
+                      a.helicopterCode,
+                      a.privilegeName,
+                      if ((a.activityType ?? '').isNotEmpty) a.activityType,
+                    ].join('  ·  '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w600),
