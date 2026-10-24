@@ -80,28 +80,16 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
 
   void _onViewChanged() => setState(() {});
 
+  // GO/NO GO dice già lo stato: il sottotitolo serve solo se la causa è il seminario.
   String _maintenanceSubtitle(CurrencyStatus? status) {
-    final currentStatus =
-        status ??
-        const CurrencyStatus(
-          status: CurrencyStatusEnum.noData,
-          label: 'Nessun dato',
-        );
-    if (!currentStatus.hasData) {
-      return currentStatus.label;
+    if (status == null ||
+        !status.hasData ||
+        !status.label.toLowerCase().contains('seminario')) {
+      return '';
     }
-    final seminarLabel = currentStatus.label.toLowerCase().contains(
-      'seminario',
-    );
-    if (currentStatus.isExpired) {
-      return seminarLabel ? 'Seminario NAM/MHF scaduto' : 'Attività scaduta';
-    }
-    if (currentStatus.isWarning) {
-      return seminarLabel
-          ? 'Seminario NAM/MHF in scadenza'
-          : 'Attività in scadenza';
-    }
-    return 'Attività regolare';
+    if (status.isExpired) return 'Seminario NAM/MHF scaduto';
+    if (status.isWarning) return 'Seminario NAM/MHF in scadenza';
+    return '';
   }
 
   DateTime? _maintenanceExpiryDate(CurrencyStatus? status) {
@@ -211,7 +199,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           status: crewStatus('flight_t'),
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'
-              : '${_flightSubtitle(auth.currency['flight_t'])}  ·  semestre in corso',
+              : _flightSubtitle(auth.currency['flight_t']),
           expiry: crewExpiry('flight_t'),
           onTap: () => context.go('/activities/my?type=flight'),
         ),
@@ -256,6 +244,10 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     ];
 
     final textTheme = Theme.of(context).textTheme;
+    final sectionStyle = textTheme.titleLarge?.copyWith(
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+    );
     final fitnessText = flightFitnessDate == null
         ? null
         : DateFormat('dd/MM/yyyy').format(flightFitnessDate);
@@ -401,15 +393,15 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
               const SizedBox(height: 12),
               ptaBanner,
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             // Su schermi larghi currency e privilegi stanno affiancati.
             LayoutBuilder(
               builder: (context, constraints) {
                 final currency = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Stato Currency', style: textTheme.titleMedium),
-                    const SizedBox(height: 8),
+                    Text('Currency', style: sectionStyle),
+                    const SizedBox(height: 12),
                     currencySection,
                   ],
                 );
@@ -417,8 +409,8 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                 final privileges = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Privilegi assegnati', style: textTheme.titleMedium),
-                    const SizedBox(height: 8),
+                    Text('Privilegi', style: sectionStyle),
+                    const SizedBox(height: 12),
                     PrivilegeGridWidget(
                       privileges: auth.privileges,
                       compact: true,
@@ -430,7 +422,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       currency,
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 28),
                       privileges,
                     ],
                   );
@@ -583,12 +575,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1100),
             child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                compact ? 12 : 16,
-                compact ? 12 : 16,
-                compact ? 12 : 16,
-                96,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: children,
             ),
           ),
@@ -621,33 +608,39 @@ class _UserHeaderCard extends StatelessWidget {
       message: 'Vai al profilo',
       child: GestureDetector(
         onTap: onProfileTap,
-        child: UserAvatar(user: user, radius: compact ? 22 : 31),
+        child: UserAvatar(user: user, radius: compact ? 32 : 31),
       ),
     );
 
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.surfaceVariant, AppColors.surface],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(compact ? 16 : 24),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
+      // Compatta: superficie piatta, la gerarchia la fanno spazio e tipografia.
+      decoration: compact
+          ? BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+            )
+          : BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.surfaceVariant, AppColors.surface],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.14),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
       child: Padding(
-        padding: EdgeInsets.all(compact ? 12 : 20),
+        padding: EdgeInsets.all(compact ? 18 : 20),
         child: Row(
           children: [
             avatar,
-            SizedBox(width: compact ? 12 : 16),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -661,13 +654,18 @@ class _UserHeaderCard extends StatelessWidget {
                   Text(
                     user.nome,
                     style: compact
-                        ? Theme.of(context).textTheme.titleMedium
+                        ? Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.5,
+                            height: 1.15,
+                          )
                         : Theme.of(context).textTheme.titleLarge,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (badges.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Wrap(spacing: 6, runSpacing: 6, children: badges),
                   ],
                 ],
@@ -703,11 +701,10 @@ class _Badge extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -749,13 +746,13 @@ class _CompactGrid extends StatelessWidget {
           children: [
             for (var i = 0; i < cards.length; i += columns)
               Padding(
-                padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                padding: EdgeInsets.only(top: i == 0 ? 0 : 12),
                 child: IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       for (var j = i; j < i + columns; j++) ...[
-                        if (j > i) const SizedBox(width: 8),
+                        if (j > i) const SizedBox(width: 12),
                         Expanded(
                           child: j < cards.length
                               ? cards[j]
@@ -806,8 +803,9 @@ class _CurrencyCard extends StatelessWidget {
     final date = expiry;
     final expiryText = compact
         ? (date == null
-              ? 'Nessuna data'
-              : 'Scad. ${DateFormat('dd/MM/yyyy').format(date)}')
+              ? ''
+              : '${date.isBefore(DateUtils.dateOnly(DateTime.now())) ? 'Scaduta' : 'Scade'} '
+                    '${DateFormat('d MMM yyyy', 'it').format(date)}')
         : (date == null
               ? 'Nessuna data registrata'
               : 'Scadenza: ${DateFormat('d MMMM yyyy', 'it').format(date)}');
@@ -826,64 +824,60 @@ class _CurrencyCard extends StatelessWidget {
     );
 
     if (compact) {
-      return Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.hardEdge,
+      // Stile widget iOS: nome in alto, stato grande in basso, scadenza piccola.
+      const secondary = TextStyle(color: AppColors.textSecondary, fontSize: 12);
+      return Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Container(
-            decoration: decoration,
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      currentStatus.icon,
-                      size: 20,
-                      color: currentStatus.color,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      goText,
-                      style: TextStyle(
-                        color: currentStatus.color,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
                 Text(
                   title,
                   style: textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  softWrap: true,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                  softWrap: true,
-                ),
-                const Spacer(),
-                const SizedBox(height: 4),
-                Text(
-                  expiryText,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: currentStatus.color,
-                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
+                    height: 1.2,
                   ),
-                  softWrap: true,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: secondary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const Spacer(),
+                const SizedBox(height: 18),
+                Text(
+                  goText,
+                  style: TextStyle(
+                    color: currentStatus.color,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.6,
+                    height: 1.05,
+                  ),
+                ),
+                if (expiryText.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    expiryText,
+                    style: secondary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
@@ -945,15 +939,17 @@ class _CurrencyCard extends StatelessWidget {
                           ),
                           softWrap: true,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
+                        if (subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                            softWrap: true,
                           ),
-                          softWrap: true,
-                        ),
+                        ],
                         const SizedBox(height: 6),
                         Text(
                           expiryText,
