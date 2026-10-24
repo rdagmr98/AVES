@@ -13,6 +13,9 @@ import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
 import '../../widgets/user_avatar.dart';
+import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/currency_badge_widget.dart';
+import '../../widgets/form_parts.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -26,7 +29,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _imagePicker = ImagePicker();
   late final TextEditingController _nomeCtrl;
   late final TextEditingController _cognomeCtrl;
-  late final TextEditingController _licenzaCtrl;
   late final TextEditingController _emailCtrl;
   int? _orgUnitId;
   bool _saving = false;
@@ -44,7 +46,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profile = ref.read(authProvider).userProfile;
     _nomeCtrl = TextEditingController(text: profile?.nome ?? '');
     _cognomeCtrl = TextEditingController(text: profile?.cognome ?? '');
-    _licenzaCtrl = TextEditingController(text: profile?.numeroLicenza ?? '');
     _emailCtrl = TextEditingController(text: profile?.email ?? '');
     _profilePhotoBase64 = profile?.profilePhotoBase64;
     _orgUnitId = profile?.orgUnitId;
@@ -59,7 +60,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void dispose() {
     _nomeCtrl.dispose();
     _cognomeCtrl.dispose();
-    _licenzaCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
   }
@@ -357,7 +357,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     _nomeCtrl.text = profile.nome;
     _cognomeCtrl.text = profile.cognome;
-    _licenzaCtrl.text = profile.numeroLicenza ?? '';
     _emailCtrl.text = profile.email ?? '';
     _profilePhotoBase64 = profile.profilePhotoBase64;
     _orgUnitId = profile.orgUnitId;
@@ -910,325 +909,291 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     _syncProfileState(profile);
     final isAdminProfile = profile.isAdmin;
-    final today = DateTime.now();
-    final isFlightFitnessExpired =
-        _flightFitnessExpiry != null &&
-        _flightFitnessExpiry!.isBefore(
-          DateTime(today.year, today.month, today.day),
+    final textTheme = Theme.of(context).textTheme;
+    final now = DateTime.now();
+    final fitnessDays = _flightFitnessExpiry
+        ?.difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+    final isFlightFitnessExpired = fitnessDays != null && fitnessDays < 0;
+    final unitName = auth.orgUnits
+        .where((u) => u.id == _orgUnitId)
+        .firstOrNull
+        ?.name;
+    final licenza = profile.numeroLicenza ?? '';
+
+    // Licenze e privilegi raggruppati per elicottero
+    final byHeli =
+        <
+          int,
+          ({String code, UserLicense? license, List<UserPrivilege> privs})
+        >{};
+    for (final lic in auth.licenses) {
+      byHeli[lic.helicopterTypeId] = (
+        code: lic.helicopterCode,
+        license: lic,
+        privs: <UserPrivilege>[],
+      );
+    }
+    for (final priv in auth.privileges) {
+      if (byHeli.containsKey(priv.helicopterTypeId)) {
+        byHeli[priv.helicopterTypeId]!.privs.add(priv);
+      } else {
+        byHeli[priv.helicopterTypeId] = (
+          code: priv.helicopterCode,
+          license: null,
+          privs: [priv],
         );
+      }
+    }
+
+    Widget empty(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(text, style: textTheme.bodySmall),
+    );
 
     return Scaffold(
       appBar: AppBar(
+        leading: AdminAppBarLeading(
+          fallbackRoute: isAdminProfile ? null : '/dashboard',
+        ),
         title: const Text('Profilo'),
-        actions: [
-          IconButton(
-            onPressed: _saving ? null : _saveProfile,
-            icon: const Icon(Icons.save_outlined),
-          ),
-        ],
+        bottom: _saving || auth.isLoading
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
+            : null,
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 960),
-          child: ListView(
-            shrinkWrap: false,
-            padding: const EdgeInsets.all(24),
-            children: [
-              if (_saving || auth.isLoading) ...[
-                const LinearProgressIndicator(),
-                const SizedBox(height: 8),
-                Text(
-                  'Salvataggio...',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (!isAdminProfile && _pendingDeletionRequest != null) ...[
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.hourglass_top, color: Colors.amber),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Richiesta di eliminazione account in attesa di approvazione admin.',
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
                     children: [
-                      const SizedBox(height: 20),
-                      GestureDetector(
-                        onTap: _saving ? null : _pickProfilePhoto,
-                        child: Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            UserAvatar(
-                              user: profile.copyWith(
-                                profilePhotoBase64: _profilePhotoBase64,
-                              ),
-                              radius: 44,
-                            ),
-                            const CircleAvatar(
-                              radius: 14,
-                              child: Icon(
-                                Icons.photo_camera_outlined,
-                                size: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Tocca l\'avatar per aggiornare la foto profilo.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Dati anagrafici',
-                        style: Theme.of(context).textTheme.titleLarge,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _nomeCtrl,
-                        decoration: const InputDecoration(labelText: 'Nome'),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _cognomeCtrl,
-                        decoration: const InputDecoration(labelText: 'Cognome'),
-                      ),
-                      if (!isAdminProfile) ...[
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _licenzaCtrl,
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Numero licenza',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _emailCtrl,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            labelText: 'Email istituzionale',
-                            hintText: 'nome.cognome@esercito.difesa.it',
-                            errorText: _emailError,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      AppDropdown<int>(
-                        initialValue: _orgUnitId,
-                        decoration: const InputDecoration(
-                          labelText: 'Unità organizzativa',
-                        ),
-                        items: auth.orgUnits
-                            .map(
-                              (item) => DropdownMenuItem<int>(
-                                value: item.id,
-                                child: Text(item.name, softWrap: true),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) =>
-                            setState(() => _orgUnitId = value),
-                      ),
-                      const SizedBox(height: 16),
-                      if (isFlightFitnessExpired)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade700.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.red.shade400),
-                          ),
-                          child: const Row(
+                      Tooltip(
+                        message: 'Cambia foto',
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _saving ? null : _pickProfilePhoto,
+                          child: Stack(
+                            clipBehavior: Clip.none,
                             children: [
-                              Icon(
-                                Icons.warning_amber_rounded,
-                                color: Colors.redAccent,
+                              UserAvatar(
+                                user: profile.copyWith(
+                                  profilePhotoBase64: _profilePhotoBase64,
+                                ),
+                                radius: 38,
                               ),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Idoneità al volo scaduta. Aggiorna la data di scadenza.',
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: AppColors.primary,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.photo_camera_outlined,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      Padding(
-                        padding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.medical_services_outlined,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Idoneità al volo — Scadenza',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        softWrap: true,
-                                      ),
-                                      Text(
-                                        _formatDate(_flightFitnessExpiry),
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodySmall,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              profile.fullName.isEmpty
+                                  ? 'Il tuo profilo'
+                                  : profile.fullName,
+                              style: textTheme.titleLarge,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                if (_flightFitnessExpiry != null)
-                                  OutlinedButton.icon(
-                                    onPressed: () => setState(
-                                      () => _flightFitnessExpiry = null,
-                                    ),
-                                    icon: const Icon(Icons.close, size: 16),
-                                    label: const Text('Rimuovi'),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      textStyle: const TextStyle(fontSize: 13),
-                                    ),
-                                  ),
-                                OutlinedButton.icon(
-                                  onPressed: _pickFlightFitnessExpiry,
-                                  icon: const Icon(
-                                    Icons.calendar_month_outlined,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Seleziona data'),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    textStyle: const TextStyle(fontSize: 13),
-                                  ),
+                            if (licenza.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Licenza $licenza',
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: AppColors.textSecondary,
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                            if (unitName != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                unitName,
+                                style: textTheme.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Istruttore T.A. (TI)'),
-                        subtitle: const Text('Istruttore Tecnico-Aeronautico'),
-                        value: _isTi,
-                        onChanged: (value) => setState(() => _isTi = value),
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Esaminatore T.P. (ETP)'),
-                        subtitle: const Text('Esaminatore Teorico-Pratico'),
-                        value: _isEtp,
-                        onChanged: (value) => setState(() => _isEtp = value),
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _showChangePasswordDialog,
-                        icon: const Icon(Icons.lock_reset_outlined),
-                        label: const Text('Cambia password'),
-                      ),
-                      if (isAdminProfile) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          'Profilo amministrativo: i campi personali, le assegnazioni e le capacità operative non sono richiesti per gli admin.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          softWrap: true,
-                        ),
-                      ],
                     ],
                   ),
-                ),
-              ),
-              if (!isAdminProfile) ...[
-                const SizedBox(height: 16),
-                // ---- MANUTENZIONE (licenze + privilegi combinati per elicottero) ----
-                Builder(
-                  builder: (context) {
-                    // Group licenses and privileges by helicopter
-                    final byHeli =
-                        <
-                          int,
-                          ({
-                            String code,
-                            UserLicense? license,
-                            List<UserPrivilege> privs,
-                          })
-                        >{};
-                    for (final lic in auth.licenses) {
-                      byHeli[lic.helicopterTypeId] = (
-                        code: lic.helicopterCode,
-                        license: lic,
-                        privs: <UserPrivilege>[],
-                      );
-                    }
-                    for (final priv in auth.privileges) {
-                      if (byHeli.containsKey(priv.helicopterTypeId)) {
-                        byHeli[priv.helicopterTypeId]!.privs.add(priv);
-                      } else {
-                        byHeli[priv.helicopterTypeId] = (
-                          code: priv.helicopterCode,
-                          license: null,
-                          privs: [priv],
-                        );
-                      }
-                    }
-                    return _EditableSection(
+                  const SizedBox(height: 20),
+                  _Section(
+                    icon: Icons.person_outline,
+                    title: 'Dati personali',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        LabeledField(
+                          label: 'Nome',
+                          child: TextField(
+                            controller: _nomeCtrl,
+                            textCapitalization: TextCapitalization.words,
+                          ),
+                        ),
+                        LabeledField(
+                          label: 'Cognome',
+                          child: TextField(
+                            controller: _cognomeCtrl,
+                            textCapitalization: TextCapitalization.characters,
+                          ),
+                        ),
+                        if (!isAdminProfile)
+                          LabeledField(
+                            label: 'Email istituzionale',
+                            child: TextField(
+                              controller: _emailCtrl,
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: InputDecoration(
+                                hintText: 'nome.cognome@esercito.difesa.it',
+                                errorText: _emailError,
+                              ),
+                            ),
+                          ),
+                        LabeledField(
+                          label: 'Unità organizzativa',
+                          child: AppDropdown<int>(
+                            initialValue: _orgUnitId,
+                            hint: const Text('Seleziona'),
+                            items: auth.orgUnits
+                                .map(
+                                  (item) => DropdownMenuItem<int>(
+                                    value: item.id,
+                                    child: Text(item.name, softWrap: true),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) =>
+                                setState(() => _orgUnitId = value),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _Section(
+                    icon: Icons.verified_user_outlined,
+                    title: 'Idoneità e qualifiche',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        LabeledField(
+                          label: 'Idoneità al volo',
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: _pickFlightFitnessExpiry,
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                prefixIcon: const Icon(
+                                  Icons.medical_services_outlined,
+                                ),
+                                errorText: isFlightFitnessExpired
+                                    ? 'Scaduta: tocca per aggiornare la data'
+                                    : null,
+                                suffixIcon: _flightFitnessExpiry == null
+                                    ? null
+                                    : IconButton(
+                                        tooltip: 'Rimuovi',
+                                        icon: const Icon(Icons.close),
+                                        onPressed: () => setState(
+                                          () => _flightFitnessExpiry = null,
+                                        ),
+                                      ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _flightFitnessExpiry == null
+                                          ? 'Seleziona la scadenza'
+                                          : _formatDate(_flightFitnessExpiry),
+                                      style: _flightFitnessExpiry == null
+                                          ? const TextStyle(
+                                              color: AppColors.textHint,
+                                            )
+                                          : null,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (fitnessDays != null)
+                                    _Pill(
+                                      text: fitnessDays < 0
+                                          ? 'Scaduta'
+                                          : fitnessDays == 0
+                                          ? 'Scade oggi'
+                                          : 'Tra $fitnessDays gg',
+                                      color: expiryBadge(
+                                        _flightFitnessExpiry,
+                                      ).$2,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Istruttore T.A. (TI)'),
+                          subtitle: const Text(
+                            'Istruttore Tecnico-Aeronautico',
+                          ),
+                          value: _isTi,
+                          onChanged: (value) => setState(() => _isTi = value),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Esaminatore T.P. (ETP)'),
+                          subtitle: const Text('Esaminatore Teorico-Pratico'),
+                          value: _isEtp,
+                          onChanged: (value) => setState(() => _isEtp = value),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isAdminProfile) ...[
+                    _Section(
+                      icon: Icons.build_outlined,
                       title: 'Manutenzione',
-                      addLabel: 'Aggiungi',
                       onAdd: () async {
-                        final excludeIds = byHeli.keys.toList();
                         final result = await _showMaintenanceDialog(
                           auth.helicopterTypes,
                           auth.licenseTypes,
                           auth.privilegeTypes,
-                          excludeHelicopterIds: excludeIds,
+                          excludeHelicopterIds: byHeli.keys.toList(),
                         );
                         if (result == null) return;
                         await _applyMaintenanceEntry(
@@ -1239,129 +1204,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         );
                       },
                       child: byHeli.isEmpty
-                          ? const Text(
-                              'Nessuna manutenzione assegnata.',
-                              textAlign: TextAlign.center,
-                            )
+                          ? empty('Nessuna manutenzione assegnata.')
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: byHeli.entries.map((entry) {
-                                final heliId = entry.key;
-                                final group = entry.value;
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      10,
-                                      8,
-                                      10,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                group.license != null
-                                                    ? '${group.code}  ·  Cat. ${group.license!.licenseCode}'
-                                                    : group.code,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleSmall
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                softWrap: true,
-                                              ),
-                                              if (group.privs.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  group.privs
-                                                      .map(
-                                                        (p) => p.privilegeName,
-                                                      )
-                                                      .join(' · '),
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall,
-                                                  softWrap: true,
-                                                ),
-                                              ],
-                                            ],
-                                          ),
+                              children: [
+                                for (final MapEntry(key: heliId, value: group)
+                                    in byHeli.entries)
+                                  _AssignmentTile(
+                                    title: group.code,
+                                    badge: group.license == null
+                                        ? null
+                                        : 'Cat. ${group.license!.licenseCode}',
+                                    subtitle: group.privs.isEmpty
+                                        ? null
+                                        : group.privs
+                                              .map((p) => p.privilegeName)
+                                              .join(' · '),
+                                    onEdit: () async {
+                                      final result =
+                                          await _showMaintenanceDialog(
+                                            auth.helicopterTypes,
+                                            auth.licenseTypes,
+                                            auth.privilegeTypes,
+                                            initialHelicopterId: heliId,
+                                            initialLicenseTypeId:
+                                                group.license?.licenseTypeId,
+                                            initialPrivilegeTypeIds: group.privs
+                                                .map((p) => p.privilegeTypeId)
+                                                .toSet(),
+                                          );
+                                      if (result == null) return;
+                                      await _applyMaintenanceEntry(
+                                        profile,
+                                        result,
+                                        auth.licenses,
+                                        auth.privileges,
+                                      );
+                                    },
+                                    onDelete: () =>
+                                        _removeMaintenanceHelicopter(
+                                          profile,
+                                          heliId,
+                                          auth.licenses,
+                                          auth.privileges,
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.edit_outlined,
-                                            size: 18,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          onPressed: () async {
-                                            final result =
-                                                await _showMaintenanceDialog(
-                                                  auth.helicopterTypes,
-                                                  auth.licenseTypes,
-                                                  auth.privilegeTypes,
-                                                  initialHelicopterId: heliId,
-                                                  initialLicenseTypeId: group
-                                                      .license
-                                                      ?.licenseTypeId,
-                                                  initialPrivilegeTypeIds: group
-                                                      .privs
-                                                      .map(
-                                                        (p) =>
-                                                            p.privilegeTypeId,
-                                                      )
-                                                      .toSet(),
-                                                );
-                                            if (result == null) return;
-                                            await _applyMaintenanceEntry(
-                                              profile,
-                                              result,
-                                              auth.licenses,
-                                              auth.privileges,
-                                            );
-                                          },
-                                        ),
-                                        const SizedBox(width: 4),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            size: 18,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          onPressed: () =>
-                                              _removeMaintenanceHelicopter(
-                                                profile,
-                                                heliId,
-                                                auth.licenses,
-                                                auth.privileges,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
-                                );
-                              }).toList(),
+                              ],
                             ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                // ---- EQUIPAGGI DI VOLO (crew + capacità TOB combinati) ----
-                Builder(
-                  builder: (context) {
-                    return _EditableSection(
+                    ),
+                    _Section(
+                      icon: Icons.flight_outlined,
                       title: 'Equipaggi di volo',
-                      addLabel: 'Aggiungi',
                       onAdd: () async {
                         final result = await _showCrewDialog(
                           auth.helicopterTypes,
@@ -1408,146 +1301,98 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         }, successMessage: 'Equipaggio aggiunto.');
                       },
                       child: auth.crewAssignments.isEmpty
-                          ? const Text(
-                              'Nessun equipaggio assegnato.',
-                              textAlign: TextAlign.center,
-                            )
+                          ? empty('Nessun equipaggio assegnato.')
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: auth.crewAssignments.map((item) {
-                                final caps = auth.tobCapabilities
-                                    .where(
-                                      (c) =>
-                                          c.helicopterTypeId ==
-                                          item.helicopterTypeId,
-                                    )
-                                    .toList();
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      10,
-                                      8,
-                                      10,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                item.crewType == 'TOB'
-                                                    ? '${item.helicopterCode}  ·  ${item.crewType} (Fascia ${item.fascia ?? '-'})'
-                                                    : '${item.helicopterCode}  ·  ${item.crewType}',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleSmall
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                softWrap: true,
-                                              ),
-                                              if (item.crewType == 'TOB' &&
-                                                  caps.isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  caps
-                                                      .map(
-                                                        (c) => c.capabilityName,
-                                                      )
-                                                      .join(' · '),
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall,
-                                                  softWrap: true,
-                                                ),
-                                              ],
-                                            ],
+                              children: [
+                                for (final item in auth.crewAssignments)
+                                  _AssignmentTile(
+                                    title: item.helicopterCode,
+                                    badge: item.crewType == 'TOB'
+                                        ? 'TOB · Fascia ${item.fascia ?? '-'}'
+                                        : item.crewType,
+                                    subtitle: item.crewType == 'TOB'
+                                        ? auth.tobCapabilities
+                                              .where(
+                                                (c) =>
+                                                    c.helicopterTypeId ==
+                                                    item.helicopterTypeId,
+                                              )
+                                              .map((c) => c.capabilityName)
+                                              .join(' · ')
+                                        : null,
+                                    onEdit: item.crewType == 'TOB'
+                                        ? () => _manageTobCapabilities(
+                                            profile,
+                                            auth.tobCapabilities,
+                                            auth.helicopterTypes,
+                                            auth.tobCapabilityTypes,
+                                          )
+                                        : null,
+                                    onDelete: item.id == null
+                                        ? null
+                                        : () => _removeCrewAssignment(
+                                            profile,
+                                            item,
+                                            auth.crewAssignments,
+                                            auth.tobCapabilities,
                                           ),
-                                        ),
-                                        if (item.crewType == 'TOB')
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit_outlined,
-                                              size: 18,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                            onPressed: () =>
-                                                _manageTobCapabilities(
-                                                  profile,
-                                                  auth.tobCapabilities,
-                                                  auth.helicopterTypes,
-                                                  auth.tobCapabilityTypes,
-                                                ),
-                                          ),
-                                        const SizedBox(width: 4),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            size: 18,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          onPressed: item.id == null
-                                              ? null
-                                              : () => _removeCrewAssignment(
-                                                  profile,
-                                                  item,
-                                                  auth.crewAssignments,
-                                                  auth.tobCapabilities,
-                                                ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
-                                );
-                              }).toList(),
+                              ],
                             ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    ),
+                  ],
+                  _Section(
+                    icon: Icons.manage_accounts_outlined,
+                    title: 'Account',
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Gestione account',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.lock_reset_outlined),
+                          title: const Text('Cambia password'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _showChangePasswordDialog,
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Puoi richiedere l\'eliminazione del tuo account. La cancellazione sarà eseguita solo dopo approvazione di un admin.',
-                        ),
-                        const SizedBox(height: 16),
-                        OutlinedButton.icon(
-                          onPressed: _pendingDeletionRequest != null
-                              ? null
-                              : _showDeleteAccountRequestDialog,
-                          icon: const Icon(Icons.delete_forever_outlined),
-                          label: Text(
-                            _pendingDeletionRequest != null
-                                ? 'Richiesta già inviata'
-                                : 'Richiedi eliminazione account',
+                        if (!isAdminProfile)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            enabled: _pendingDeletionRequest == null,
+                            iconColor: AppColors.currencyExpired,
+                            textColor: AppColors.currencyExpired,
+                            leading: Icon(
+                              _pendingDeletionRequest == null
+                                  ? Icons.delete_forever_outlined
+                                  : Icons.hourglass_top,
+                            ),
+                            title: const Text('Richiedi eliminazione account'),
+                            subtitle: Text(
+                              _pendingDeletionRequest == null
+                                  ? "L'account sarà eliminato solo dopo l'approvazione di un admin."
+                                  : 'Richiesta inviata, in attesa di approvazione admin.',
+                            ),
+                            onTap: _showDeleteAccountRequestDialog,
                           ),
-                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ],
+                  if (isAdminProfile)
+                    Text(
+                      'Profilo amministrativo: i campi personali, le assegnazioni e le capacità operative non sono richiesti per gli admin.',
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodySmall,
+                    ),
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
+      ),
+      bottomNavigationBar: SaveBar(
+        label: 'Salva profilo',
+        icon: Icons.check_rounded,
+        saving: _saving,
+        onPressed: _saveProfile,
       ),
     );
   }
@@ -1575,46 +1420,151 @@ class _HelicopterCapabilitySelection {
   final Set<int> selectedCapabilityIds;
 }
 
-class _EditableSection extends StatelessWidget {
-  const _EditableSection({
+/// Card di sezione: intestazione con icona e, se [onAdd], pulsante Aggiungi.
+class _Section extends StatelessWidget {
+  const _Section({
+    required this.icon,
     required this.title,
-    required this.addLabel,
-    required this.onAdd,
     required this.child,
+    this.onAdd,
   });
 
+  final IconData icon;
   final String title;
-  final String addLabel;
-  final VoidCallback onAdd;
   final Widget child;
+  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FormHeader(
+                icon: icon,
+                title: title,
+                trailing: onAdd == null
+                    ? null
+                    : TextButton.icon(
+                        onPressed: onAdd,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Aggiungi'),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Riga di un'assegnazione (elicottero + categoria/ruolo + dettagli).
+class _AssignmentTile extends StatelessWidget {
+  const _AssignmentTile({
+    required this.title,
+    required this.onDelete,
+    this.badge,
+    this.subtitle,
+    this.onEdit,
+  });
+
+  final String title;
+  final String? badge;
+  final String? subtitle;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (badge != null) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: _Pill(text: badge!, color: AppColors.accentGlow),
+                      ),
+                    ],
+                  ],
                 ),
-                OutlinedButton.icon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: Text(addLabel),
-                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(subtitle!, style: textTheme.bodySmall),
+                ],
               ],
             ),
-            const SizedBox(height: 16),
-            child,
-          ],
+          ),
+          if (onEdit != null)
+            IconButton(
+              tooltip: 'Modifica',
+              icon: const Icon(Icons.edit_outlined, size: 20),
+              onPressed: onEdit,
+            ),
+          IconButton(
+            tooltip: 'Rimuovi',
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
