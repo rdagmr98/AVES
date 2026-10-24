@@ -11,6 +11,7 @@ import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
 import '../../services/notification_service.dart';
 import '../../services/pta_service.dart';
+import '../../services/view_prefs.dart';
 import '../../services/web_notification_service.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../services/hours_format.dart';
@@ -65,12 +66,19 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     });
   }
 
-  String _formatLongDate(DateTime? date) {
-    if (date == null) {
-      return 'Nessuna data registrata';
-    }
-    return 'Scadenza: ${DateFormat('d MMMM yyyy', 'it').format(date)}';
+  @override
+  void initState() {
+    super.initState();
+    compactDashboard.addListener(_onViewChanged);
   }
+
+  @override
+  void dispose() {
+    compactDashboard.removeListener(_onViewChanged);
+    super.dispose();
+  }
+
+  void _onViewChanged() => setState(() {});
 
   String _maintenanceSubtitle(CurrencyStatus? status) {
     final currentStatus =
@@ -127,6 +135,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = compactDashboard.value;
     final auth = ref.watch(authProvider);
     final user = auth.userProfile;
     final today = DateTime.now();
@@ -174,98 +183,366 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
         .map((item) => item.fascia)
         .firstWhere((item) => item != null, orElse: () => null);
 
+    // Idoneità al volo scaduta: sospende tutte le currency di equipaggio.
+    const fitnessExpired = CurrencyStatus(
+      status: CurrencyStatusEnum.expired,
+      label: 'Idoneità al volo scaduta',
+    );
+    CurrencyStatus? crewStatus(String key) =>
+        flightFitnessBlocking ? fitnessExpired : auth.currency[key];
+    DateTime? crewExpiry(String key) => flightFitnessBlocking
+        ? flightFitnessDate
+        : auth.currency[key]?.expiryDate;
+
     final currencyCards = <Widget>[
       if (hasMaintenanceAccess)
         _CurrencyCard(
+          compact: compact,
           title: 'Manutenzione',
           status: auth.currency['maintenance'],
           subtitle: _maintenanceSubtitle(auth.currency['maintenance']),
-          expiryText: _formatLongDate(
-            _maintenanceExpiryDate(auth.currency['maintenance']),
-          ),
+          expiry: _maintenanceExpiryDate(auth.currency['maintenance']),
           onTap: () => context.go('/activities/my?type=maintenance'),
         ),
       if (auth.hasTCrew)
         _CurrencyCard(
+          compact: compact,
           title: 'Volo T',
-          status: flightFitnessBlocking
-              ? const CurrencyStatus(
-                  status: CurrencyStatusEnum.expired,
-                  label: 'Idoneità al volo scaduta',
-                )
-              : auth.currency['flight_t'],
+          status: crewStatus('flight_t'),
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'
               : '${_flightSubtitle(auth.currency['flight_t'])}  ·  semestre in corso',
-          expiryText: _formatLongDate(
-            flightFitnessBlocking
-                ? flightFitnessDate
-                : auth.currency['flight_t']?.expiryDate,
-          ),
+          expiry: crewExpiry('flight_t'),
           onTap: () => context.go('/activities/my?type=flight'),
         ),
-      if (auth.hasTobCrew)
+      if (auth.hasTobCrew) ...[
         _CurrencyCard(
+          compact: compact,
           title: 'Base TOB',
-          status: flightFitnessBlocking
-              ? const CurrencyStatus(
-                  status: CurrencyStatusEnum.expired,
-                  label: 'Idoneità al volo scaduta',
-                )
-              : auth.currency['tob_base'],
+          status: crewStatus('tob_base'),
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'
               : 'Fascia ${tobFascia ?? '-'}',
-          expiryText: _formatLongDate(
-            flightFitnessBlocking
-                ? flightFitnessDate
-                : auth.currency['tob_base']?.expiryDate,
-          ),
+          expiry: crewExpiry('tob_base'),
           onTap: () => context.go('/activities/my?type=tob'),
         ),
-      if (auth.hasTobCrew)
-        ...auth.tobCapabilities.map(
-          (cap) => _CurrencyCard(
+        for (final cap in auth.tobCapabilities)
+          _CurrencyCard(
+            compact: compact,
             title: cap.capabilityName,
-            status: flightFitnessBlocking
-                ? const CurrencyStatus(
-                    status: CurrencyStatusEnum.expired,
-                    label: 'Idoneità al volo scaduta',
-                  )
-                : auth.currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}'],
+            status: crewStatus(
+              'tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}',
+            ),
             subtitle: flightFitnessBlocking
                 ? 'Idoneità scaduta'
                 : 'TOB · ${cap.helicopterCode}',
-            expiryText: _formatLongDate(
-              flightFitnessBlocking
-                  ? flightFitnessDate
-                  : auth
-                        .currency['tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}']
-                        ?.expiryDate,
+            expiry: crewExpiry(
+              'tob_${cap.helicopterTypeId}_${cap.tobCapabilityId}',
             ),
             onTap: () => context.go('/activities/my?type=tob'),
           ),
-        ),
+      ],
       if (auth.hasMdbCrew)
         _CurrencyCard(
+          compact: compact,
           title: 'Mitragliere di Bordo',
-          status: flightFitnessBlocking
-              ? const CurrencyStatus(
-                  status: CurrencyStatusEnum.expired,
-                  label: 'Idoneità al volo scaduta',
-                )
-              : auth.currency['mdb'],
+          status: crewStatus('mdb'),
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'
               : _flightSubtitle(auth.currency['mdb']),
-          expiryText: _formatLongDate(
-            flightFitnessBlocking
-                ? flightFitnessDate
-                : auth.currency['mdb']?.expiryDate,
-          ),
+          expiry: crewExpiry('mdb'),
           onTap: () => context.go('/activities/my?type=flight'),
         ),
     ];
+
+    final textTheme = Theme.of(context).textTheme;
+    final fitnessText = flightFitnessDate == null
+        ? null
+        : DateFormat('dd/MM/yyyy').format(flightFitnessDate);
+
+    final header = _UserHeaderCard(
+      user: user,
+      compact: compact,
+      badges: [
+        if (compact && fitnessText != null)
+          _Badge(
+            flightFitnessBlocking
+                ? 'Idoneità volo scaduta $fitnessText · SOSPESO'
+                : 'Idoneità volo $fitnessText',
+            flightFitnessBlocking ? Colors.redAccent : Colors.green,
+            icon: flightFitnessBlocking
+                ? Icons.warning_amber_rounded
+                : Icons.verified_outlined,
+            onTap: () => context.go('/profile'),
+          ),
+        if (compact && user.isTi) _Badge('TI', Colors.blue.shade300),
+        if (compact && user.isEtp) _Badge('ETP', Colors.purple.shade200),
+      ],
+      showFleetShortcut: assignedHelicopters.isNotEmpty,
+      onProfileTap: () => context.go('/profile'),
+      onFleetTap: assignedHelicopters.isNotEmpty
+          ? () => context.go('/helicopters/fleet')
+          : null,
+    );
+
+    final approvalBanner = Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.currencyWarning.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.currencyWarning),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.pending_actions, color: AppColors.currencyWarning),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'In attesa di approvazione. Alcune funzionalità saranno abilitate dopo la verifica del profilo.',
+              softWrap: true,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final ptaBanner = InkWell(
+      onTap: () => context.go('/pta'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF8E44AD).withValues(alpha: 0.2),
+              AppColors.surface,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF8E44AD)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.block, color: Color(0xFFCE93D8)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CURRENCY SOSPESA — PTA attiva',
+                    style: TextStyle(
+                      color: Color(0xFFCE93D8),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    softWrap: true,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    unreadPtas.isNotEmpty
+                        ? 'PTA: ${unreadPtas.map((p) => p.number).join(', ')} — Tocca per prendere visione'
+                        : 'PTA: ${blockingPtas.map((p) => p.number).join(', ')} — Presa visione registrata, in attesa di chiusura',
+                    style: const TextStyle(fontSize: 13),
+                    softWrap: true,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Color(0xFFCE93D8)),
+          ],
+        ),
+      ),
+    );
+
+    final Widget currencySection = currencyCards.isEmpty
+        ? const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Nessuna currency operativa assegnata al tuo profilo.',
+                textAlign: TextAlign.center,
+                softWrap: true,
+              ),
+            ),
+          )
+        : compact
+        ? _CompactGrid(currencyCards)
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = constraints.maxWidth >= 960
+                  ? 320.0
+                  : constraints.maxWidth >= 640
+                  ? 300.0
+                  : constraints.maxWidth;
+              return Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final card in currencyCards)
+                    SizedBox(width: cardWidth, child: card),
+                ],
+              );
+            },
+          );
+
+    final children = compact
+        ? <Widget>[
+            header,
+            _PushPermissionBanner(userId: user.id),
+            if (!user.isApproved) ...[
+              const SizedBox(height: 12),
+              approvalBanner,
+            ],
+            if (blockingPtas.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ptaBanner,
+            ],
+            const SizedBox(height: 16),
+            // Su schermi larghi currency e privilegi stanno affiancati.
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final currency = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Stato Currency', style: textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    currencySection,
+                  ],
+                );
+                if (auth.privileges.isEmpty) return currency;
+                final privileges = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Privilegi assegnati', style: textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    PrivilegeGridWidget(
+                      privileges: auth.privileges,
+                      compact: true,
+                    ),
+                  ],
+                );
+                if (constraints.maxWidth < 900) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      currency,
+                      const SizedBox(height: 16),
+                      privileges,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: currency),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 2, child: privileges),
+                  ],
+                );
+              },
+            ),
+          ]
+        : <Widget>[
+            header,
+            _PushPermissionBanner(userId: user.id),
+            if (flightFitnessDate != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: flightFitnessBlocking
+                      ? Colors.red.shade700.withValues(alpha: 0.15)
+                      : Colors.green.shade800.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: flightFitnessBlocking
+                        ? Colors.red.shade400
+                        : Colors.green.shade600,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      flightFitnessBlocking
+                          ? Icons.warning_amber_rounded
+                          : Icons.verified_outlined,
+                      color: flightFitnessBlocking
+                          ? Colors.redAccent
+                          : Colors.green,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        flightFitnessBlocking
+                            ? 'Idoneità al volo scaduta il $fitnessText — Volo SOSPESO'
+                            : 'Idoneità al volo: scadenza $fitnessText',
+                        style: TextStyle(
+                          color: flightFitnessBlocking
+                              ? Colors.redAccent
+                              : Colors.green,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        softWrap: true,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => context.go('/profile'),
+                      child: const Text('Aggiorna'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (user.isTi || user.isEtp) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (user.isTi)
+                    Chip(
+                      label: const Text('TI'),
+                      backgroundColor: Colors.blue.shade700,
+                    ),
+                  if (user.isEtp)
+                    Chip(
+                      label: const Text('ETP'),
+                      backgroundColor: Colors.purple.shade700,
+                    ),
+                ],
+              ),
+            ],
+            if (!user.isApproved) ...[
+              const SizedBox(height: 16),
+              approvalBanner,
+            ],
+            if (blockingPtas.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              ptaBanner,
+            ],
+            const SizedBox(height: 24),
+            Text('Stato Currency', style: textTheme.titleLarge),
+            const SizedBox(height: 12),
+            currencySection,
+            if (auth.privileges.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text(
+                'Privilegi assegnati',
+                style: textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              PrivilegeGridWidget(privileges: auth.privileges),
+            ],
+          ];
 
     return Scaffold(
       appBar: AppBar(
@@ -306,223 +583,13 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1100),
             child: ListView(
-              shrinkWrap: false,
-              padding: const EdgeInsets.only(
-                left: 16,
-                top: 16,
-                right: 16,
-                bottom: 96,
+              padding: EdgeInsets.fromLTRB(
+                compact ? 12 : 16,
+                compact ? 12 : 16,
+                compact ? 12 : 16,
+                96,
               ),
-              children: [
-                _UserHeaderCard(
-                  user: user,
-                  showFleetShortcut: assignedHelicopters.isNotEmpty,
-                  onProfileTap: () => context.go('/profile'),
-                  onFleetTap: assignedHelicopters.isNotEmpty
-                      ? () => context.go('/helicopters/fleet')
-                      : null,
-                ),
-                _PushPermissionBanner(userId: user.id),
-                if (flightFitnessDate != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: flightFitnessBlocking
-                          ? Colors.red.shade700.withValues(alpha: 0.15)
-                          : Colors.green.shade800.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: flightFitnessBlocking
-                            ? Colors.red.shade400
-                            : Colors.green.shade600,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          flightFitnessBlocking
-                              ? Icons.warning_amber_rounded
-                              : Icons.verified_outlined,
-                          color: flightFitnessBlocking
-                              ? Colors.redAccent
-                              : Colors.green,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            flightFitnessBlocking
-                                ? 'Idoneità al volo scaduta il ${DateFormat('dd/MM/yyyy').format(flightFitnessDate)} — Volo SOSPESO'
-                                : 'Idoneità al volo: scadenza ${DateFormat('dd/MM/yyyy').format(flightFitnessDate)}',
-                            style: TextStyle(
-                              color: flightFitnessBlocking
-                                  ? Colors.redAccent
-                                  : Colors.green,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            softWrap: true,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => context.go('/profile'),
-                          child: const Text('Aggiorna'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (user.isTi || user.isEtp) ...[
-                  const SizedBox(height: 16),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (user.isTi)
-                        Chip(
-                          label: const Text('TI'),
-                          backgroundColor: Colors.blue.shade700,
-                        ),
-                      if (user.isEtp)
-                        Chip(
-                          label: const Text('ETP'),
-                          backgroundColor: Colors.purple.shade700,
-                        ),
-                    ],
-                  ),
-                ],
-                if (!user.isApproved) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.currencyWarning.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.currencyWarning),
-                    ),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.pending_actions,
-                          color: AppColors.currencyWarning,
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'In attesa di approvazione. Alcune funzionalità saranno abilitate dopo la verifica del profilo.',
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (blockingPtas.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: () => context.go('/pta'),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF8E44AD).withValues(alpha: 0.2),
-                            AppColors.surface,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF8E44AD)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.block, color: Color(0xFFCE93D8)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'CURRENCY SOSPESA — PTA attiva',
-                                  style: TextStyle(
-                                    color: Color(0xFFCE93D8),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  softWrap: true,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  unreadPtas.isNotEmpty
-                                      ? 'PTA: ${unreadPtas.map((p) => p.number).join(', ')} — Tocca per prendere visione'
-                                      : 'PTA: ${blockingPtas.map((p) => p.number).join(', ')} — Presa visione registrata, in attesa di chiusura',
-                                  style: const TextStyle(fontSize: 13),
-                                  softWrap: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right,
-                            color: Color(0xFFCE93D8),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Text(
-                  'Stato Currency',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                if (currencyCards.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'Nessuna currency operativa assegnata al tuo profilo.',
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                      ),
-                    ),
-                  )
-                else
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final cardWidth = constraints.maxWidth >= 960
-                          ? 320.0
-                          : constraints.maxWidth >= 640
-                          ? 300.0
-                          : constraints.maxWidth;
-                      return Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          for (final card in currencyCards)
-                            SizedBox(width: cardWidth, child: card),
-                        ],
-                      );
-                    },
-                  ),
-                if (auth.privileges.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    'Privilegi assegnati',
-                    style: Theme.of(context).textTheme.titleLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  PrivilegeGridWidget(privileges: auth.privileges),
-                ],
-              ],
+              children: children,
             ),
           ),
         ),
@@ -534,12 +601,16 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
 class _UserHeaderCard extends StatelessWidget {
   const _UserHeaderCard({
     required this.user,
+    required this.compact,
     required this.showFleetShortcut,
     required this.onProfileTap,
+    this.badges = const [],
     this.onFleetTap,
   });
 
   final UserProfile user;
+  final bool compact;
+  final List<Widget> badges;
   final bool showFleetShortcut;
   final VoidCallback onProfileTap;
   final VoidCallback? onFleetTap;
@@ -550,7 +621,7 @@ class _UserHeaderCard extends StatelessWidget {
       message: 'Vai al profilo',
       child: GestureDetector(
         onTap: onProfileTap,
-        child: UserAvatar(user: user, radius: 31),
+        child: UserAvatar(user: user, radius: compact ? 22 : 31),
       ),
     );
 
@@ -561,7 +632,7 @@ class _UserHeaderCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(compact ? 16 : 24),
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
@@ -572,31 +643,38 @@ class _UserHeaderCard extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(compact ? 12 : 20),
         child: Row(
           children: [
             avatar,
-            const SizedBox(width: 16),
+            SizedBox(width: compact ? 12 : 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Benvenuto',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                  if (!compact)
+                    Text(
+                      'Benvenuto',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   Text(
                     user.nome,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: compact
+                        ? Theme.of(context).textTheme.titleMedium
+                        : Theme.of(context).textTheme.titleLarge,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (badges.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 6, runSpacing: 6, children: badges),
+                  ],
                 ],
               ),
             ),
             if (showFleetShortcut) ...[
-              const SizedBox(width: 16),
+              SizedBox(width: compact ? 8 : 16),
               IconButton(
                 icon: const Icon(Icons.flight, size: 28),
                 tooltip: 'La Mia Flotta',
@@ -610,19 +688,106 @@ class _UserHeaderCard extends StatelessWidget {
   }
 }
 
+/// Pillola di stato nell'header compatto (TI, ETP, idoneità al volo).
+class _Badge extends StatelessWidget {
+  const _Badge(this.label, this.color, {this.icon, this.onTap});
+
+  final String label;
+  final Color color;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 4),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                softWrap: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Griglia a colonne fisse con card della stessa altezza per riga.
+class _CompactGrid extends StatelessWidget {
+  const _CompactGrid(this.cards);
+
+  final List<Widget> cards;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = math.max(2, constraints.maxWidth ~/ 190);
+        return Column(
+          children: [
+            for (var i = 0; i < cards.length; i += columns)
+              Padding(
+                padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var j = i; j < i + columns; j++) ...[
+                        if (j > i) const SizedBox(width: 8),
+                        Expanded(
+                          child: j < cards.length
+                              ? cards[j]
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _CurrencyCard extends StatelessWidget {
   const _CurrencyCard({
+    required this.compact,
     required this.title,
     required this.status,
     required this.subtitle,
-    required this.expiryText,
+    required this.expiry,
     required this.onTap,
   });
 
+  final bool compact;
   final String title;
   final CurrencyStatus? status;
   final String subtitle;
-  final String expiryText;
+  final DateTime? expiry;
   final VoidCallback onTap;
 
   @override
@@ -638,25 +803,100 @@ class _CurrencyCard extends StatelessWidget {
               ? 'NO GO'
               : 'GO')
         : 'N/D';
+    final date = expiry;
+    final expiryText = compact
+        ? (date == null
+              ? 'Nessuna data'
+              : 'Scad. ${DateFormat('dd/MM/yyyy').format(date)}')
+        : (date == null
+              ? 'Nessuna data registrata'
+              : 'Scadenza: ${DateFormat('d MMMM yyyy', 'it').format(date)}');
+    final textTheme = Theme.of(context).textTheme;
+
+    final decoration = BoxDecoration(
+      border: Border(left: BorderSide(color: currentStatus.color, width: 4)),
+      gradient: LinearGradient(
+        colors: [
+          currentStatus.color.withValues(alpha: 0.08),
+          AppColors.surface,
+        ],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      ),
+    );
+
+    if (compact) {
+      return Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.hardEdge,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            decoration: decoration,
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      currentStatus.icon,
+                      size: 20,
+                      color: currentStatus.color,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      goText,
+                      style: TextStyle(
+                        color: currentStatus.color,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  title,
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  softWrap: true,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
+                  softWrap: true,
+                ),
+                const Spacer(),
+                const SizedBox(height: 4),
+                Text(
+                  expiryText,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: currentStatus.color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  softWrap: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Card(
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(color: currentStatus.color, width: 4),
-            ),
-            gradient: LinearGradient(
-              colors: [
-                currentStatus.color.withValues(alpha: 0.08),
-                AppColors.surface,
-              ],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-          ),
+          decoration: decoration,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           child: IntrinsicHeight(
             child: Row(
@@ -699,32 +939,29 @@ class _CurrencyCard extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                           softWrap: true,
                         ),
                         const SizedBox(height: 4),
                         Text(
                           subtitle,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
                           softWrap: true,
                         ),
                         const SizedBox(height: 6),
                         Text(
                           expiryText,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: currentStatus.color,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: currentStatus.color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                           softWrap: true,
                         ),
                       ],
