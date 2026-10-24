@@ -26,8 +26,6 @@ import 'screens/dashboard/admin_crew_dashboard.dart';
 import 'screens/dashboard/admin_p66_dashboard.dart';
 import 'screens/dashboard/admin_privileges_dashboard.dart';
 import 'screens/dashboard/user_dashboard.dart';
-import 'screens/helicopters/helicopter_detail_screen.dart';
-import 'screens/helicopters/my_fleet_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'services/gh_db_service.dart';
 
@@ -114,16 +112,6 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         builder: (context, state) => const PtaManagementScreen(),
       ),
       GoRoute(path: '/pta', builder: (context, state) => const PtaScreen()),
-      GoRoute(
-        path: '/helicopters/fleet',
-        builder: (context, state) => const MyFleetScreen(),
-      ),
-      GoRoute(
-        path: '/helicopters/:id',
-        builder: (context, state) => HelicopterDetailScreen(
-          helicopterId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
-        ),
-      ),
     ],
     redirect: (context, state) {
       final auth = ref.read(authProvider);

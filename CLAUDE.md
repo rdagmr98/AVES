@@ -22,7 +22,6 @@ git push origin main   ← autorizzato, sempre senza chiedere
 |----------|-----------|
 | `screens/auth/` | login |
 | `screens/dashboard/` | home |
-| `screens/helicopters/` | `my_fleet_screen.dart`, `helicopter_detail_screen.dart` |
 | `screens/activities/` | `my_activities_screen.dart`, `add_activity_screen.dart`, `pta_screen.dart` |
 | `screens/admin/` | gestione utenti |
 | `screens/profile/` | profilo utente |
@@ -46,7 +45,6 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
 | `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin |
-| `view_prefs.dart` | preferenza vista dashboard (`compactDashboard`, default compatta, `shared_preferences`), caricata in `main()` prima di `runApp` |
 
 ## Modelli
 - `user_models.dart`: utente + abilitazioni
@@ -54,6 +52,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-24
+- 2026-10-24 (9): rimossi vista estesa della dashboard (`view_prefs.dart`, interruttore nel profilo), schermate flotta/dettaglio elicottero e `PrivilegeGridWidget`: resta solo la dashboard compatta. Card currency in rilievo: cornice piena da 2,5 px nel colore di stato (stesso dell'anello avatar) con luce/ombra diagonale, alone colorato, ombra scura, riflesso in alto e GO luminoso.
 - 2026-10-24 (8): dashboard compatta, miniature elicotteri. `_HelicopterTiles` sotto le currency usa i ritagli senza sfondo in `assets/images/helicopters/<code>.webp` (crediti in `assets/CREDITS.md`). Il tocco apre `_HelicopterSheet`, che mostra i privilegi con GO/NO GO (`getPerPrivilegeCurrency`; PTA o seminario bloccano tutti), le qualifiche di volo e le licenze. Card currency con bordo, alone e gradiente diagonale nel colore di stato. Catalogo ridotto a `helicopterImage`/`catalogAccent`; le descrizioni sono nel vault (`AVES Corsi/Catalogo elicotteri descrizioni.md`). Nota vault `AVES Corsi/Tecnici dashboard miniature elicotteri 2026-10-24.md`.
 - 2026-10-24 (7): dashboard compatta stile iOS, con anello di stato sull'avatar e anello di progresso sulle currency (`4c5ad0b`). Nota vault `AVES Corsi/Tecnici dashboard compatta stile iOS 2026-10-24.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.

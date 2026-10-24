@@ -5,12 +5,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'app.dart';
 import 'config/gh_config.dart';
 import 'services/gh_db_service.dart';
-import 'services/view_prefs.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('it', null);
-  await loadViewPrefs();
   if (!GhConfig.isConfigured) {
     runApp(const _SetupApp());
     return;

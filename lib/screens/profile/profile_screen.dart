@@ -12,7 +12,6 @@ import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
-import '../../services/view_prefs.dart';
 import '../../widgets/user_avatar.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/currency_badge_widget.dart';
@@ -1344,22 +1343,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     title: 'Account',
                     child: Column(
                       children: [
-                        if (!isAdminProfile)
-                          ValueListenableBuilder(
-                            valueListenable: compactDashboard,
-                            builder: (context, compact, _) => SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              secondary: const Icon(
-                                Icons.dashboard_customize_outlined,
-                              ),
-                              title: const Text('Visualizzazione compatta'),
-                              subtitle: const Text(
-                                'Dashboard più orizzontale; disattiva per la vista classica',
-                              ),
-                              value: compact,
-                              onChanged: setCompactDashboard,
-                            ),
-                          ),
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.lock_reset_outlined),
