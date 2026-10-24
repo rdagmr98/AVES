@@ -397,6 +397,15 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     final auth = ref.watch(authProvider);
     final filteredUsers = _filteredUsers();
     final isWide = MediaQuery.sizeOf(context).width >= 700;
+    final search = TextField(
+      controller: _searchCtrl,
+      decoration: const InputDecoration(
+        hintText: 'Cerca per nome o numero licenza…',
+        prefixIcon: Icon(Icons.search),
+        isDense: true,
+      ),
+      onChanged: (v) => setState(() => _search = v),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -423,18 +432,14 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          TextField(
-                            controller: _searchCtrl,
-                            decoration: const InputDecoration(
-                              hintText: 'Cerca per nome o numero licenza…',
-                              prefixIcon: Icon(Icons.search),
-                              isDense: true,
-                            ),
-                            onChanged: (v) => setState(() => _search = v),
-                          ),
-                          const SizedBox(height: 8),
+                          // PC: ricerca e filtri su una riga sola
+                          if (!isWide) ...[search, const SizedBox(height: 8)],
                           Row(
                             children: [
+                              if (isWide) ...[
+                                Expanded(flex: 2, child: search),
+                                const SizedBox(width: 8),
+                              ],
                               Expanded(
                                 child: AppDropdown<int?>(
                                   key: ValueKey(_orgUnitId),
@@ -586,6 +591,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                               child: _UserList(
                                 users: filteredUsers,
                                 selected: _selectedUser,
+                                dense: true,
                                 onSelected: (u) => _openUserDetail(context, u),
                                 isMaintenanceContext:
                                     auth.isAdminPriv || !auth.isAdminCrew,
@@ -640,10 +646,12 @@ class _UserList extends StatelessWidget {
     required this.onSelected,
     required this.isMaintenanceContext,
     required this.isCrewContext,
+    this.dense = false,
   });
 
   final List<UserProfile> users;
   final UserProfile? selected;
+  final bool dense;
   final ValueChanged<UserProfile> onSelected;
   final bool isMaintenanceContext;
   final bool isCrewContext;
@@ -656,7 +664,7 @@ class _UserList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       itemCount: users.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 6),
+      separatorBuilder: (_, _) => SizedBox(height: dense ? 2 : 6),
       itemBuilder: (context, index) {
         final user = users[index];
         final isSelected = selected?.id == user.id;
@@ -677,22 +685,25 @@ class _UserList extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             onTap: () => onSelected(user),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: EdgeInsets.symmetric(
+                horizontal: dense ? 12 : 16,
+                vertical: dense ? 6 : 14,
+              ),
               child: Row(
                 children: [
                   UserAvatar(
                     user: user,
-                    radius: 22,
+                    radius: dense ? 16 : 22,
                     backgroundColor: isPending
                         ? Colors.amber.shade700
                         : Theme.of(context).colorScheme.primary,
-                    textStyle: const TextStyle(
+                    textStyle: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: dense ? 13 : 16,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  SizedBox(width: dense ? 10 : 14),
                   // Name + licence (Expanded so it never overflows)
                   Expanded(
                     child: Column(
@@ -707,7 +718,8 @@ class _UserList extends StatelessWidget {
                         Text(
                           '${user.numeroLicenza ?? 'Licenza non indicata'}'
                           '${user.isPreRegistered ? ' · non ancora registrato' : ''}'
-                          '${user.isActive ? '' : ' · disattivato'}',
+                          '${user.isActive ? '' : ' · disattivato'}'
+                          '${dense ? ' · ${user.orgUnitName}' : ''}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
@@ -717,17 +729,17 @@ class _UserList extends StatelessWidget {
                                 ).colorScheme.onSurface.withValues(alpha: 0.65),
                               ),
                         ),
-                        Text(
-                          user.orgUnitName,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.55),
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        if (!dense)
+                          Text(
+                            user.orgUnitName,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.55),
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                       ],
                     ),
                   ),

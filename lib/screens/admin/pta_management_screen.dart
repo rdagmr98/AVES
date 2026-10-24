@@ -231,9 +231,11 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
         final acks = _ptaService.getAcknowledgmentsForPta(pta.id!);
         final validatedCount = acks.where((a) => a.isValidated).length;
         return Card(
-          margin: const EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 4),
           child: ListTile(
+            dense: true,
             leading: CircleAvatar(
+              radius: 16,
               backgroundColor: pta.isClosed
                   ? Colors.grey
                   : AppColors.currencyExpired,
@@ -252,17 +254,12 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
               '${pta.number} — ${pta.helicopterCode}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(pta.title),
-                const SizedBox(height: 4),
-                Text(
-                  'Emessa: ${DateFormat('dd/MM/yyyy').format(pta.issueDate)}  •  '
-                  'Prese visione validate: $validatedCount/${acks.length}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            subtitle: Text(
+              '${pta.title}  •  '
+              'Emessa: ${DateFormat('dd/MM/yyyy').format(pta.issueDate)}  •  '
+              'Prese visione validate: $validatedCount/${acks.length}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             trailing: PopupMenuButton<String>(
               onSelected: (value) {
@@ -297,7 +294,6 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
                     )
                   : const Icon(Icons.more_horiz),
             ),
-            isThreeLine: true,
           ),
         );
       },
@@ -344,50 +340,27 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
             ),
             ...entry.value.map(
               (ack) => Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.person_outline, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              ack.userFullName.isNotEmpty
-                                  ? ack.userFullName
-                                  : ack.userId,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Licenza: ${ack.userLicenza.isNotEmpty ? ack.userLicenza : "-"}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      Text(
-                        'Preso visione il: ${DateFormat('dd/MM/yyyy HH:mm').format(ack.acknowledgedAt)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _validateAck(ack),
-                          icon: const Icon(Icons.verified_outlined, size: 18),
-                          label: const Text('Valida presa visione'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.currencyValid,
-                          ),
-                        ),
-                      ),
-                    ],
+                margin: const EdgeInsets.only(bottom: 4),
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(
+                    ack.userFullName.isNotEmpty ? ack.userFullName : ack.userId,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'Licenza: ${ack.userLicenza.isNotEmpty ? ack.userLicenza : "-"}  •  '
+                    'Preso visione il: ${DateFormat('dd/MM/yyyy HH:mm').format(ack.acknowledgedAt)}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: ElevatedButton.icon(
+                    onPressed: () => _validateAck(ack),
+                    icon: const Icon(Icons.verified_outlined, size: 18),
+                    label: const Text('Valida'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.currencyValid,
+                    ),
                   ),
                 ),
               ),
