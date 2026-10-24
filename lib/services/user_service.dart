@@ -538,8 +538,9 @@ class UserService {
   }
 
   Future<List<LicenseType>> getLicenseTypes() async {
+    // per codice: A1-A4, B1.1-B1.4, B2, C (gli id seguono l'ordine di inserimento)
     final items = _referenceList('licenseTypes')
-      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+      ..sort((a, b) => (a['code'] as String).compareTo(b['code'] as String));
     return items.map(LicenseType.fromJson).toList();
   }
 
