@@ -7,9 +7,11 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
+import '../../data/helicopter_catalog.dart';
 import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
+import '../../services/currency_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/pta_service.dart';
 import '../../services/view_prefs.dart';
@@ -182,6 +184,55 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
     DateTime? crewExpiry(String key) => flightFitnessBlocking
         ? flightFitnessDate
         : auth.currency[key]?.expiryDate;
+
+    // Tocco su una miniatura: privilegi con GO/NO GO e qualifiche di volo.
+    void openHelicopter(HelicopterType heli) {
+      String? fascia;
+      for (final c in auth.crewAssignments) {
+        if (c.helicopterTypeId == heli.id && c.crewType == 'TOB') {
+          fascia = c.fascia;
+        }
+      }
+      final crewTypes = auth.crewAssignments
+          .where((c) => c.helicopterTypeId == heli.id)
+          .map((c) => c.crewType)
+          .toSet();
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        backgroundColor: AppColors.surface,
+        builder: (_) => _HelicopterSheet(
+          helicopter: heli,
+          privileges: auth.privileges
+              .where((p) => p.helicopterTypeId == heli.id)
+              .toList(),
+          licenses: [
+            for (final l in auth.licenses)
+              if (l.helicopterTypeId == heli.id) l.licenseName,
+          ],
+          maintenance: auth.currency['maintenance'],
+          perPrivilege: CurrencyService().getPerPrivilegeCurrency(
+            user.id,
+            helicopterTypeIds: {heli.id},
+          ),
+          flight: [
+            if (crewTypes.contains('T')) ('Volo T', '', crewStatus('flight_t')),
+            if (crewTypes.contains('TOB'))
+              ('Base TOB', 'Fascia ${fascia ?? '-'}', crewStatus('tob_base')),
+            for (final cap in auth.tobCapabilities)
+              if (cap.helicopterTypeId == heli.id)
+                (
+                  cap.capabilityName,
+                  'Capacità TOB',
+                  crewStatus('tob_${heli.id}_${cap.tobCapabilityId}'),
+                ),
+            if (crewTypes.contains('MDB'))
+              ('Mitragliere di Bordo', '', crewStatus('mdb')),
+          ],
+        ),
+      );
+    }
 
     final currencyCards = <_CurrencyCard>[
       if (hasMaintenanceAccess)
@@ -415,52 +466,18 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
               ptaBanner,
             ],
             const SizedBox(height: 24),
-            // Su schermi larghi currency e privilegi stanno affiancati.
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final currency = Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Currency', style: sectionStyle),
-                    const SizedBox(height: 12),
-                    currencySection,
-                  ],
-                );
-                if (assignedHelicopters.isEmpty) return currency;
-                final privileges = Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      auth.privileges.isEmpty ? 'Flotta' : 'Privilegi',
-                      style: sectionStyle,
-                    ),
-                    const SizedBox(height: 12),
-                    _HelicopterList(
-                      helicopters: assignedHelicopters,
-                      privileges: auth.privileges,
-                    ),
-                  ],
-                );
-                if (constraints.maxWidth < 900) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      currency,
-                      const SizedBox(height: 28),
-                      privileges,
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: currency),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 2, child: privileges),
-                  ],
-                );
-              },
-            ),
+            Text('Currency', style: sectionStyle),
+            const SizedBox(height: 12),
+            currencySection,
+            if (assignedHelicopters.isNotEmpty) ...[
+              const SizedBox(height: 28),
+              Text('Elicotteri', style: sectionStyle),
+              const SizedBox(height: 12),
+              _HelicopterTiles(
+                helicopters: assignedHelicopters,
+                onTap: openHelicopter,
+              ),
+            ],
           ]
         : <Widget>[
             header,
@@ -844,75 +861,286 @@ class _Badge extends StatelessWidget {
   }
 }
 
-/// Elicotteri assegnati come lista raggruppata iOS: privilegi sotto il
-/// codice, tocco = scheda elicottero (sostituisce la scorciatoia flotta).
-class _HelicopterList extends StatelessWidget {
-  const _HelicopterList({required this.helicopters, required this.privileges});
+/// Miniature degli elicotteri assegnati: ritaglio senza sfondo e nome.
+class _HelicopterTiles extends StatelessWidget {
+  const _HelicopterTiles({required this.helicopters, required this.onTap});
 
   final List<HelicopterType> helicopters;
-  final List<UserPrivilege> privileges;
+  final ValueChanged<HelicopterType> onTap;
 
   @override
   Widget build(BuildContext context) {
     final sorted = [...helicopters]..sort((a, b) => a.code.compareTo(b.code));
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = math.max(3, constraints.maxWidth ~/ 150);
+        final width = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final heli in sorted)
+              SizedBox(width: width, child: _tile(heli)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _tile(HelicopterType heli) {
+    final image = helicopterImage(heli.code);
+    final accent = catalogAccent(heli.code);
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [accent.withValues(alpha: 0.16), AppColors.surface],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: InkWell(
+          onTap: () => onTap(heli),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 14, 10, 12),
+            child: Column(
+              children: [
+                AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: image == null
+                      ? Icon(Icons.flight, color: accent, size: 32)
+                      : Image.asset(image, fit: BoxFit.contain),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  heli.name.isEmpty ? heli.code : heli.name,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Scheda dell'elicottero: privilegi con GO/NO GO e qualifiche di volo.
+class _HelicopterSheet extends StatelessWidget {
+  const _HelicopterSheet({
+    required this.helicopter,
+    required this.privileges,
+    required this.licenses,
+    required this.maintenance,
+    required this.perPrivilege,
+    required this.flight,
+  });
+
+  final HelicopterType helicopter;
+  final List<UserPrivilege> privileges;
+  final List<String> licenses;
+  final CurrencyStatus? maintenance;
+  final Future<List<PrivilegeCurrencyStatus>> perPrivilege;
+  final List<(String, String, CurrencyStatus?)> flight;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = helicopterImage(helicopter.code);
+    final sorted = [...privileges]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    // PTA o seminario mancante/scaduto fermano tutti i privilegi: sono gli
+    // unici NO GO generali senza data del seminario (currency_service).
+    final general = maintenance;
+    final blocked =
+        general != null &&
+            (general.isSuspended ||
+                (general.isExpired && general.secondaryExpiryDate == null))
+        ? general
+        : null;
+    final sectionStyle = Theme.of(
+      context,
+    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (image != null)
+              SizedBox(
+                height: 120,
+                child: Image.asset(image, fit: BoxFit.contain),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              helicopter.name.isEmpty ? helicopter.code : helicopter.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+            if (sorted.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text('Privilegi', style: sectionStyle),
+              const SizedBox(height: 8),
+              FutureBuilder<List<PrivilegeCurrencyStatus>>(
+                future: perPrivilege,
+                builder: (context, snap) {
+                  CurrencyStatus? statusFor(UserPrivilege p) {
+                    if (blocked != null) return blocked;
+                    for (final s in snap.data ?? const []) {
+                      if (s.privilegeTypeId == p.privilegeTypeId) {
+                        return s.status;
+                      }
+                    }
+                    return null;
+                  }
+
+                  return _SheetGroup([
+                    for (final p in sorted)
+                      _SheetRow(
+                        title: PrivilegeGridWidget.label(p),
+                        status: snap.hasData ? statusFor(p) : null,
+                        loading: !snap.hasData,
+                      ),
+                  ]);
+                },
+              ),
+            ],
+            if (flight.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text('Qualifiche di volo', style: sectionStyle),
+              const SizedBox(height: 8),
+              _SheetGroup([
+                for (final f in flight)
+                  _SheetRow(title: f.$1, subtitle: f.$2, status: f.$3),
+              ]),
+            ],
+            if (licenses.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text('Licenze', style: sectionStyle),
+              const SizedBox(height: 8),
+              _SheetGroup([
+                for (final l in licenses)
+                  _SheetRow(title: l, showStatus: false),
+              ]),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetGroup extends StatelessWidget {
+  const _SheetGroup(this.rows);
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         children: [
-          for (var i = 0; i < sorted.length; i++) ...[
+          for (var i = 0; i < rows.length; i++) ...[
             if (i > 0)
               const Divider(height: 1, indent: 16, color: AppColors.border),
-            _row(context, sorted[i]),
+            rows[i],
           ],
         ],
       ),
     );
   }
+}
 
-  Widget _row(BuildContext context, HelicopterType heli) {
-    final items =
-        privileges.where((p) => p.helicopterTypeId == heli.id).toList()
-          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    return InkWell(
-      // push: la scheda elicottero non ha un "indietro" proprio.
-      onTap: () => context.push('/helicopters/${heli.id}'),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    heli.code.isEmpty ? heli.name : heli.code,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+/// Riga della scheda: pallino e GO/NO GO a destra.
+class _SheetRow extends StatelessWidget {
+  const _SheetRow({
+    required this.title,
+    this.subtitle = '',
+    this.status,
+    this.loading = false,
+    this.showStatus = true,
+  });
+
+  final String title;
+  final String subtitle;
+  final CurrencyStatus? status;
+  final bool loading;
+  final bool showStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = status;
+    final go = s == null || !s.hasData
+        ? 'N/D'
+        : s.isExpired || s.isSuspended
+        ? 'NO GO'
+        : 'GO';
+    final color = s?.color ?? AppColors.textHint;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                   ),
-                  // Solo equipaggio/licenza: il codice basta.
-                  if (items.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      items.map(PrivilegeGridWidget.label).join('\n'),
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
                     ),
-                  ],
-                ],
+                  ),
+              ],
+            ),
+          ),
+          if (loading)
+            const SizedBox.square(
+              dimension: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (showStatus) ...[
+            const SizedBox(width: 12),
+            Icon(Icons.circle, size: 10, color: color),
+            const SizedBox(width: 6),
+            Text(
+              go,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const Icon(Icons.chevron_right, color: AppColors.textHint),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1028,92 +1256,115 @@ class _CurrencyCard extends StatelessWidget {
           : days == 0
           ? 'Scade oggi'
           : 'Scaduta da ${-days} gg';
-      return Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        clipBehavior: Clip.antiAlias,
-        child: Ink(
-          decoration: BoxDecoration(gradient: decoration.gradient),
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: textTheme.titleSmall?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+      final radius = BorderRadius.circular(20);
+      // Profondità: alone e bordo nel colore di stato, gradiente diagonale.
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.22),
+              blurRadius: 22,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          color: AppColors.surface,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(color: color.withValues(alpha: 0.45)),
+              gradient: LinearGradient(
+                colors: [color.withValues(alpha: 0.22), AppColors.surface],
+                stops: const [0, 0.8],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitle,
-                      style: secondary,
+                      title,
+                      style: textTheme.titleSmall?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                  const Spacer(),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            goText,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 30,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.8,
-                              height: 1,
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: secondary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const Spacer(),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              goText,
+                              style: TextStyle(
+                                color: color,
+                                fontSize: 30,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.8,
+                                height: 1,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox.square(
-                        dimension: 38,
-                        child: CircularProgressIndicator(
-                          value: progress.clamp(0.0, 1.0),
-                          strokeWidth: 5,
-                          strokeCap: StrokeCap.round,
-                          color: color,
-                          backgroundColor: color.withValues(alpha: 0.18),
+                        const SizedBox(width: 8),
+                        SizedBox.square(
+                          dimension: 38,
+                          child: CircularProgressIndicator(
+                            value: progress.clamp(0.0, 1.0),
+                            strokeWidth: 5,
+                            strokeCap: StrokeCap.round,
+                            color: color,
+                            backgroundColor: color.withValues(alpha: 0.18),
+                          ),
                         ),
+                      ],
+                    ),
+                    if (date != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        countdown,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        DateFormat('d MMM yyyy', 'it').format(date),
+                        style: secondary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                  ),
-                  if (date != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      countdown,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      DateFormat('d MMM yyyy', 'it').format(date),
-                      style: secondary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   ],
-                ],
+                ),
               ),
             ),
           ),

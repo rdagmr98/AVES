@@ -27,7 +27,6 @@ class HelicopterDetailScreen extends ConsumerWidget {
       );
     }
 
-    final catalog = catalogForHelicopter(helicopter);
     final accent = catalogAccent(helicopter.code);
     final userLicenses = auth.licenses
         .where((item) => item.helicopterTypeId == helicopterId)
@@ -55,13 +54,9 @@ class HelicopterDetailScreen extends ConsumerWidget {
             children: [
               _HeroCard(
                 helicopter: helicopter,
-                subtitle: catalog.subtitle,
-                description: catalog.description,
-                imageAsset: catalog.imageAsset,
+                imageAsset: helicopterImage(helicopter.code),
                 accent: accent,
               ),
-              const SizedBox(height: 16),
-              _SpecsCard(specs: catalog.specs, accent: accent),
               const SizedBox(height: 16),
               _AssignmentCard(
                 title: 'Abilitazioni utente',
@@ -133,15 +128,11 @@ class HelicopterDetailScreen extends ConsumerWidget {
 class _HeroCard extends StatelessWidget {
   const _HeroCard({
     required this.helicopter,
-    required this.subtitle,
-    required this.description,
     required this.imageAsset,
     required this.accent,
   });
 
   final HelicopterType helicopter;
-  final String subtitle;
-  final String description;
   final String? imageAsset;
   final Color accent;
 
@@ -171,96 +162,12 @@ class _HeroCard extends StatelessWidget {
               ),
             Padding(
               padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    helicopter.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(color: accent),
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    description,
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                  ),
-                ],
+              child: Text(
+                helicopter.name,
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+                softWrap: true,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SpecsCard extends StatelessWidget {
-  const _SpecsCard({required this.specs, required this.accent});
-
-  final List<(String label, String value)> specs;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.hardEdge,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Caratteristiche',
-              style: Theme.of(context).textTheme.titleLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final spec in specs)
-                  SizedBox(
-                    width: 220,
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceVariant.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: accent.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            spec.$1,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: accent,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(spec.$2, textAlign: TextAlign.center),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
             ),
           ],
         ),

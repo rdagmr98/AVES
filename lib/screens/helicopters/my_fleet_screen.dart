@@ -138,7 +138,7 @@ class _FleetHelicopterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final catalog = catalogForHelicopter(helicopter);
+    final image = helicopterImage(helicopter.code);
     final accent = catalogAccent(helicopter.code);
 
     return InkWell(
@@ -158,7 +158,7 @@ class _FleetHelicopterCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (catalog.imageAsset != null)
+              if (image != null)
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(20),
@@ -168,10 +168,7 @@ class _FleetHelicopterCard extends StatelessWidget {
                     child: Container(
                       color: Colors.black.withValues(alpha: 0.12),
                       padding: const EdgeInsets.all(12),
-                      child: Image.asset(
-                        catalog.imageAsset!,
-                        fit: BoxFit.contain,
-                      ),
+                      child: Image.asset(image, fit: BoxFit.contain),
                     ),
                   ),
                 ),
@@ -185,15 +182,6 @@ class _FleetHelicopterCard extends StatelessWidget {
                       Text(
                         helicopter.name,
                         style: Theme.of(context).textTheme.titleLarge,
-                        textAlign: TextAlign.center,
-                        softWrap: true,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        catalog.subtitle,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: accent),
                         textAlign: TextAlign.center,
                         softWrap: true,
                       ),
