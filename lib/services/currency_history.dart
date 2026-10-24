@@ -83,3 +83,28 @@ Map<int, String> ojtOptions(
         p.id: p.name,
   };
 }
+
+/// OJT per assegnare [ids] su [heliId], dallo storico privilegi dell'utente
+/// ([history], righe anche revocate): i già attivi non lo richiedono; nessuna
+/// riga = utente nuovo (iniziale), privilegio già avuto = ripristino.
+Map<int, String> proposedOjt(
+  List<Map<String, dynamic>> history,
+  int heliId,
+  Iterable<int> ids,
+) {
+  bool had(int p, {bool active = false}) => history.any(
+    (r) =>
+        r['helicopter_type_id'] == heliId &&
+        r['privilege_type_id'] == p &&
+        (!active || r['active'] != false),
+  );
+  return {
+    for (final p in ids)
+      if (!had(p, active: true))
+        p: history.isEmpty
+            ? ojtTypes[0]
+            : had(p)
+            ? ojtTypes[1]
+            : ojtTypes[2],
+  };
+}

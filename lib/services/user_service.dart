@@ -451,6 +451,175 @@ class UserService {
     await deleteUser(request.userId);
   }
 
+  /// Richieste privilegi, le più recenti prima (utenti eliminati esclusi).
+  Future<List<PrivilegeRequest>> getPrivilegeRequests({
+    String? userId,
+    bool onlyPending = false,
+  }) async {
+    final names = {
+      for (final u in _db.users) u['id']: _userFullNameFromMap(u),
+    };
+    return _db.privilegeRequests
+        .where(
+          (r) =>
+              names.containsKey(r['user_id']) &&
+              (userId == null || r['user_id'] == userId) &&
+              (!onlyPending || r['status'] == 'pending'),
+        )
+        .map(
+          (r) => PrivilegeRequest.fromJson({
+            ...r,
+            'user_full_name': names[r['user_id']],
+          }),
+        )
+        .toList()
+      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+  }
+
+  /// Chiede licenza e privilegi voluti su un elicottero (nessuno = rimozione)
+  /// al posto dell'eventuale richiesta in attesa; se coincidono con quelli
+  /// attuali la richiesta sparisce. Con [append] si sommano agli attuali.
+  Future<void> requestPrivilegeChange(
+    String userId,
+    int helicopterTypeId, {
+    int? licenseTypeId,
+    Iterable<int> privilegeTypeIds = const [],
+    bool append = false,
+  }) async {
+    bool onHeli(Map<String, dynamic> r) =>
+        r['user_id'] == userId &&
+        r['helicopter_type_id'] == helicopterTypeId &&
+        r['active'] != false;
+    final current = {
+      for (final r in _db.privileges.where(onHeli))
+        r['privilege_type_id'] as int,
+    };
+    final licenses = {
+      for (final r in _db.licenses.where(onHeli)) r['license_type_id'] as int,
+    };
+    final ids = {...privilegeTypeIds, if (append) ...current};
+    final license =
+        licenseTypeId ?? (append ? licenses.firstOrNull : null);
+    final unchanged =
+        ids.length == current.length &&
+        ids.containsAll(current) &&
+        (license == null
+            ? licenses.isEmpty
+            : licenses.length == 1 && licenses.contains(license));
+
+    final requests = _db.privilegeRequests;
+    final id = _nextId(requests);
+    requests.removeWhere(
+      (r) =>
+          r['user_id'] == userId &&
+          r['helicopter_type_id'] == helicopterTypeId &&
+          r['status'] == 'pending',
+    );
+    if (!unchanged) {
+      requests.add(
+        PrivilegeRequest(
+          id: id,
+          userId: userId,
+          helicopterTypeId: helicopterTypeId,
+          licenseTypeId: license,
+          privilegeTypeIds: ids,
+          requestedAt: DateTime.now(),
+        ).toJson(),
+      );
+    }
+    await _db.savePrivilegeRequests(requests);
+    if (unchanged) return;
+    final user = _db.users.firstWhere(
+      (u) => u['id'] == userId,
+      orElse: () => {'id': userId},
+    );
+    await _notificationService.notifyAllAdmins(
+      type: 'PRIVILEGE_REQUEST_PENDING',
+      message: 'Privilegi da approvare: ${_userFullNameFromMap(user)}.',
+      dedupeUnread: true,
+    );
+  }
+
+  /// Righe privilegi dell'utente, anche revocate: lo storico per il tipo OJT.
+  List<Map<String, dynamic>> privilegeHistory(String userId) =>
+      _db.privileges.where((r) => r['user_id'] == userId).toList();
+
+  /// Applica licenza e privilegi di [request] (anche corretta dall'admin):
+  /// i tolti restano nello storico, gli OJT dei nuovi li registra il chiamante.
+  Future<void> approvePrivilegeRequest(
+    PrivilegeRequest request,
+    String adminId,
+  ) async {
+    final userId = request.userId;
+    final heli = request.helicopterTypeId;
+    final licenseTypeId = request.licenseTypeId;
+    final privilegeTypeIds = request.privilegeTypeIds;
+    for (final l in await getUserLicenses(userId)) {
+      if (l.helicopterTypeId == heli && l.licenseTypeId != licenseTypeId) {
+        await deleteUserLicense(l.id!);
+      }
+    }
+    if (licenseTypeId != null) {
+      await setUserLicenses(userId, [
+        {'helicopter_type_id': heli, 'license_type_id': licenseTypeId},
+      ], append: true);
+    }
+    for (final p in await getUserPrivileges(userId)) {
+      if (p.helicopterTypeId == heli &&
+          !privilegeTypeIds.contains(p.privilegeTypeId)) {
+        await removePrivilege(userId, heli, p.privilegeTypeId);
+      }
+    }
+    await setUserPrivileges(userId, [
+      for (final p in privilegeTypeIds)
+        {'helicopter_type_id': heli, 'privilege_type_id': p},
+    ], append: true);
+    await _closePrivilegeRequest(
+      request,
+      adminId,
+      'approved',
+      'Privilegi su ${_heliCode(heli)} approvati.',
+    );
+  }
+
+  Future<void> rejectPrivilegeRequest(
+    PrivilegeRequest request,
+    String adminId, {
+    String? reason,
+  }) => _closePrivilegeRequest(
+    request,
+    adminId,
+    'rejected',
+    'Richiesta privilegi su ${_heliCode(request.helicopterTypeId)} non approvata'
+        '${(reason ?? '').trim().isEmpty ? '' : ': ${reason!.trim()}'}.',
+  );
+
+  String _heliCode(int id) =>
+      _findReference('helicopterTypes', id)?['code'] as String? ?? '';
+
+  Future<void> _closePrivilegeRequest(
+    PrivilegeRequest request,
+    String adminId,
+    String status,
+    String message,
+  ) async {
+    final requests = _db.privilegeRequests;
+    final i = requests.indexWhere((r) => r['id'] == request.id);
+    if (i == -1) throw Exception('Richiesta non trovata');
+    requests[i] = {
+      ...requests[i],
+      'status': status,
+      'handled_by': adminId,
+      'handled_at': DateTime.now().toIso8601String(),
+    };
+    await _db.savePrivilegeRequests(requests);
+    await _notificationService.createNotification(
+      userId: request.userId,
+      type: 'PRIVILEGE_REQUEST_${status.toUpperCase()}',
+      message: message,
+    );
+  }
+
   Future<void> deleteUser(String userId) async {
     final user = _db.users.firstWhere(
       (item) => item['id'] == userId,

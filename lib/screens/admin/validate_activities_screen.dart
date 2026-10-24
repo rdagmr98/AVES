@@ -5,11 +5,16 @@ import 'package:intl/intl.dart';
 import '../../constants/app_constants.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
+import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/currency_history.dart';
 import '../../services/hours_format.dart';
+import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/activity_edit_dialog.dart';
 import '../../widgets/app_dropdown.dart';
+import '../../widgets/date_range_dialog.dart';
+import '../../widgets/form_parts.dart';
 
 class ValidateActivitiesScreen extends ConsumerStatefulWidget {
   const ValidateActivitiesScreen({super.key});
@@ -19,12 +24,13 @@ class ValidateActivitiesScreen extends ConsumerStatefulWidget {
       _ValidateActivitiesScreenState();
 }
 
-enum _ValidationTabType { maintenance, seminar, flight, tob }
+enum _ValidationTabType { maintenance, seminar, privileges, flight, tob }
 
 class _ValidateActivitiesScreenState
     extends ConsumerState<ValidateActivitiesScreen>
     with SingleTickerProviderStateMixin {
   final _service = ActivityService();
+  final _userService = UserService();
 
   late final TabController _tabController;
   late final List<_ValidationTabType> _tabs;
@@ -33,6 +39,7 @@ class _ValidateActivitiesScreenState
   List<SeminarActivity> _seminars = [];
   List<FlightActivity> _flight = [];
   List<TobActivity> _tob = [];
+  List<PrivilegeRequest> _requests = [];
 
   String get _adminId => ref.read(authProvider).userProfile!.id;
 
@@ -44,6 +51,7 @@ class _ValidateActivitiesScreenState
       _tabs = const [
         _ValidationTabType.maintenance,
         _ValidationTabType.seminar,
+        _ValidationTabType.privileges,
       ];
     } else if (auth.isAdminCrew) {
       _tabs = const [_ValidationTabType.flight, _ValidationTabType.tob];
@@ -51,6 +59,7 @@ class _ValidateActivitiesScreenState
       _tabs = const [
         _ValidationTabType.maintenance,
         _ValidationTabType.seminar,
+        _ValidationTabType.privileges,
         _ValidationTabType.flight,
         _ValidationTabType.tob,
       ];
@@ -79,6 +88,9 @@ class _ValidateActivitiesScreenState
     final tob = _tabs.contains(_ValidationTabType.tob)
         ? await _service.getPendingTobActivities()
         : <TobActivity>[];
+    final requests = _tabs.contains(_ValidationTabType.privileges)
+        ? await _userService.getPrivilegeRequests(onlyPending: true)
+        : <PrivilegeRequest>[];
     if (!mounted) {
       return;
     }
@@ -87,6 +99,7 @@ class _ValidateActivitiesScreenState
       _seminars = seminars;
       _flight = flight;
       _tob = tob;
+      _requests = requests;
       _loading = false;
     });
   }
@@ -111,6 +124,8 @@ class _ValidateActivitiesScreenState
                       'Manutenzione (${_maintenance.length})',
                     _ValidationTabType.seminar =>
                       'Seminari (${_seminars.length})',
+                    _ValidationTabType.privileges =>
+                      'Privilegi (${_requests.length})',
                     _ValidationTabType.flight => 'Volo (${_flight.length})',
                     _ValidationTabType.tob => 'TOB (${_tob.length})',
                   },
@@ -162,6 +177,23 @@ class _ValidateActivitiesScreenState
           edit: editSeminarActivity,
           onDone: _load,
         );
+      case _ValidationTabType.privileges:
+        return _ValidationTable<PrivilegeRequest>(
+          items: _requests,
+          detailLabel: 'Richiesta',
+          row: (r) => (
+            r.userFullName,
+            _heliCode(r.helicopterTypeId),
+            _describe(r),
+            _plan(r, r.privilegeTypeIds),
+            r.requestedAt,
+          ),
+          validate: _approve,
+          reject: (r, reason) =>
+              _userService.rejectPrivilegeRequest(r, _adminId, reason: reason),
+          edit: _reviewRequest,
+          onDone: _load,
+        );
       case _ValidationTabType.flight:
         return _ValidationTable<FlightActivity>(
           items: _flight,
@@ -195,6 +227,256 @@ class _ValidateActivitiesScreenState
           onDone: _load,
         );
     }
+  }
+
+  String _heliCode(int id) =>
+      ref.read(authProvider).helicopterTypes
+          .where((h) => h.id == id)
+          .firstOrNull
+          ?.code ??
+      '';
+
+  String _privName(int id) =>
+      ref.read(authProvider).privilegeTypes
+          .where((p) => p.id == id)
+          .firstOrNull
+          ?.name ??
+      '$id';
+
+  String _describe(PrivilegeRequest r) {
+    if (r.licenseTypeId == null && r.privilegeTypeIds.isEmpty) {
+      return 'Rimozione elicottero';
+    }
+    final lic = ref.read(authProvider).licenseTypes
+        .where((l) => l.id == r.licenseTypeId)
+        .firstOrNull;
+    return [
+      if (lic != null) 'Cat. ${lic.code}',
+      ...r.privilegeTypeIds.map(_privName),
+    ].join(' · ');
+  }
+
+  /// Privilegi attivi sull'elicottero che l'approvazione toglierebbe.
+  Set<int> _revoked(PrivilegeRequest r, Set<int> keep) => {
+    for (final h in _userService.privilegeHistory(r.userId))
+      if (h['active'] != false &&
+          h['helicopter_type_id'] == r.helicopterTypeId &&
+          !keep.contains(h['privilege_type_id']))
+        h['privilege_type_id'] as int,
+  };
+
+  /// Cosa fa l'approvazione: OJT per tipo (dallo storico) e revoche.
+  String _plan(PrivilegeRequest r, Set<int> ids, [Map<int, String>? ojt]) {
+    ojt ??= proposedOjt(
+      _userService.privilegeHistory(r.userId),
+      r.helicopterTypeId,
+      ids,
+    );
+    final revoked = _revoked(r, ids);
+    return [
+      for (final t in ojtTypes)
+        if (ojt.containsValue(t))
+          '$t: ${[
+            for (final e in ojt.entries)
+              if (e.value == t) _privName(e.key),
+          ].join(', ')}',
+      if (revoked.isNotEmpty) 'Revoca: ${revoked.map(_privName).join(', ')}',
+    ].join('\n');
+  }
+
+  /// Approva [r] (o la sua correzione) e registra gli OJT dei privilegi
+  /// nuovi come attività validate: la currency riparte da [date].
+  Future<void> _approve(
+    PrivilegeRequest r, {
+    Map<int, String>? ojt,
+    DateTime? date,
+    String? note,
+  }) async {
+    ojt ??= proposedOjt(
+      _userService.privilegeHistory(r.userId),
+      r.helicopterTypeId,
+      r.privilegeTypeIds,
+    );
+    await _userService.approvePrivilegeRequest(r, _adminId);
+    for (final MapEntry(key: p, value: type) in ojt.entries) {
+      await _service.addMaintenanceActivityValidated(
+        MaintenanceActivity(
+          userId: r.userId,
+          helicopterTypeId: r.helicopterTypeId,
+          privilegeTypeId: p,
+          activityDate: date ?? DateTime.now(),
+          activityType: type,
+          description: note,
+          submittedBy: _adminId,
+        ),
+        _adminId,
+      );
+    }
+  }
+
+  /// Richiesta già compilata: l'admin corregge licenza, privilegi, tipo e
+  /// data dell'OJT prima di approvare.
+  Future<bool> _reviewRequest(BuildContext context, PrivilegeRequest r) async {
+    final auth = ref.read(authProvider);
+    final history = _userService.privilegeHistory(r.userId);
+    var license = r.licenseTypeId;
+    var selected = {...r.privilegeTypeIds};
+    final chosen = <int, String>{};
+    Map<int, String> ojt() => {
+      for (final e in proposedOjt(
+        history,
+        r.helicopterTypeId,
+        selected,
+      ).entries)
+        e.key: chosen[e.key] ?? e.value,
+    };
+    var date = DateTime.now();
+    // ponytail: controller non disposto, come in _registerOjt.
+    final notes = TextEditingController();
+    Widget label(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 4, top: 12),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) {
+          final plan = ojt();
+          final revoked = _revoked(r, selected);
+          return AlertDialog(
+            title: Text(
+              '${r.userFullName}  ·  ${_heliCode(r.helicopterTypeId)}',
+              overflow: TextOverflow.ellipsis,
+            ),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    label('Categoria licenza'),
+                    AppDropdown<int?>(
+                      initialValue: license,
+                      isDense: true,
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text('Nessuna'),
+                        ),
+                        for (final l in auth.licenseTypes)
+                          DropdownMenuItem(value: l.id, child: Text(l.code)),
+                      ],
+                      onChanged: (v) => setD(() => license = v),
+                    ),
+                    label('Privilegi'),
+                    MultiCheckList<int>(
+                      options: {
+                        for (final p in auth.privilegeTypes) p.id: p.name,
+                      },
+                      selected: selected,
+                      onChanged: (ids) => setD(() => selected = ids),
+                    ),
+                    if (plan.isNotEmpty) ...[
+                      label('OJT'),
+                      for (final e in plan.entries)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _privName(e.key),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 220,
+                                child: AppDropdown<String>(
+                                  key: ValueKey(e.key),
+                                  initialValue: e.value,
+                                  isDense: true,
+                                  isExpanded: true,
+                                  items: [
+                                    for (final t in ojtTypes)
+                                      DropdownMenuItem(
+                                        value: t,
+                                        child: Text(
+                                          t,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (v) =>
+                                      setD(() => chosen[e.key] = v ?? e.value),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      label('Data OJT'),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.event, size: 18),
+                        label: Text(DateFormat('dd/MM/yyyy').format(date)),
+                        onPressed: () async {
+                          final d = await showDateDialog(
+                            c,
+                            initialDate: date,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now(),
+                          );
+                          if (d != null) setD(() => date = d);
+                        },
+                      ),
+                      label('Note'),
+                      TextField(
+                        controller: notes,
+                        maxLines: 2,
+                        decoration: const InputDecoration(isDense: true),
+                      ),
+                    ],
+                    if (revoked.isNotEmpty) ...[
+                      label('Revocati (restano nello storico)'),
+                      Text(revoked.map(_privName).join(', ')),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(c).pop(false),
+                child: const Text('Annulla'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(c).pop(true),
+                child: const Text('Approva'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok != true) return false;
+    final note = notes.text.trim();
+    await _approve(
+      PrivilegeRequest(
+        id: r.id,
+        userId: r.userId,
+        helicopterTypeId: r.helicopterTypeId,
+        licenseTypeId: license,
+        privilegeTypeIds: selected,
+        requestedAt: r.requestedAt,
+      ),
+      ojt: ojt(),
+      date: date,
+      note: note.isEmpty ? null : note,
+    );
+    return true;
   }
 }
 

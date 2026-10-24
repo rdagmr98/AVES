@@ -108,11 +108,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
       );
 
-      // append: non cancella privilegi/attività già assegnati dall'admin.
-      if (_pendingLicenses.isNotEmpty) {
-        await _userService.setUserLicenses(
+      // Licenze e privilegi attendono l'approvazione dell'admin (con OJT);
+      // append: si sommano a quelli già assegnati dall'admin.
+      final heliIds = {
+        for (final r in [..._pendingLicenses, ..._pendingPrivileges])
+          r['helicopter_type_id'] as int,
+      };
+      for (final h in heliIds) {
+        await _userService.requestPrivilegeChange(
           userId,
-          _pendingLicenses,
+          h,
+          licenseTypeId:
+              _pendingLicenses
+                      .where((l) => l['helicopter_type_id'] == h)
+                      .firstOrNull?['license_type_id']
+                  as int?,
+          privilegeTypeIds: [
+            for (final p in _pendingPrivileges)
+              if (p['helicopter_type_id'] == h) p['privilege_type_id'] as int,
+          ],
           append: true,
         );
       }
@@ -120,13 +134,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         await _userService.setUserCrewAssignments(
           userId,
           _pendingCrew,
-          append: true,
-        );
-      }
-      if (_pendingPrivileges.isNotEmpty) {
-        await _userService.setUserPrivileges(
-          userId,
-          _pendingPrivileges,
           append: true,
         );
       }
@@ -152,6 +159,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             claimed
                 ? 'Il tuo account era già stato creato dall\'amministratore '
                       'con privilegi e attività: ora puoi accedere.'
+                      '${heliIds.isEmpty ? '' : ' Licenze e privilegi indicati attendono l\'approvazione.'}'
                 : 'Registrazione inviata - in attesa di approvazione',
           ),
           actions: [

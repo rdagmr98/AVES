@@ -449,3 +449,51 @@ class AccountDeletionRequest {
     if (handledAt != null) 'handled_at': handledAt!.toIso8601String(),
   };
 }
+
+/// Licenza e privilegi su un elicottero chiesti dall'utente (stato voluto,
+/// vuoto = rimozione): valgono solo dopo l'approvazione dell'admin con OJT.
+class PrivilegeRequest {
+  final int? id;
+  final String userId;
+  final String userFullName;
+  final int helicopterTypeId;
+  final int? licenseTypeId;
+  final Set<int> privilegeTypeIds;
+  final DateTime requestedAt;
+  final String status;
+
+  const PrivilegeRequest({
+    this.id,
+    required this.userId,
+    this.userFullName = '',
+    required this.helicopterTypeId,
+    this.licenseTypeId,
+    required this.privilegeTypeIds,
+    required this.requestedAt,
+    this.status = 'pending',
+  });
+
+  factory PrivilegeRequest.fromJson(Map<String, dynamic> j) => PrivilegeRequest(
+    id: j['id'] as int?,
+    userId: j['user_id'] as String,
+    userFullName: j['user_full_name'] as String? ?? '',
+    helicopterTypeId: j['helicopter_type_id'] as int,
+    licenseTypeId: j['license_type_id'] as int?,
+    privilegeTypeIds: {
+      for (final p in j['privilege_type_ids'] as List? ?? []) p as int,
+    },
+    requestedAt: DateTime.parse(j['requested_at'] as String),
+    status: j['status'] as String? ?? 'pending',
+  );
+
+  /// Il nome si ricava da users.json alla lettura: non si salva in chiaro.
+  Map<String, dynamic> toJson() => {
+    if (id != null) 'id': id,
+    'user_id': userId,
+    'helicopter_type_id': helicopterTypeId,
+    'license_type_id': licenseTypeId,
+    'privilege_type_ids': privilegeTypeIds.toList()..sort(),
+    'requested_at': requestedAt.toIso8601String(),
+    'status': status,
+  };
+}

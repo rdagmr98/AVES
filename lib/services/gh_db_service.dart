@@ -47,6 +47,7 @@ class GhDbService {
     'pta.json',
     'pta_acknowledgments.json',
     'account_deletion_requests.json',
+    'privilege_requests.json',
     'seminars.json',
   ];
 
@@ -518,6 +519,14 @@ class GhDbService {
         data,
         'aggiornamento richieste eliminazione account',
       );
+
+  List<Map<String, dynamic>> get privilegeRequests =>
+      List<Map<String, dynamic>>.from(
+        _getData('privilege_requests.json') as List? ?? [],
+      );
+
+  Future<void> savePrivilegeRequests(List<Map<String, dynamic>> data) =>
+      _writeFile('privilege_requests.json', data, 'aggiornamento richieste privilegi');
 }
 
 class ConflictException implements Exception {

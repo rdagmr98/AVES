@@ -76,4 +76,18 @@ void main() {
     expect(o(1, 30), isEmpty);
     expect(o(2, 30), [1, 2, 3]);
   });
+
+  test('tipo OJT proposto dallo storico privilegi', () {
+    Map<String, dynamic> r(int h, int p, {bool active = true}) => {
+      'helicopter_type_id': h,
+      'privilege_type_id': p,
+      'active': active,
+    };
+    expect(proposedOjt([], 10, [1, 2]), {1: ojtTypes[0], 2: ojtTypes[0]});
+    final history = [r(10, 1), r(10, 2, active: false), r(20, 3)];
+    expect(proposedOjt(history, 10, [1, 2, 3]), {
+      2: ojtTypes[1],
+      3: ojtTypes[2],
+    });
+  });
 }

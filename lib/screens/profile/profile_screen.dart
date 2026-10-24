@@ -39,6 +39,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   DateTime? _flightFitnessExpiry;
   String? _lastProfileSyncKey;
   AccountDeletionRequest? _pendingDeletionRequest;
+  Map<int, PrivilegeRequest> _privilegeRequests = {};
 
   @override
   void initState() {
@@ -54,6 +55,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _flightFitnessExpiry = profile?.flightFitnessExpiry;
     _lastProfileSyncKey = _profileSyncKey(profile);
     _loadDeletionRequest();
+    _loadPrivilegeRequests();
   }
 
   @override
@@ -153,6 +155,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return;
     }
     setState(() => _pendingDeletionRequest = request);
+  }
+
+  Future<void> _loadPrivilegeRequests() async {
+    final profile = ref.read(authProvider).userProfile;
+    if (profile == null) {
+      return;
+    }
+    final requests = await _userService.getPrivilegeRequests(
+      userId: profile.id,
+      onlyPending: true,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(
+      () => _privilegeRequests = {
+        for (final r in requests) r.helicopterTypeId: r,
+      },
+    );
   }
 
   Future<void> _showDeleteAccountRequestDialog() async {
@@ -506,72 +527,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Future<void> _applyMaintenanceEntry(
+  /// Le modifiche alla manutenzione diventano una richiesta: valgono quando
+  /// l'admin la approva registrando l'OJT.
+  Future<void> _requestMaintenance(
     UserProfile profile,
-    _MaintenanceEntry entry,
-    List<UserLicense> existingLicenses,
-    List<UserPrivilege> existingPrivileges,
-  ) async {
-    await _runMutation(() async {
-      // Handle license: remove old for this helicopter, add new
-      final oldLicenses = existingLicenses
-          .where((l) => l.helicopterTypeId == entry.helicopterTypeId)
-          .toList();
-      for (final old in oldLicenses) {
-        if (old.id != null) await _userService.deleteUserLicense(old.id!);
-      }
-      await _userService.addUserLicense(
-        UserLicense(
-          userId: profile.id,
-          helicopterTypeId: entry.helicopterTypeId,
-          licenseTypeId: entry.licenseTypeId,
-        ),
-      );
-      // Update privileges: keep other helicopters, replace this helicopter
-      final otherPrivileges = existingPrivileges
-          .where((p) => p.helicopterTypeId != entry.helicopterTypeId)
-          .map(
-            (p) => {
-              'helicopter_type_id': p.helicopterTypeId,
-              'privilege_type_id': p.privilegeTypeId,
-            },
-          )
-          .toList();
-      for (final privTypeId in entry.privilegeTypeIds) {
-        otherPrivileges.add({
-          'helicopter_type_id': entry.helicopterTypeId,
-          'privilege_type_id': privTypeId,
-        });
-      }
-      await _userService.setUserPrivileges(profile.id, otherPrivileges);
-    }, successMessage: 'Manutenzione aggiornata.');
-  }
-
-  Future<void> _removeMaintenanceHelicopter(
-    UserProfile profile,
-    int helicopterTypeId,
-    List<UserLicense> existingLicenses,
-    List<UserPrivilege> existingPrivileges,
-  ) async {
-    await _runMutation(() async {
-      final toDelete = existingLicenses
-          .where((l) => l.helicopterTypeId == helicopterTypeId && l.id != null)
-          .toList();
-      for (final lic in toDelete) {
-        await _userService.deleteUserLicense(lic.id!);
-      }
-      final remaining = existingPrivileges
-          .where((p) => p.helicopterTypeId != helicopterTypeId)
-          .map(
-            (p) => {
-              'helicopter_type_id': p.helicopterTypeId,
-              'privilege_type_id': p.privilegeTypeId,
-            },
-          )
-          .toList();
-      await _userService.setUserPrivileges(profile.id, remaining);
-    }, successMessage: 'Manutenzione rimossa.');
-  }
+    int helicopterTypeId, {
+    int? licenseTypeId,
+    Set<int> privilegeTypeIds = const {},
+  }) => _runMutation(() async {
+    await _userService.requestPrivilegeChange(
+      profile.id,
+      helicopterTypeId,
+      licenseTypeId: licenseTypeId,
+      privilegeTypeIds: privilegeTypeIds,
+    );
+    await _loadPrivilegeRequests();
+  }, successMessage: "Modifica inviata all'admin per l'approvazione.");
 
   Future<Map<String, dynamic>?> _showCrewDialog(
     List<HelicopterType> helicopterTypes,
@@ -941,6 +912,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     }
+    // Elicotteri solo richiesti, non ancora approvati.
+    for (final r in _privilegeRequests.values) {
+      byHeli.putIfAbsent(
+        r.helicopterTypeId,
+        () => (
+          code:
+              auth.helicopterTypes
+                  .where((h) => h.id == r.helicopterTypeId)
+                  .firstOrNull
+                  ?.code ??
+              '',
+          license: null,
+          privs: <UserPrivilege>[],
+        ),
+      );
+    }
+    String requested(PrivilegeRequest r) =>
+        r.licenseTypeId == null && r.privilegeTypeIds.isEmpty
+        ? 'rimozione'
+        : [
+            for (final l in auth.licenseTypes)
+              if (l.id == r.licenseTypeId) 'Cat. ${l.code}',
+            for (final p in auth.privilegeTypes)
+              if (r.privilegeTypeIds.contains(p.id)) p.name,
+          ].join(' · ');
 
     Widget empty(String text) => Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -1192,11 +1188,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           excludeHelicopterIds: byHeli.keys.toList(),
                         );
                         if (result == null) return;
-                        await _applyMaintenanceEntry(
+                        await _requestMaintenance(
                           profile,
-                          result,
-                          auth.licenses,
-                          auth.privileges,
+                          result.helicopterTypeId,
+                          licenseTypeId: result.licenseTypeId,
+                          privilegeTypeIds: result.privilegeTypeIds,
                         );
                       },
                       child: byHeli.isEmpty
@@ -1216,34 +1212,40 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                         : group.privs
                                               .map((p) => p.privilegeName)
                                               .join(' · '),
+                                    pending: _privilegeRequests[heliId] == null
+                                        ? null
+                                        : 'In attesa di approvazione: '
+                                              '${requested(_privilegeRequests[heliId]!)}',
                                     onEdit: () async {
+                                      final r = _privilegeRequests[heliId];
                                       final result =
                                           await _showMaintenanceDialog(
                                             auth.helicopterTypes,
                                             auth.licenseTypes,
                                             auth.privilegeTypes,
                                             initialHelicopterId: heliId,
-                                            initialLicenseTypeId:
-                                                group.license?.licenseTypeId,
-                                            initialPrivilegeTypeIds: group.privs
-                                                .map((p) => p.privilegeTypeId)
-                                                .toSet(),
+                                            initialLicenseTypeId: r != null
+                                                ? r.licenseTypeId
+                                                : group.license?.licenseTypeId,
+                                            initialPrivilegeTypeIds:
+                                                r?.privilegeTypeIds ??
+                                                group.privs
+                                                    .map(
+                                                      (p) => p.privilegeTypeId,
+                                                    )
+                                                    .toSet(),
                                           );
                                       if (result == null) return;
-                                      await _applyMaintenanceEntry(
+                                      await _requestMaintenance(
                                         profile,
-                                        result,
-                                        auth.licenses,
-                                        auth.privileges,
+                                        heliId,
+                                        licenseTypeId: result.licenseTypeId,
+                                        privilegeTypeIds:
+                                            result.privilegeTypeIds,
                                       );
                                     },
                                     onDelete: () =>
-                                        _removeMaintenanceHelicopter(
-                                          profile,
-                                          heliId,
-                                          auth.licenses,
-                                          auth.privileges,
-                                        ),
+                                        _requestMaintenance(profile, heliId),
                                   ),
                               ],
                             ),
@@ -1468,12 +1470,14 @@ class _AssignmentTile extends StatelessWidget {
     required this.onDelete,
     this.badge,
     this.subtitle,
+    this.pending,
     this.onEdit,
   });
 
   final String title;
   final String? badge;
   final String? subtitle;
+  final String? pending;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -1517,6 +1521,15 @@ class _AssignmentTile extends StatelessWidget {
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(subtitle!, style: textTheme.bodySmall),
+                ],
+                if (pending != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    pending!,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: AppColors.currencyWarning,
+                    ),
+                  ),
                 ],
               ],
             ),
