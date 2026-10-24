@@ -41,6 +41,10 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `flight_semester.dart` | currency volo T a semestri di calendario (funzione pura, test in `test/flight_semester_test.dart`) |
 | `hours_format.dart` | ore salvate decimali, inserite/mostrate h:mm (`parseHours`: `1:35`/`1.35`/`1h35`, solo cifre = minuti); widget `widgets/hours_field.dart` |
 | `name_format.dart` | forma canonica nomi: Nome = iniziale maiuscola, COGNOME = maiuscolo (applicata in `GhDbService.saveUsers`) |
+| `merge_user_rows.dart` | setter righe utente con soft delete (`active: false` + `updated_at`), conserva `created_at` = assegnazione |
+| `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
+| `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
+| `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
 
 ## Modelli
 - `user_models.dart`: utente + abilitazioni
@@ -48,7 +52,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-24
-- 2026-10-24 (2): elicotteri da mostrare valgono anche per le tendine (`AuthProvider.visibleHelicopters({keep})`); tendine uniformi via `widgets/app_dropdown.dart`; periodi Dal/Al con `widgets/date_range_dialog.dart` (`showDateRangeDialog`, due calendari affiancati: admin = PC, mai `showDateRangePicker`); app in italiano (`flutter_localizations`, lunedì primo giorno); squadra OL ordinata per scadenza (opzione A-Z, `CurrencyService.lastMaintenanceDate`); tolte dalla navigazione priv le 3 voci già nelle stat card; Rifiuta chiede conferma + motivo (nella notifica). Nota vault `AVES Corsi/Tecnici analisi miglioramenti 2026-10-24.md`.
-- 2026-10-24 (1): Opzioni admin (`_openOptions` in `screens/dashboard/admin_privileges_dashboard.dart`): unità, tipi attività OL, elicotteri da mostrare (`view_helicopter_ids` in users.json). Report PDF rimosso, T sul 169 = B + D. `93c31bf`.
+- 2026-10-24 (3): terza tornata completata (`e9cc7fe` → `7215453`): `showDateDialog` per le date admin, seminario per scadenza, `warning_days` in criteria.json, disattiva utente (`getAllUsers` esclude i disattivati), Valida = `_ValidationTable<T>`, "Currency scadute" con revoca e OJT, storico currency manutenzione e volo, corso volo (`registerFlightCourse`). Nota vault `AVES Corsi/Tecnici richieste OJT storico currency 2026-10-24.md`.
+- 2026-10-24 (2): `visibleHelicopters({keep})` per le tendine, `AppDropdown`, `showDateRangeDialog`, app in italiano, squadra OL per scadenza, Rifiuta con conferma + motivo. Nota vault `AVES Corsi/Tecnici analisi miglioramenti 2026-10-24.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
