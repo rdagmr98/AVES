@@ -1,6 +1,7 @@
 import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'activity_service.dart';
+import 'currency_history.dart';
 import 'flight_semester.dart';
 import 'gh_db_service.dart';
 import 'hours_format.dart';
@@ -379,6 +380,91 @@ class CurrencyService {
       if (last == null || d.isAfter(last)) last = d;
     }
     return last;
+  }
+
+  /// Storico currency manutentiva di [userId], dal più recente: assegnazioni
+  /// e revoche dei privilegi (`created_at`, `active: false` + `updated_at`),
+  /// OJT registrati e perdite ricavate dalle attività validate con la regola
+  /// di [lastMaintenanceDate].
+  Future<List<CurrencyEvent>> getCurrencyHistory(String userId) async {
+    final periodDays = (await getMaintenanceCriteria())?.periodDays ?? 180;
+    final now = DateTime.now();
+    String label(Object? h, Object? p) =>
+        '${_findReference('helicopterTypes', h)?['code'] ?? '?'} · '
+        '${_findReference('privilegeTypes', p)?['name'] ?? 'Tutti i privilegi'}';
+    DateTime date(Map<String, dynamic> a) =>
+        DateTime.parse((a['date_to'] ?? a['activity_date']) as String);
+    bool isOjt(Map<String, dynamic> a) =>
+        (a['activity_type'] as String? ?? '').startsWith('OJT');
+    final acts = _db.maintenanceActs
+        .where((a) => a['user_id'] == userId && a['is_validated'] == true)
+        .toList();
+    final events = <CurrencyEvent>[
+      for (final a in acts.where(isOjt))
+        (
+          date: date(a),
+          kind: CurrencyEventKind.restored,
+          title:
+              '${a['activity_type']}: '
+              '${label(a['helicopter_type_id'], a['privilege_type_id'])}',
+          note: a['description'] as String?,
+        ),
+    ];
+    // Fine del conteggio perdite per coppia: oggi se il privilegio è attivo,
+    // sennò l'ultima revoca.
+    // ponytail: le eventuali perdite fra revoca e riassegnazione restano.
+    final ends = <(Object?, Object?), DateTime>{};
+    for (final p in _db.privileges.where((p) => p['user_id'] == userId)) {
+      final key = (p['helicopter_type_id'], p['privilege_type_id']);
+      final created = DateTime.tryParse(p['created_at'] as String? ?? '');
+      final revoked = p['active'] == false
+          ? DateTime.tryParse(p['updated_at'] as String? ?? '') ?? now
+          : null;
+      if (created != null) {
+        events.add((
+          date: created,
+          kind: CurrencyEventKind.assigned,
+          title: 'Privilegio assegnato: ${label(key.$1, key.$2)}',
+          note: null,
+        ));
+      }
+      if (revoked != null) {
+        events.add((
+          date: revoked,
+          kind: CurrencyEventKind.revoked,
+          title: 'Privilegio revocato: ${label(key.$1, key.$2)}',
+          note: null,
+        ));
+      }
+      final end = revoked ?? now;
+      if (ends[key]?.isAfter(end) != true) ends[key] = end;
+    }
+    for (final MapEntry(key: (h, p), value: end) in ends.entries) {
+      final mine = acts.where(
+        (a) =>
+            a['helicopter_type_id'] == h &&
+            (a['privilege_type_id'] == null || a['privilege_type_id'] == p),
+      );
+      final ojtDates = {for (final a in mine.where(isOjt)) date(a)};
+      for (final l in currencyLosses(mine.map(date), periodDays, end)) {
+        events.add((
+          date: l.lost,
+          kind: CurrencyEventKind.lost,
+          title: 'Currency persa: ${label(h, p)}',
+          note: 'nessuna attività validata da $periodDays giorni',
+        ));
+        final r = l.regained;
+        if (r != null && !ojtDates.contains(r)) {
+          events.add((
+            date: r,
+            kind: CurrencyEventKind.restored,
+            title: 'Currency riacquisita: ${label(h, p)}',
+            note: 'con attività validata',
+          ));
+        }
+      }
+    }
+    return events..sort((a, b) => b.date.compareTo(a.date));
   }
 
   Future<List<PrivilegeCurrencyStatus>> getPerPrivilegeCurrency(

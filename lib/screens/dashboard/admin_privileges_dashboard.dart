@@ -12,6 +12,7 @@ import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/activity_service.dart';
+import '../../services/currency_history.dart';
 import '../../services/currency_service.dart';
 import '../../services/pta_service.dart';
 import '../../services/report_service.dart';
@@ -2326,6 +2327,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
   late _MaintenanceUserRow _row = widget.initialRow;
   List<MaintenanceActivity> _acts = [];
   List<SeminarActivity> _seminars = [];
+  List<CurrencyEvent> _history = [];
   bool _loading = true;
   String _query = '';
   int? _heliId;
@@ -2348,10 +2350,12 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     final userId = _row.user.id;
     final acts = await _activityService.getUserMaintenanceActivities(userId);
     final seminars = await _activityService.getUserSeminarActivities(userId);
+    final history = await CurrencyService().getCurrencyHistory(userId);
     if (!mounted) return;
     setState(() {
       _acts = acts.where((a) => a.isValidated).toList();
       _seminars = seminars.where((s) => s.isValidated).toList();
+      _history = history;
       _loading = false;
     });
   }
@@ -2957,7 +2961,48 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
               onPressed: () => _deleteSeminar(s),
             ),
           ),
+        const SizedBox(height: 16),
+        _sectionTitle('Storico currency'),
+        if (_history.isEmpty)
+          const Text(
+            'Nessun evento.',
+            style: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        for (final e in _history) _eventTile(e),
       ],
+    );
+  }
+
+  Widget _eventTile(CurrencyEvent e) {
+    final (icon, color) = switch (e.kind) {
+      CurrencyEventKind.assigned => (
+        Icons.add_circle_outline,
+        AppColors.primary,
+      ),
+      CurrencyEventKind.revoked => (
+        Icons.remove_circle_outline,
+        AppColors.textSecondary,
+      ),
+      CurrencyEventKind.restored => (
+        Icons.how_to_reg_outlined,
+        AppColors.currencyValid,
+      ),
+      CurrencyEventKind.lost => (
+        Icons.event_busy_outlined,
+        AppColors.currencyExpired,
+      ),
+    };
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: color, size: 20),
+      title: Text(e.title),
+      subtitle: Text(
+        [_fmt(e.date), if ((e.note ?? '').isNotEmpty) e.note!].join('  ·  '),
+      ),
     );
   }
 
