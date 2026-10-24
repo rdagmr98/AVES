@@ -1,3 +1,5 @@
+import '../models/activity_models.dart';
+import '../models/reference_models.dart';
 import '../models/user_models.dart';
 
 enum CurrencyEventKind { assigned, revoked, restored, lost }
@@ -57,3 +59,27 @@ void sortByExpiry(List<UserProfile> users, Map<String, DateTime?> expiry) =>
           : (eb == null ? 1 : ea.compareTo(eb));
       return c != 0 ? c : a.fullName.compareTo(b.fullName);
     });
+
+const ojtTypes = ['OJT iniziale', 'OJT di ripristino', 'OJT nuovo privilegio'];
+
+/// Privilegi proponibili per tipo di OJT su un elicottero: iniziale = tutti,
+/// ripristino = solo gli scaduti dell'utente, nuovo = solo i non assegnati.
+Map<int, String> ojtOptions(
+  String type,
+  int? heliId,
+  List<PrivilegeType> privs,
+  List<PrivilegeCurrencyStatus> current,
+) {
+  bool has(int p, {bool expired = false}) => current.any(
+    (s) =>
+        s.helicopterTypeId == heliId &&
+        s.privilegeTypeId == p &&
+        (!expired || s.status.isExpired),
+  );
+  return {
+    for (final p in privs)
+      if (type == ojtTypes[0] ||
+          (type == ojtTypes[1] ? has(p.id, expired: true) : !has(p.id)))
+        p.id: p.name,
+  };
+}

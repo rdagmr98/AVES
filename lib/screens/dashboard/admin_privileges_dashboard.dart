@@ -25,6 +25,7 @@ import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/currency_event_tile.dart';
 import '../../widgets/date_range_dialog.dart';
 import '../../widgets/filter_panel.dart';
+import '../../widgets/form_parts.dart';
 import '../../widgets/user_avatar.dart';
 
 enum _MaintenanceSortMode { status, alphabetical, lastModified, lastActivity }
@@ -1976,8 +1977,6 @@ class _StatCardData {
   final VoidCallback? onTap;
 }
 
-const _ojtTypes = ['OJT iniziale', 'OJT di ripristino', 'OJT nuovo privilegio'];
-
 Future<bool> _confirmAction(
   BuildContext context,
   String title,
@@ -2024,8 +2023,8 @@ Future<bool> _revokePrivilege(
   return true;
 }
 
-/// OJT di manutenzione: assegna il privilegio se manca e lo registra come
-/// attività validata alla data dell'OJT, da cui la currency riparte.
+/// OJT di manutenzione: assegna i privilegi che mancano e li registra come
+/// attività validate alla data dell'OJT, da cui la currency riparte.
 Future<bool> _registerOjt(
   BuildContext context,
   WidgetRef ref,
@@ -2035,12 +2034,32 @@ Future<bool> _registerOjt(
 }) async {
   final auth = ref.read(authProvider);
   final adminId = auth.userProfile?.id;
-  final helis = auth.visibleHelicopters(keep: heliId);
   final privs = auth.privilegeTypes;
-  var type = _ojtTypes[privId == null ? 0 : 1];
+  // Non filtrato per il GO/NO GO: serve sapere cosa è già assegnato ovunque.
+  final current = await CurrencyService().getPerPrivilegeCurrency(user.id);
+  if (!context.mounted) return false;
+  Map<int, String> options(String t, int? h) =>
+      ojtOptions(t, h, privs, current);
+  final helis = auth.visibleHelicopters(keep: heliId);
+  // Elicottero bloccato (da riga privilegio): resta quello anche se vuoto.
+  List<HelicopterType> helisFor(String t) => heliId != null
+      ? helis
+      : helis.where((h) => options(t, h.id).isNotEmpty).toList();
+  var type = options(ojtTypes[1], heliId).containsKey(privId)
+      ? ojtTypes[1]
+      : ojtTypes[0];
   var date = DateTime.now();
-  var heli = heliId ?? helis.firstOrNull?.id;
-  var priv = privId ?? privs.firstOrNull?.id;
+  var heli = heliId ?? helisFor(type).firstOrNull?.id;
+  var selected = <int>{?privId};
+  void setType(String t) {
+    type = t;
+    final hs = helisFor(t);
+    if (heliId == null && !hs.any((h) => h.id == heli)) {
+      heli = hs.firstOrNull?.id;
+    }
+    selected = selected.where(options(t, heli).containsKey).toSet();
+  }
+
   // ponytail: controller non disposto, come in _editActivity.
   final notes = TextEditingController();
   Widget label(String text) => Padding(
@@ -2070,10 +2089,10 @@ Future<bool> _registerOjt(
                   initialValue: type,
                   isDense: true,
                   items: [
-                    for (final t in _ojtTypes)
+                    for (final t in ojtTypes)
                       DropdownMenuItem(value: t, child: Text(t)),
                   ],
-                  onChanged: (v) => type = v ?? type,
+                  onChanged: (v) => setD(() => setType(v ?? type)),
                 ),
                 label('Data OJT'),
                 OutlinedButton.icon(
@@ -2091,30 +2110,43 @@ Future<bool> _registerOjt(
                 ),
                 label('Elicottero'),
                 AppDropdown<int>(
+                  // Il tipo cambia la lista e la scelta: ricrea il campo.
+                  key: ValueKey(type),
                   initialValue: heli,
                   isDense: true,
                   items: [
-                    for (final h in helis)
+                    for (final h in helisFor(type))
                       DropdownMenuItem(
                         value: h.id,
                         child: Text(h.code, overflow: TextOverflow.ellipsis),
                       ),
                   ],
-                  onChanged: heliId != null ? null : (v) => heli = v,
+                  onChanged: heliId != null
+                      ? null
+                      : (v) => setD(() {
+                          heli = v;
+                          selected = {};
+                        }),
                 ),
-                label('Privilegio'),
-                AppDropdown<int>(
-                  initialValue: priv,
-                  isDense: true,
-                  items: [
-                    for (final p in privs)
-                      DropdownMenuItem(
-                        value: p.id,
-                        child: Text(p.name, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: privId != null ? null : (v) => priv = v,
-                ),
+                label('Privilegi'),
+                if (options(type, heli).isEmpty)
+                  Text(
+                    switch (ojtTypes.indexOf(type)) {
+                      1 => 'Nessun privilegio scaduto.',
+                      2 => 'Tutti i privilegi sono già assegnati.',
+                      _ => 'Nessun privilegio.',
+                    },
+                    style: const TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: AppColors.textSecondary,
+                    ),
+                  )
+                else
+                  MultiCheckList<int>(
+                    options: options(type, heli),
+                    selected: selected,
+                    onChanged: (ids) => setD(() => selected = ids),
+                  ),
                 label('Note'),
                 TextField(
                   controller: notes,
@@ -2131,37 +2163,44 @@ Future<bool> _registerOjt(
             child: const Text('Annulla'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(c).pop(true),
+            onPressed: heli == null || selected.isEmpty
+                ? null
+                : () => Navigator.of(c).pop(true),
             child: const Text('Registra OJT'),
           ),
         ],
       ),
     ),
   );
-  final h = heli, p = priv;
-  if (ok != true || h == null || p == null || adminId == null) return false;
-  final users = UserService();
-  final assigned = (await users.getUserPrivileges(
-    user.id,
-  )).any((x) => x.helicopterTypeId == h && x.privilegeTypeId == p);
-  if (!assigned) {
-    await users.setUserPrivileges(user.id, [
-      {'helicopter_type_id': h, 'privilege_type_id': p},
+  final h = heli;
+  if (ok != true || h == null || selected.isEmpty || adminId == null) {
+    return false;
+  }
+  final missing = selected.where(
+    (p) =>
+        !current.any((s) => s.helicopterTypeId == h && s.privilegeTypeId == p),
+  );
+  if (missing.isNotEmpty) {
+    await UserService().setUserPrivileges(user.id, [
+      for (final p in missing)
+        {'helicopter_type_id': h, 'privilege_type_id': p},
     ], append: true);
   }
   final note = notes.text.trim();
-  await ActivityService().addMaintenanceActivityValidated(
-    MaintenanceActivity(
-      userId: user.id,
-      helicopterTypeId: h,
-      privilegeTypeId: p,
-      activityDate: date,
-      activityType: type,
-      description: note.isEmpty ? null : note,
-      submittedBy: adminId,
-    ),
-    adminId,
-  );
+  for (final p in selected) {
+    await ActivityService().addMaintenanceActivityValidated(
+      MaintenanceActivity(
+        userId: user.id,
+        helicopterTypeId: h,
+        privilegeTypeId: p,
+        activityDate: date,
+        activityType: type,
+        description: note.isEmpty ? null : note,
+        submittedBy: adminId,
+      ),
+      adminId,
+    );
+  }
   return true;
 }
 

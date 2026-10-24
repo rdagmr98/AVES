@@ -1,3 +1,5 @@
+import 'package:aves_currency/models/activity_models.dart';
+import 'package:aves_currency/models/reference_models.dart';
 import 'package:aves_currency/models/user_models.dart';
 import 'package:aves_currency/services/currency_history.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,5 +48,32 @@ void main() {
     final users = [u('a', 'A'), u('b', 'B'), u('c', 'D'), u('z', 'C')];
     sortByExpiry(users, exp);
     expect(users.map((x) => x.id), ['z', 'c', 'b', 'a']);
+  });
+
+  test('OJT: iniziale tutti, ripristino scaduti, nuovo non assegnati', () {
+    final privs = [
+      for (final id in [1, 2, 3])
+        PrivilegeType(id: id, code: '$id', name: 'P$id'),
+    ];
+    PrivilegeCurrencyStatus s(int heli, int priv, CurrencyStatusEnum st) =>
+        PrivilegeCurrencyStatus(
+          helicopterTypeId: heli,
+          helicopterCode: 'H$heli',
+          privilegeTypeId: priv,
+          privilegeName: 'P$priv',
+          status: CurrencyStatus(status: st, label: ''),
+        );
+    final cur = [
+      s(10, 1, CurrencyStatusEnum.expired),
+      s(10, 2, CurrencyStatusEnum.valid),
+      s(20, 3, CurrencyStatusEnum.expired),
+    ];
+    Iterable<int> o(int t, int heli) =>
+        ojtOptions(ojtTypes[t], heli, privs, cur).keys;
+    expect(o(0, 10), [1, 2, 3]);
+    expect(o(1, 10), [1]);
+    expect(o(2, 10), [3]);
+    expect(o(1, 30), isEmpty);
+    expect(o(2, 30), [1, 2, 3]);
   });
 }
