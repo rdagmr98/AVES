@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
+import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/notification_service.dart';
 import '../../services/pta_service.dart';
@@ -182,7 +183,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
         ? flightFitnessDate
         : auth.currency[key]?.expiryDate;
 
-    final currencyCards = <Widget>[
+    final currencyCards = <_CurrencyCard>[
       if (hasMaintenanceAccess)
         _CurrencyCard(
           compact: compact,
@@ -252,30 +253,50 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
         ? null
         : DateFormat('dd/MM/yyyy').format(flightFitnessDate);
 
-    final header = _UserHeaderCard(
-      user: user,
-      compact: compact,
-      badges: [
-        if (compact && fitnessText != null)
-          _Badge(
-            flightFitnessBlocking
-                ? 'Idoneità volo scaduta $fitnessText · SOSPESO'
-                : 'Idoneità volo $fitnessText',
-            flightFitnessBlocking ? Colors.redAccent : Colors.green,
-            icon: flightFitnessBlocking
-                ? Icons.warning_amber_rounded
-                : Icons.verified_outlined,
+    // Anello attorno all'avatar = stato peggiore tra le currency mostrate.
+    const rank = [
+      CurrencyStatusEnum.valid,
+      CurrencyStatusEnum.noData,
+      CurrencyStatusEnum.warning,
+      CurrencyStatusEnum.suspended,
+      CurrencyStatusEnum.expired,
+    ];
+    final worst =
+        [
+          for (final card in currencyCards)
+            card.status?.status ?? CurrencyStatusEnum.noData,
+          if (blockingPtas.isNotEmpty) CurrencyStatusEnum.suspended,
+        ].fold<CurrencyStatusEnum?>(
+          null,
+          (a, b) => a == null || rank.indexOf(b) > rank.indexOf(a) ? b : a,
+        );
+
+    final Widget header = compact
+        ? _CompactHeader(
+            user: user,
+            ringColor: worst == null
+                ? null
+                : CurrencyStatus(status: worst, label: '').color,
+            badges: [
+              if (user.isTi) _Badge('TI', Colors.blue.shade300),
+              if (user.isEtp) _Badge('ETP', Colors.purple.shade200),
+            ],
+            caption: flightFitnessDate == null
+                ? null
+                : _FitnessCaption(
+                    date: flightFitnessDate,
+                    blocking: flightFitnessBlocking,
+                  ),
             onTap: () => context.go('/profile'),
-          ),
-        if (compact && user.isTi) _Badge('TI', Colors.blue.shade300),
-        if (compact && user.isEtp) _Badge('ETP', Colors.purple.shade200),
-      ],
-      showFleetShortcut: assignedHelicopters.isNotEmpty,
-      onProfileTap: () => context.go('/profile'),
-      onFleetTap: assignedHelicopters.isNotEmpty
-          ? () => context.go('/helicopters/fleet')
-          : null,
-    );
+          )
+        : _UserHeaderCard(
+            user: user,
+            showFleetShortcut: assignedHelicopters.isNotEmpty,
+            onProfileTap: () => context.go('/profile'),
+            onFleetTap: assignedHelicopters.isNotEmpty
+                ? () => context.go('/helicopters/fleet')
+                : null,
+          );
 
     final approvalBanner = Container(
       padding: const EdgeInsets.all(16),
@@ -405,15 +426,18 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                     currencySection,
                   ],
                 );
-                if (auth.privileges.isEmpty) return currency;
+                if (assignedHelicopters.isEmpty) return currency;
                 final privileges = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Privilegi', style: sectionStyle),
+                    Text(
+                      auth.privileges.isEmpty ? 'Flotta' : 'Privilegi',
+                      style: sectionStyle,
+                    ),
                     const SizedBox(height: 12),
-                    PrivilegeGridWidget(
+                    _HelicopterList(
+                      helicopters: assignedHelicopters,
                       privileges: auth.privileges,
-                      compact: true,
                     ),
                   ],
                 );
@@ -588,16 +612,12 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
 class _UserHeaderCard extends StatelessWidget {
   const _UserHeaderCard({
     required this.user,
-    required this.compact,
     required this.showFleetShortcut,
     required this.onProfileTap,
-    this.badges = const [],
     this.onFleetTap,
   });
 
   final UserProfile user;
-  final bool compact;
-  final List<Widget> badges;
   final bool showFleetShortcut;
   final VoidCallback onProfileTap;
   final VoidCallback? onFleetTap;
@@ -608,39 +628,29 @@ class _UserHeaderCard extends StatelessWidget {
       message: 'Vai al profilo',
       child: GestureDetector(
         onTap: onProfileTap,
-        child: UserAvatar(user: user, radius: compact ? 32 : 31),
+        child: UserAvatar(user: user, radius: 31),
       ),
     );
 
     return Container(
-      // Compatta: superficie piatta, la gerarchia la fanno spazio e tipografia.
-      decoration: compact
-          ? BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.surfaceVariant, AppColors.surface],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-            )
-          : BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.surfaceVariant, AppColors.surface],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.14),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.surfaceVariant, AppColors.surface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: EdgeInsets.all(compact ? 18 : 20),
+        padding: const EdgeInsets.all(20),
         child: Row(
           children: [
             avatar,
@@ -650,33 +660,21 @@ class _UserHeaderCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!compact)
-                    Text(
-                      'Benvenuto',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
+                  Text(
+                    'Benvenuto',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                   Text(
                     user.nome,
-                    style: compact
-                        ? Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.5,
-                            height: 1.15,
-                          )
-                        : Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleLarge,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (badges.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 6, runSpacing: 6, children: badges),
-                  ],
                 ],
               ),
             ),
             if (showFleetShortcut) ...[
-              SizedBox(width: compact ? 8 : 16),
+              const SizedBox(width: 16),
               IconButton(
                 icon: const Icon(Icons.flight, size: 28),
                 tooltip: 'La Mia Flotta',
@@ -690,44 +688,229 @@ class _UserHeaderCard extends StatelessWidget {
   }
 }
 
-/// Pillola di stato nell'header compatto (TI, ETP, idoneità al volo).
-class _Badge extends StatelessWidget {
-  const _Badge(this.label, this.color, {this.icon, this.onTap});
+/// Header compatto: riga profilo stile iOS (tutta tappabile), avatar con
+/// anello colorato dallo stato peggiore, nome grande, TI/ETP, idoneità.
+class _CompactHeader extends StatelessWidget {
+  const _CompactHeader({
+    required this.user,
+    required this.ringColor,
+    required this.badges,
+    required this.caption,
+    required this.onTap,
+  });
 
-  final String label;
-  final Color color;
-  final IconData? icon;
-  final VoidCallback? onTap;
+  final UserProfile user;
+  final Color? ringColor;
+  final List<Widget> badges;
+  final Widget? caption;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.surfaceVariant, AppColors.surface],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 4),
-            ],
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 12, 20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: ringColor ?? Colors.transparent,
+                      width: 2.5,
+                    ),
+                  ),
+                  child: UserAvatar(user: user, radius: 34),
                 ),
-                softWrap: true,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              user.nome,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.6,
+                                height: 1.15,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          for (final badge in badges) ...[
+                            const SizedBox(width: 8),
+                            badge,
+                          ],
+                        ],
+                      ),
+                      if (caption != null) ...[
+                        const SizedBox(height: 6),
+                        caption!,
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.textHint),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Riga idoneità al volo sotto il nome: discreta se valida, rossa se scaduta.
+class _FitnessCaption extends StatelessWidget {
+  const _FitnessCaption({required this.date, required this.blocking});
+
+  final DateTime date;
+  final bool blocking;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = DateFormat('dd/MM/yyyy').format(date);
+    return Row(
+      children: [
+        Icon(
+          blocking ? Icons.warning_amber_rounded : Icons.verified_outlined,
+          size: 15,
+          color: blocking ? Colors.redAccent : AppColors.currencyValid,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            blocking
+                ? 'Idoneità volo scaduta $text · SOSPESO'
+                : 'Idoneità volo $text',
+            style: TextStyle(
+              color: blocking ? Colors.redAccent : AppColors.textSecondary,
+              fontSize: 13,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Pillola accanto al nome nell'header compatto (TI, ETP).
+class _Badge extends StatelessWidget {
+  const _Badge(this.label, this.color);
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// Elicotteri assegnati come lista raggruppata iOS: privilegi sotto il
+/// codice, tocco = scheda elicottero (sostituisce la scorciatoia flotta).
+class _HelicopterList extends StatelessWidget {
+  const _HelicopterList({required this.helicopters, required this.privileges});
+
+  final List<HelicopterType> helicopters;
+  final List<UserPrivilege> privileges;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...helicopters]..sort((a, b) => a.code.compareTo(b.code));
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < sorted.length; i++) ...[
+            if (i > 0)
+              const Divider(height: 1, indent: 16, color: AppColors.border),
+            _row(context, sorted[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, HelicopterType heli) {
+    final items =
+        privileges.where((p) => p.helicopterTypeId == heli.id).toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return InkWell(
+      // push: la scheda elicottero non ha un "indietro" proprio.
+      onTap: () => context.push('/helicopters/${heli.id}'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    heli.code.isEmpty ? heli.name : heli.code,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  // Solo equipaggio/licenza: il codice basta.
+                  if (items.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      items.map(PrivilegeGridWidget.label).join('\n'),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
+            const Icon(Icons.chevron_right, color: AppColors.textHint),
           ],
         ),
       ),
@@ -805,14 +988,9 @@ class _CurrencyCard extends StatelessWidget {
               : 'GO')
         : 'N/D';
     final date = expiry;
-    final expiryText = compact
-        ? (date == null
-              ? ''
-              : '${date.isBefore(DateUtils.dateOnly(DateTime.now())) ? 'Scaduta' : 'Scade'} '
-                    '${DateFormat('d MMM yyyy', 'it').format(date)}')
-        : (date == null
-              ? 'Nessuna data registrata'
-              : 'Scadenza: ${DateFormat('d MMMM yyyy', 'it').format(date)}');
+    final expiryText = date == null
+        ? 'Nessuna data registrata'
+        : 'Scadenza: ${DateFormat('d MMMM yyyy', 'it').format(date)}';
     final textTheme = Theme.of(context).textTheme;
 
     final decoration = BoxDecoration(
@@ -828,8 +1006,28 @@ class _CurrencyCard extends StatelessWidget {
     );
 
     if (compact) {
-      // Stile widget iOS: nome in alto, stato grande in basso, scadenza piccola.
+      // Stile widget iOS/Fitness: nome in alto, stato grande con anello,
+      // countdown e data. Anello = ore del semestre se c'è un minimo ore,
+      // altrimenti tempo residuo tra ultima attività e scadenza.
       const secondary = TextStyle(color: AppColors.textSecondary, fontSize: 12);
+      final color = currentStatus.color;
+      final today = DateUtils.dateOnly(DateTime.now());
+      final days = date == null ? null : _daysBetween(today, date);
+      final hours = currentStatus.flightHours;
+      final minHours = currentStatus.minFlightHours;
+      final last = currentStatus.lastActivityDate;
+      final progress = hours != null && minHours != null && minHours > 0
+          ? hours / minHours
+          : days != null && last != null
+          ? days / math.max(1, _daysBetween(last, date!))
+          : 0.0;
+      final countdown = days == null
+          ? ''
+          : days > 0
+          ? 'Scade tra $days gg'
+          : days == 0
+          ? 'Scade oggi'
+          : 'Scaduta da ${-days} gg';
       return Material(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -864,21 +1062,52 @@ class _CurrencyCard extends StatelessWidget {
                     ),
                   ],
                   const Spacer(),
-                  const SizedBox(height: 18),
-                  Text(
-                    goText,
-                    style: TextStyle(
-                      color: currentStatus.color,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.6,
-                      height: 1.05,
-                    ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            goText,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.8,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox.square(
+                        dimension: 38,
+                        child: CircularProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          strokeWidth: 5,
+                          strokeCap: StrokeCap.round,
+                          color: color,
+                          backgroundColor: color.withValues(alpha: 0.18),
+                        ),
+                      ),
+                    ],
                   ),
-                  if (expiryText.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                  if (date != null) ...[
+                    const SizedBox(height: 10),
                     Text(
-                      expiryText,
+                      countdown,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      DateFormat('d MMM yyyy', 'it').format(date),
                       style: secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -979,6 +1208,13 @@ class _CurrencyCard extends StatelessWidget {
     );
   }
 }
+
+/// Giorni di calendario tra due date (UTC: niente sorprese da ora legale).
+int _daysBetween(DateTime from, DateTime to) => DateTime.utc(
+  to.year,
+  to.month,
+  to.day,
+).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
 
 /// "+" che apre a ventaglio le 4 tipologie di attività (indice = tab).
 class _RadialAddButton extends StatefulWidget {
