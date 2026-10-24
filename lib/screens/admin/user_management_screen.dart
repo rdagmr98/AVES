@@ -51,7 +51,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
 
   Future<void> _loadUsers() async {
     setState(() => _loading = true);
-    final users = await _service.getAllUsers();
+    final users = await _service.getAllUsers(includeInactive: true);
     final deletionRequests = await _service.getDeletionRequests(
       onlyPending: true,
     );
@@ -130,6 +130,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
         'pending_crew' => auth.isAdminCrew && !user.isApprovedCrew,
         'pending' => !user.isApproved,
         'unclaimed' => user.isPreRegistered,
+        'inactive' => !user.isActive,
         _ => true,
       };
       return matchesSearch && matchesOrg && matchesApproval;
@@ -499,6 +500,10 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                                       value: 'unclaimed',
                                       child: Text('Non ancora registrati'),
                                     ),
+                                    const DropdownMenuItem(
+                                      value: 'inactive',
+                                      child: Text('Disattivati'),
+                                    ),
                                   ],
                                   onChanged: (v) => setState(
                                     () => _approvalFilter = v ?? 'all',
@@ -701,7 +706,8 @@ class _UserList extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${user.numeroLicenza ?? 'Licenza non indicata'}'
-                          '${user.isPreRegistered ? ' · non ancora registrato' : ''}',
+                          '${user.isPreRegistered ? ' · non ancora registrato' : ''}'
+                          '${user.isActive ? '' : ' · disattivato'}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
@@ -727,7 +733,9 @@ class _UserList extends StatelessWidget {
                   ),
                   // Status badge
                   const SizedBox(width: 8),
-                  isPending
+                  !user.isActive
+                      ? const Icon(Icons.block, color: Colors.grey, size: 22)
+                      : isPending
                       ? const Icon(
                           Icons.pending_rounded,
                           color: Colors.amber,
@@ -1557,6 +1565,19 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                             ],
                           ),
                         ],
+                        if (_user.isUser)
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Utente attivo'),
+                            subtitle: const Text(
+                              'Disattivato: niente accesso, escluso da GO / NO GO, '
+                              'matrice, squadra OL e seminari. Lo storico resta.',
+                            ),
+                            value: _user.isActive,
+                            onChanged: (value) => setState(
+                              () => _user = _user.copyWith(isActive: value),
+                            ),
+                          ),
                         const SizedBox(height: 14),
                         // Il ruolo admin è fisso e non modificabile da qui.
                         // Esistono solo 2 admin (admin_priv / admin_crew).

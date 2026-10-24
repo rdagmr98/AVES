@@ -501,9 +501,15 @@ class UserService {
     );
   }
 
-  Future<List<UserProfile>> getAllUsers() async {
+  /// Disattivati (trasferiti, congedati) esclusi di default: restano solo in
+  /// Gestione Utenti, con tutto lo storico.
+  Future<List<UserProfile>> getAllUsers({bool includeInactive = false}) async {
     final users = _db.users
-        .where((item) => item['role'] == 'user')
+        .where(
+          (item) =>
+              item['role'] == 'user' &&
+              (includeInactive || item['is_active'] != false),
+        )
         .map((item) => UserProfile.fromJson(_withOrgUnit(item)))
         .toList();
     users.sort(
@@ -581,7 +587,10 @@ class UserService {
     }
     if (id == null) {
       final nextId =
-          units.fold<int>(0, (m, u) => (u['id'] as int) > m ? u['id'] as int : m) +
+          units.fold<int>(
+            0,
+            (m, u) => (u['id'] as int) > m ? u['id'] as int : m,
+          ) +
           1;
       units.add({'id': nextId, 'code': c, 'name': n});
     } else {
