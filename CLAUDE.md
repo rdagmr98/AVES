@@ -51,10 +51,14 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-10-24
+## STATO SESSIONE — aggiornato 2026-10-25
+- 2026-10-25 (12):
+  - Gestione Utenti: i privilegi aggiunti aprono `_registerOjt`, un OJT precompilato con `proposedOjt` calcolato prima del salvataggio. "Senza OJT" assegna i privilegi senza attività.
+  - `CurrencyEvent.delete`: dallo storico si eliminano, con conferma (`CurrencyEventTile(onDeleted:)`), OJT, corsi e righe revocate. Perdite calcolate e righe attive non si eliminano.
+  - Tasto "Registra OJT" della dashboard privilegi solo con `isExpired`.
+  - Nota vault `AVES Corsi/Tecnici Gestione Utenti OJT e storico eliminabile 2026-10-25.md`.
 - 2026-10-24 (11): licenze e privilegi modificati dall'utente (profilo, registrazione) vanno in `privilege_requests.json` (`PrivilegeRequest`, `UserService.requestPrivilegeChange`). L'admin li approva in Valida attività > Privilegi con un click: gli OJT vengono registrati come attività validate e il tipo è dato da `proposedOjt` (storico vuoto = iniziale, privilegio già avuto = ripristino, altrimenti nuovo). In alternativa usa il dialog di modifica. Rimossi Aggiungi/modifica privilegi dalla dashboard admin. Nota vault `AVES Corsi/Tecnici approvazione privilegi con OJT 2026-10-24.md`.
 - 2026-10-24 (10): tipi licenza AER(EP).P-66 / EMAR 66 in `reference.json` (`licenseTypes` id 1 A1, 2 B1.1, 3 B1.3, 4 B2, 5 C, 6 A2, 7 A3, 8 A4, 9 B1.2, 10 B1.4), ordinati con `compareLicenseCode` (`models/reference_models.dart`: C, B1.1-B1.4, B2, A1-A4) in menu, liste utente, P-66 e matrice privilegi. 95 licenze importate dall'Annesso 1 CS (TMA = B1.3, TEA = B2, UT = C), solo in append. Nota vault `AVES Corsi/Tecnici licenze P-66 da Annesso 2026-10-24.md`.
 - 2026-10-24 (9): rimossi vista estesa della dashboard (`view_prefs.dart`, interruttore nel profilo), schermate flotta/dettaglio elicottero e `PrivilegeGridWidget`: resta solo la dashboard compatta. Card currency in rilievo: cornice piena da 2,5 px nel colore di stato (stesso dell'anello avatar) con luce/ombra diagonale, alone colorato, ombra scura, riflesso in alto e GO luminoso.
-- 2026-10-24 (8): dashboard compatta, miniature elicotteri. `_HelicopterTiles` sotto le currency usa i ritagli senza sfondo in `assets/images/helicopters/<code>.webp` (crediti in `assets/CREDITS.md`). Il tocco apre `_HelicopterSheet`, che mostra i privilegi con GO/NO GO (`getPerPrivilegeCurrency`; PTA o seminario bloccano tutti), le qualifiche di volo e le licenze. Card currency con bordo, alone e gradiente diagonale nel colore di stato. Catalogo ridotto a `helicopterImage`/`catalogAccent`; le descrizioni sono nel vault (`AVES Corsi/Catalogo elicotteri descrizioni.md`). Nota vault `AVES Corsi/Tecnici dashboard miniature elicotteri 2026-10-24.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
