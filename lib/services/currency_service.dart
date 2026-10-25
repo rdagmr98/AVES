@@ -382,6 +382,17 @@ class CurrencyService {
     return last;
   }
 
+  /// Cancella la riga [id] (letta al momento, i getter danno copie).
+  Future<void> Function() _remove(
+    List<Map<String, dynamic>> Function() rows,
+    Future<void> Function(List<Map<String, dynamic>>) save,
+    Object? id,
+  ) =>
+      () => save([
+        for (final r in rows())
+          if (r['id'] != id) r,
+      ]);
+
   /// Storico currency manutentiva di [userId], dal più recente: assegnazioni
   /// e revoche dei privilegi (`created_at`, `active: false` + `updated_at`),
   /// OJT registrati e perdite ricavate dalle attività validate con la regola
@@ -408,6 +419,11 @@ class CurrencyService {
               '${a['activity_type']}: '
               '${label(a['helicopter_type_id'], a['privilege_type_id'])}',
           note: a['description'] as String?,
+          delete: _remove(
+            () => _db.maintenanceActs,
+            _db.saveMaintenanceActs,
+            a['id'],
+          ),
         ),
     ];
     // Fine del conteggio perdite per coppia: oggi se il privilegio è attivo,
@@ -420,12 +436,17 @@ class CurrencyService {
       final revoked = p['active'] == false
           ? DateTime.tryParse(p['updated_at'] as String? ?? '') ?? now
           : null;
+      // Si eliminano solo le righe revocate: le attive con "Togli privilegio".
+      final del = revoked == null
+          ? null
+          : _remove(() => _db.privileges, _db.savePrivileges, p['id']);
       if (created != null) {
         events.add((
           date: created,
           kind: CurrencyEventKind.assigned,
           title: 'Privilegio assegnato: ${label(key.$1, key.$2)}',
           note: null,
+          delete: del,
         ));
       }
       if (revoked != null) {
@@ -434,6 +455,7 @@ class CurrencyService {
           kind: CurrencyEventKind.revoked,
           title: 'Privilegio revocato: ${label(key.$1, key.$2)}',
           note: null,
+          delete: del,
         ));
       }
       final end = revoked ?? now;
@@ -450,6 +472,7 @@ class CurrencyService {
         events.add((
           date: l.lost,
           kind: CurrencyEventKind.lost,
+          delete: null,
           title: 'Currency persa: ${label(h, p)}',
           note: 'nessuna attività validata da $periodDays giorni',
         ));
@@ -460,6 +483,7 @@ class CurrencyService {
             kind: CurrencyEventKind.restored,
             title: 'Currency riacquisita: ${label(h, p)}',
             note: 'con attività validata',
+            delete: null,
           ));
         }
       }
@@ -504,6 +528,7 @@ class CurrencyService {
             if ((a['description'] as String? ?? '').isNotEmpty)
               a['description'],
           ].join(' · '),
+          delete: _remove(() => _db.flightActs, _db.saveFlightActs, a['id']),
         ),
       for (final a in tobActs.where(isCourse))
         (
@@ -513,14 +538,18 @@ class CurrencyService {
               '${a['activity_type']}: ${heli(a['helicopter_type_id'])} · '
               '${cap(a['tob_capability_id'])}',
           note: a['description'] as String?,
+          delete: _remove(() => _db.tobActs, _db.saveTobActs, a['id']),
         ),
     ];
     void rowEvents(
       Iterable<Map<String, dynamic>> rows,
       String noun,
       String Function(Map<String, dynamic>) what,
+      List<Map<String, dynamic>> Function() all,
+      Future<void> Function(List<Map<String, dynamic>>) save,
     ) {
       for (final r in rows) {
+        final del = r['active'] == false ? _remove(all, save, r['id']) : null;
         final created = DateTime.tryParse(r['created_at'] as String? ?? '');
         if (created != null) {
           events.add((
@@ -528,6 +557,7 @@ class CurrencyService {
             kind: CurrencyEventKind.assigned,
             title: '$noun assegnata: ${what(r)}',
             note: null,
+            delete: del,
           ));
         }
         if (r['active'] == false) {
@@ -536,6 +566,7 @@ class CurrencyService {
             kind: CurrencyEventKind.revoked,
             title: '$noun revocata: ${what(r)}',
             note: null,
+            delete: del,
           ));
         }
       }
@@ -545,12 +576,16 @@ class CurrencyService {
       crew,
       'Qualifica',
       (r) => '${heli(r['helicopter_type_id'])} · ${r['crew_type']}',
+      () => _db.crew,
+      _db.saveCrew,
     );
     rowEvents(
       caps,
       'Capacità',
       (r) =>
           '${heli(r['helicopter_type_id'])} · ${cap(r['tob_capability_id'])}',
+      () => _db.tobUserCaps,
+      _db.saveTobUserCaps,
     );
 
     // Fine conteggio perdite: oggi se una riga è attiva, sennò l'ultima revoca;
@@ -576,6 +611,7 @@ class CurrencyService {
         events.add((
           date: l.lost,
           kind: CurrencyEventKind.lost,
+          delete: null,
           title: 'Currency persa: $what',
           note: note,
         ));
@@ -586,6 +622,7 @@ class CurrencyService {
             kind: CurrencyEventKind.restored,
             title: 'Currency riacquisita: $what',
             note: 'con attività validata',
+            delete: null,
           ));
         }
       }

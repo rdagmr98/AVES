@@ -5,11 +5,14 @@ import '../models/user_models.dart';
 enum CurrencyEventKind { assigned, revoked, restored, lost }
 
 /// Evento dello storico currency di un utente (timeline della scheda).
+/// [delete] elimina la riga da cui nasce (null = evento calcolato o
+/// privilegio ancora attivo).
 typedef CurrencyEvent = ({
   DateTime date,
   CurrencyEventKind kind,
   String title,
   String? note,
+  Future<void> Function()? delete,
 });
 
 /// Perdite di currency ricavate dalle date delle attività: ogni intervallo

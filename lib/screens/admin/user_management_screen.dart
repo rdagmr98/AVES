@@ -6,8 +6,12 @@ import '../../widgets/app_dropdown.dart';
 import '../../widgets/date_range_dialog.dart';
 import '../../widgets/flight_course_dialog.dart';
 import '../../app.dart';
+import '../../constants/app_constants.dart';
+import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
+import '../../services/activity_service.dart';
+import '../../services/currency_history.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/user_avatar.dart';
@@ -951,6 +955,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   Set<String> _tobCapabilityKeys = <String>{};
   // Già assegnate all'ultimo caricamento/salvataggio: le nuove chiedono il corso.
   Set<int> _savedT = <int>{};
+  Set<String> _savedPrivs = <String>{};
   Set<String> _savedCaps = <String>{};
   Map<int, String> _tobGrades = <int, String>{};
 
@@ -1005,6 +1010,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           .toSet();
       _savedT = {..._tCrewHelicopters};
       _savedCaps = {..._tobCapabilityKeys};
+      _savedPrivs = {..._privilegeKeys};
       _addedHelicopters.clear();
       _loading = false;
     });
@@ -1181,6 +1187,135 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     }
   }
 
+  /// OJT dei privilegi appena assegnati su [heliId]: [plan] = tipo proposto
+  /// dallo storico per privilegio, l'admin corregge tipo, data e note.
+  /// "Senza OJT" = privilegi assegnati senza attività (come il corso T).
+  Future<void> _registerOjt(int heliId, Map<int, String> plan) async {
+    final auth = ref.read(authProvider);
+    final adminId = auth.userProfile?.id;
+    if (adminId == null) return;
+    String name(int id) =>
+        auth.privilegeTypes.where((p) => p.id == id).firstOrNull?.name ??
+        '#$id';
+    final heli =
+        auth.helicopterTypes.where((h) => h.id == heliId).firstOrNull?.code ??
+        '?';
+    final types = {...plan};
+    var date = DateTime.now();
+    // ponytail: controller non disposto, come in registerFlightCourse.
+    final notes = TextEditingController();
+    Widget label(String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 4, top: 12),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text(
+            'OJT  ·  ${_user.fullName}  ·  $heli',
+            overflow: TextOverflow.ellipsis,
+          ),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  label('Privilegi assegnati'),
+                  for (final e in plan.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name(e.key),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 220,
+                            child: AppDropdown<String>(
+                              initialValue: e.value,
+                              isDense: true,
+                              isExpanded: true,
+                              items: [
+                                for (final t in ojtTypes)
+                                  DropdownMenuItem(
+                                    value: t,
+                                    child: Text(
+                                      t,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (v) => types[e.key] = v ?? e.value,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  label('Data OJT'),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.event, size: 18),
+                    label: Text(DateFormat('dd/MM/yyyy').format(date)),
+                    onPressed: () async {
+                      final d = await showDateDialog(
+                        c,
+                        initialDate: date,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                      );
+                      if (d != null) setD(() => date = d);
+                    },
+                  ),
+                  label('Note'),
+                  TextField(
+                    controller: notes,
+                    maxLines: 2,
+                    decoration: const InputDecoration(isDense: true),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(c).pop(false),
+              child: const Text('Senza OJT'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(c).pop(true),
+              child: const Text('Registra OJT'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final note = notes.text.trim();
+    for (final MapEntry(key: p, value: type) in types.entries) {
+      await ActivityService().addMaintenanceActivityValidated(
+        MaintenanceActivity(
+          userId: _user.id,
+          helicopterTypeId: heliId,
+          privilegeTypeId: p,
+          activityDate: date,
+          activityType: type,
+          description: note.isEmpty ? null : note,
+          submittedBy: adminId,
+        ),
+        adminId,
+      );
+    }
+  }
+
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
@@ -1224,6 +1359,18 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           };
         }).toList(),
       );
+      // Privilegi nuovi: OJT col tipo dallo storico, calcolato prima di
+      // salvare (dopo risultano già attivi).
+      final history = widget.service.privilegeHistory(_user.id);
+      final added = <int, Set<int>>{};
+      for (final k in _privilegeKeys.difference(_savedPrivs)) {
+        final p = k.split(':');
+        (added[int.parse(p[0])] ??= {}).add(int.parse(p[1]));
+      }
+      final ojt = {
+        for (final MapEntry(key: h, value: ids) in added.entries)
+          h: proposedOjt(history, h, ids),
+      };
       await widget.service.setUserPrivileges(
         _user.id,
         _privilegeKeys.map((k) {
@@ -1261,6 +1408,11 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ruoli e assegnazioni salvati.')),
       );
+      for (final MapEntry(key: h, value: plan) in ojt.entries) {
+        if (!mounted) return;
+        if (plan.isNotEmpty) await _registerOjt(h, plan);
+      }
+      _savedPrivs = {..._privilegeKeys};
       // T e capacità nuove si acquisiscono con un corso: per la T i voli del
       // corso contano per il semestre. Annulla = assegnata senza corso.
       for (final id in _tCrewHelicopters.difference(_savedT)) {

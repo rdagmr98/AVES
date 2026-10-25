@@ -332,111 +332,125 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   }
 
   Future<void> _showUserDetail(_CrewUserRow row) async {
-    final history = _currencyService.getFlightCurrencyHistory(row.user.id);
+    var history = _currencyService.getFlightCurrencyHistory(row.user.id);
+    var deleted = false;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(row.user.fullName, textAlign: TextAlign.center),
-        content: SizedBox(
-          width: 600,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                UserAvatar(user: row.user, radius: 30),
-                const SizedBox(height: 12),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: row
-                      .relevantStatuses('all', null)
-                      .map((status) => CurrencyBadgeWidget(status: status))
-                      .toList(),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ...row.assignments.map(
-                      (item) => Chip(
-                        label: Text(
-                          item.crewType == 'TOB'
-                              ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
-                              : item.crewType == 'MTB'
-                              ? '${item.helicopterCode} · MTB ${item.fascia ?? '-'}'
-                              : '${item.helicopterCode} · T',
-                        ),
-                      ),
-                    ),
-                    ...row.tobCapabilities.map(
-                      (item) => Chip(
-                        label: Text(
-                          '${item.helicopterCode} · ${item.capabilityName}',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Storico currency volo',
-                    style: Theme.of(dialogContext).textTheme.titleSmall,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setD) => AlertDialog(
+          title: Text(row.user.fullName, textAlign: TextAlign.center),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  UserAvatar(user: row.user, radius: 30),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: row
+                        .relevantStatuses('all', null)
+                        .map((status) => CurrencyBadgeWidget(status: status))
+                        .toList(),
                   ),
-                ),
-                FutureBuilder(
-                  future: history,
-                  builder: (_, snap) => switch (snap.data) {
-                    null => const LinearProgressIndicator(),
-                    [] => const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Nessun evento.',
-                        style: TextStyle(
-                          fontStyle: FontStyle.italic,
-                          color: AppColors.textSecondary,
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...row.assignments.map(
+                        (item) => Chip(
+                          label: Text(
+                            item.crewType == 'TOB'
+                                ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
+                                : item.crewType == 'MTB'
+                                ? '${item.helicopterCode} · MTB ${item.fascia ?? '-'}'
+                                : '${item.helicopterCode} · T',
+                          ),
                         ),
                       ),
+                      ...row.tobCapabilities.map(
+                        (item) => Chip(
+                          label: Text(
+                            '${item.helicopterCode} · ${item.capabilityName}',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Storico currency volo',
+                      style: Theme.of(dialogContext).textTheme.titleSmall,
                     ),
-                    final events => Column(
-                      children: [for (final e in events) CurrencyEventTile(e)],
-                    ),
-                  },
-                ),
-              ],
+                  ),
+                  FutureBuilder(
+                    future: history,
+                    builder: (_, snap) => switch (snap.data) {
+                      null => const LinearProgressIndicator(),
+                      [] => const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Nessun evento.',
+                          style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      final events => Column(
+                        children: [
+                          for (final e in events)
+                            CurrencyEventTile(
+                              e,
+                              onDeleted: () => setD(() {
+                                deleted = true;
+                                history = _currencyService
+                                    .getFlightCurrencyHistory(row.user.id);
+                              }),
+                            ),
+                        ],
+                      ),
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              if (await registerFlightCourse(context, ref, row.user) &&
-                  mounted) {
-                _loadData();
-              }
-            },
-            icon: const Icon(Icons.school_outlined),
-            label: const Text('Corso'),
-          ),
-          if (row.user.email != null && row.user.email!.trim().isNotEmpty)
+          actions: [
             TextButton.icon(
-              onPressed: () => _launchCrewEmail([row]),
-              icon: const Icon(Icons.email_outlined),
-              label: const Text('Invia Email'),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                if (await registerFlightCourse(context, ref, row.user) &&
+                    mounted) {
+                  _loadData();
+                }
+              },
+              icon: const Icon(Icons.school_outlined),
+              label: const Text('Corso'),
             ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Chiudi'),
-          ),
-        ],
+            if (row.user.email != null && row.user.email!.trim().isNotEmpty)
+              TextButton.icon(
+                onPressed: () => _launchCrewEmail([row]),
+                icon: const Icon(Icons.email_outlined),
+                label: const Text('Invia Email'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Chiudi'),
+            ),
+          ],
+        ),
       ),
     );
+    if (deleted && mounted) _loadData();
   }
 
   Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {

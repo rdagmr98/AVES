@@ -2586,12 +2586,14 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Registra OJT',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.how_to_reg_outlined, size: 18),
-                      onPressed: () => _ojt(ps),
-                    ),
+                    // OJT solo per ripristinare: sui GO non serve.
+                    if (ps.status.isExpired)
+                      IconButton(
+                        tooltip: 'Registra OJT',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.how_to_reg_outlined, size: 18),
+                        onPressed: () => _ojt(ps),
+                      ),
                     IconButton(
                       tooltip: 'Togli privilegio',
                       visualDensity: VisualDensity.compact,
@@ -2674,7 +2676,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
               color: AppColors.textSecondary,
             ),
           ),
-        for (final e in _history) CurrencyEventTile(e),
+        for (final e in _history) CurrencyEventTile(e, onDeleted: _afterChange),
       ],
     );
   }
