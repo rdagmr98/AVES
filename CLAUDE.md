@@ -44,14 +44,15 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
-| `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin |
+| `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin; `insertMaintenanceActivity`/`insertSeminar` = inserimento admin già validato dalla scheda |
 
 ## Modelli
 - `user_models.dart`: utente + abilitazioni
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-10-25
+## STATO SESSIONE — aggiornato 2026-10-26
+- 2026-10-26 (13): calendari con Conferma (`FilledButton`: l'`ElevatedButton` del tema ha `minimumSize` infinito e sparisce in una Row). Sync automatico: `AuthProvider.sync()` ogni 60 s con app visibile e al resume, `GhDbService.refresh()` restituisce bool e incrementa `GhDbService().changes`, che le schermate admin ascoltano per ricaricarsi senza spinner; i tasti Aggiorna chiamano `sync`. Scheda privilegi: `insertMaintenanceActivity` / `insertSeminar` (`activity_edit_dialog.dart`). Vista estesa rimossa. `web/index.html`: resize sintetico su focusout (tastiera). Nota vault `AVES Corsi/Tecnici calendari refresh automatico e scheda admin 2026-10-26.md`.
 - 2026-10-25 (12):
   - Gestione Utenti: i privilegi aggiunti aprono `_registerOjt`, un OJT precompilato con `proposedOjt` calcolato prima del salvataggio. "Senza OJT" assegna i privilegi senza attività.
   - `CurrencyEvent.delete`: dallo storico si eliminano, con conferma (`CurrencyEventTile(onDeleted:)`), OJT, corsi e righe revocate. Perdite calcolate e righe attive non si eliminano.
@@ -59,6 +60,5 @@ git push origin main   ← autorizzato, sempre senza chiedere
   - Nota vault `AVES Corsi/Tecnici Gestione Utenti OJT e storico eliminabile 2026-10-25.md`.
 - 2026-10-24 (11): licenze e privilegi modificati dall'utente (profilo, registrazione) vanno in `privilege_requests.json` (`PrivilegeRequest`, `UserService.requestPrivilegeChange`). L'admin li approva in Valida attività > Privilegi con un click: gli OJT vengono registrati come attività validate e il tipo è dato da `proposedOjt` (storico vuoto = iniziale, privilegio già avuto = ripristino, altrimenti nuovo). In alternativa usa il dialog di modifica. Rimossi Aggiungi/modifica privilegi dalla dashboard admin. Nota vault `AVES Corsi/Tecnici approvazione privilegi con OJT 2026-10-24.md`.
 - 2026-10-24 (10): tipi licenza AER(EP).P-66 / EMAR 66 in `reference.json` (`licenseTypes` id 1 A1, 2 B1.1, 3 B1.3, 4 B2, 5 C, 6 A2, 7 A3, 8 A4, 9 B1.2, 10 B1.4), ordinati con `compareLicenseCode` (`models/reference_models.dart`: C, B1.1-B1.4, B2, A1-A4) in menu, liste utente, P-66 e matrice privilegi. 95 licenze importate dall'Annesso 1 CS (TMA = B1.3, TEA = B2, UT = C), solo in append. Nota vault `AVES Corsi/Tecnici licenze P-66 da Annesso 2026-10-24.md`.
-- 2026-10-24 (9): rimossi vista estesa della dashboard (`view_prefs.dart`, interruttore nel profilo), schermate flotta/dettaglio elicottero e `PrivilegeGridWidget`: resta solo la dashboard compatta. Card currency in rilievo: cornice piena da 2,5 px nel colore di stato (stesso dell'anello avatar) con luce/ombra diagonale, alone colorato, ombra scura, riflesso in alto e GO luminoso.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
