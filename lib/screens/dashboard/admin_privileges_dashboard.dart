@@ -11,6 +11,7 @@ import '../../models/activity_models.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/gh_db_service.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_history.dart';
 import '../../services/currency_service.dart';
@@ -59,7 +60,6 @@ class _AdminPrivilegesDashboardState
   final List<int> _helicopterTypeIds = [];
   final List<int> _privilegeTypeIds = [];
   bool _andMode = false;
-  bool _gridView = true;
   bool _onlyTi = false;
   bool _onlyEtp = false;
   _MaintenanceSortMode _sortMode = _MaintenanceSortMode.status;
@@ -69,6 +69,7 @@ class _AdminPrivilegesDashboardState
   @override
   void initState() {
     super.initState();
+    GhDbService().changes.addListener(_loadData);
     _loadGoHeliIds().then((ids) {
       _goHeliIds = ids;
       if (mounted) _loadData();
@@ -77,6 +78,7 @@ class _AdminPrivilegesDashboardState
 
   @override
   void dispose() {
+    GhDbService().changes.removeListener(_loadData);
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -403,7 +405,6 @@ class _AdminPrivilegesDashboardState
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
     final users = await _userService.getAllUsers();
     final pendingActivities = await _activityService
         .getPendingMaintenanceActivities();
@@ -1241,10 +1242,8 @@ class _AdminPrivilegesDashboardState
             ),
           ),
         )
-      else if (_gridView)
-        _buildUserGrid(filteredRows)
       else
-        ..._buildListView(filteredRows),
+        _buildUserGrid(filteredRows),
     ];
 
     return Scaffold(
@@ -1298,11 +1297,8 @@ class _AdminPrivilegesDashboardState
                   case 'email':
                     _emailExpiringUsers();
                     break;
-                  case 'view':
-                    setState(() => _gridView = !_gridView);
-                    break;
                   case 'refresh':
-                    _loadData();
+                    ref.read(authProvider).sync();
                     break;
                 }
               },
@@ -1310,10 +1306,6 @@ class _AdminPrivilegesDashboardState
                 const PopupMenuItem(
                   value: 'email',
                   child: Text('Invia avvisi scadenza'),
-                ),
-                PopupMenuItem(
-                  value: 'view',
-                  child: Text(_gridView ? 'Vista estesa' : 'Vista compatta'),
                 ),
                 const PopupMenuItem(
                   value: 'refresh',
@@ -1328,11 +1320,10 @@ class _AdminPrivilegesDashboardState
               tooltip: '📧 Invia Avvisi Scadenza',
             ),
             IconButton(
-              onPressed: () => setState(() => _gridView = !_gridView),
-              icon: Icon(_gridView ? Icons.view_list : Icons.grid_view),
-              tooltip: _gridView ? 'Vista estesa' : 'Vista compatta',
+              onPressed: ref.read(authProvider).sync,
+              tooltip: 'Aggiorna dal server',
+              icon: const Icon(Icons.refresh),
             ),
-            IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
           ],
           IconButton(
             onPressed: () async {
@@ -1389,390 +1380,6 @@ class _AdminPrivilegesDashboardState
               ),
             ),
     );
-  }
-
-  CurrencyStatus _combineCurrencyStatuses(
-    Iterable<CurrencyStatus> statuses, {
-    String label = 'Nessun dato',
-  }) {
-    final items = statuses.toList(growable: false);
-    if (items.isEmpty) {
-      return CurrencyStatus(status: CurrencyStatusEnum.noData, label: label);
-    }
-
-    final activityDates =
-        items
-            .map((item) => item.lastActivityDate)
-            .whereType<DateTime>()
-            .toList(growable: false)
-          ..sort();
-    final expiryDates =
-        items
-            .map((item) => item.expiryDate)
-            .whereType<DateTime>()
-            .toList(growable: false)
-          ..sort();
-    final aggregatedStatus =
-        items.any((item) => item.status == CurrencyStatusEnum.expired)
-        ? CurrencyStatusEnum.expired
-        : items.any((item) => item.status == CurrencyStatusEnum.suspended)
-        ? CurrencyStatusEnum.suspended
-        : items.any((item) => item.status == CurrencyStatusEnum.warning)
-        ? CurrencyStatusEnum.warning
-        : items.any((item) => item.status == CurrencyStatusEnum.noData)
-        ? CurrencyStatusEnum.noData
-        : CurrencyStatusEnum.valid;
-
-    return CurrencyStatus(
-      status: aggregatedStatus,
-      label: label,
-      lastActivityDate: activityDates.isEmpty ? null : activityDates.last,
-      expiryDate: expiryDates.isEmpty ? null : expiryDates.first,
-    );
-  }
-
-  String _joinDistinctLabels(Iterable<String> values) {
-    final items =
-        values
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toSet()
-            .toList(growable: false)
-          ..sort();
-    return items.isEmpty ? '-' : items.join(', ');
-  }
-
-  List<Widget> _buildListView(List<_MaintenanceUserRow> filteredRows) {
-    return filteredRows
-        .map(
-          (row) => Card(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => _showUserDetail(row),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 780;
-                    final helicopterIds =
-                        {
-                          ...row.licenses.map((item) => item.helicopterTypeId),
-                          ...row.privileges.map(
-                            (item) => item.helicopterTypeId,
-                          ),
-                          ...row.perPrivilegeCurrency.map(
-                            (item) => item.helicopterTypeId,
-                          ),
-                        }.toList(growable: false)..sort((a, b) {
-                          String codeFor(int id) {
-                            for (final item in row.licenses) {
-                              if (item.helicopterTypeId == id) {
-                                return item.helicopterCode;
-                              }
-                            }
-                            for (final item in row.privileges) {
-                              if (item.helicopterTypeId == id) {
-                                return item.helicopterCode;
-                              }
-                            }
-                            for (final item in row.perPrivilegeCurrency) {
-                              if (item.helicopterTypeId == id) {
-                                return item.helicopterCode;
-                              }
-                            }
-                            return '$id';
-                          }
-
-                          return codeFor(a).compareTo(codeFor(b));
-                        });
-
-                    Widget buildInfoPill(IconData icon, String label) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant.withValues(
-                            alpha: 0.72,
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              icon,
-                              size: 16,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(child: Text(label, softWrap: true)),
-                          ],
-                        ),
-                      );
-                    }
-
-                    Widget buildHelicopterBlock(int helicopterTypeId) {
-                      String helicopterCode = '-';
-                      final licenses = row.licenses
-                          .where(
-                            (item) => item.helicopterTypeId == helicopterTypeId,
-                          )
-                          .toList(growable: false);
-                      final privileges = row.privileges
-                          .where(
-                            (item) => item.helicopterTypeId == helicopterTypeId,
-                          )
-                          .toList(growable: false);
-                      final statuses = row.perPrivilegeCurrency
-                          .where(
-                            (item) => item.helicopterTypeId == helicopterTypeId,
-                          )
-                          .map((item) => item.status);
-                      if (licenses.isNotEmpty) {
-                        helicopterCode = licenses.first.helicopterCode;
-                      } else if (privileges.isNotEmpty) {
-                        helicopterCode = privileges.first.helicopterCode;
-                      } else {
-                        final fallback = row.perPrivilegeCurrency.firstWhere(
-                          (item) => item.helicopterTypeId == helicopterTypeId,
-                        );
-                        helicopterCode = fallback.helicopterCode;
-                      }
-                      final status = _combineCurrencyStatuses(
-                        statuses,
-                        label: 'Currency $helicopterCode',
-                      );
-
-                      return Container(
-                        width: compact ? double.infinity : 250,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant.withValues(
-                            alpha: 0.5,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.secondary.withValues(
-                                      alpha: 0.14,
-                                    ),
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(
-                                      color: AppColors.secondary.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    helicopterCode,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.secondary,
-                                    ),
-                                  ),
-                                ),
-                                const Spacer(),
-                                Icon(
-                                  status.icon,
-                                  color: status.color,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                    color: status.color,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              // già nell'ordine categorie di getUserLicenses
-                              licenses.isEmpty
-                                  ? '-'
-                                  : licenses
-                                        .map((item) => item.licenseName)
-                                        .toSet()
-                                        .join(', '),
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                              softWrap: true,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _joinDistinctLabels(
-                                privileges.map((item) => item.privilegeName),
-                              ),
-                              style: Theme.of(context).textTheme.bodyMedium,
-                              softWrap: true,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final leftPanel = Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceVariant.withValues(alpha: 0.42),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: compact
-                            ? CrossAxisAlignment.center
-                            : CrossAxisAlignment.start,
-                        children: [
-                          UserAvatar(user: row.user, radius: 30),
-                          const SizedBox(height: 14),
-                          Text(
-                            row.user.fullName,
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                            textAlign: compact
-                                ? TextAlign.center
-                                : TextAlign.left,
-                            softWrap: true,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            row.user.numeroLicenza ?? 'Licenza non indicata',
-                            style: Theme.of(context).textTheme.bodyLarge,
-                            textAlign: compact
-                                ? TextAlign.center
-                                : TextAlign.left,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            row.user.orgUnitName.isEmpty
-                                ? 'Unità non indicata'
-                                : row.user.orgUnitName,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: AppColors.textSecondary),
-                            textAlign: compact
-                                ? TextAlign.center
-                                : TextAlign.left,
-                            softWrap: true,
-                          ),
-                        ],
-                      ),
-                    );
-
-                    final rightPanel = helicopterIds.isEmpty
-                        ? Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceVariant.withValues(
-                                alpha: 0.4,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: const Text(
-                              'Nessuna licenza o privilegio assegnato.',
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : compact
-                        ? Column(
-                            children: [
-                              for (final helicopterTypeId in helicopterIds) ...[
-                                buildHelicopterBlock(helicopterTypeId),
-                                const SizedBox(height: 12),
-                              ],
-                            ],
-                          )
-                        : Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: helicopterIds
-                                .map(buildHelicopterBlock)
-                                .toList(growable: false),
-                          );
-
-                    final emailAvailable =
-                        row.user.email != null &&
-                        row.user.email!.trim().isNotEmpty;
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (compact) ...[
-                          leftPanel,
-                          const SizedBox(height: 16),
-                          rightPanel,
-                        ] else
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: constraints.maxWidth * 0.35,
-                                child: leftPanel,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(child: rightPanel),
-                            ],
-                          ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            buildInfoPill(
-                              Icons.event_available_outlined,
-                              'Ultima attività: ${_formatDate(row.lastActivityDate)}',
-                            ),
-                            buildInfoPill(
-                              Icons.schedule_outlined,
-                              'Scadenza: ${_formatDate(row.status.expiryDate)}',
-                            ),
-                            CurrencyBadgeWidget(status: row.status),
-                            if (emailAvailable)
-                              OutlinedButton.icon(
-                                onPressed: () => _launchMaintenanceEmail([row]),
-                                style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size(0, 42),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                ),
-                                icon: const Icon(
-                                  Icons.email_outlined,
-                                  size: 18,
-                                ),
-                                label: const Text('Email'),
-                              ),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        )
-        .toList();
   }
 
   String _formatDate(DateTime? date) {
@@ -2491,6 +2098,20 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     if (await editMaintenanceActivity(context, a)) await _afterChange();
   }
 
+  String get _adminId => ref.read(authProvider).userProfile!.id;
+
+  Future<void> _addActivity() async {
+    if (await insertMaintenanceActivity(context, _row.user.id, _adminId)) {
+      await _afterChange();
+    }
+  }
+
+  Future<void> _addSeminar(String type) async {
+    if (await insertSeminar(context, _row.user.id, _adminId, type)) {
+      await _afterChange();
+    }
+  }
+
   Widget _sectionTitle(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 10),
     child: Text(
@@ -2612,6 +2233,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
   }
 
   Widget _buildPrivileges() {
+    final accent = Theme.of(context).colorScheme.primary;
     final groups = <int, List<PrivilegeCurrencyStatus>>{};
     for (final ps in _row.perPrivilegeCurrency) {
       groups.putIfAbsent(ps.helicopterTypeId, () => []).add(ps);
@@ -2636,7 +2258,34 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
           const Text('Nessuna licenza o privilegio assegnato.'),
         for (final e in groups.entries) _heliCard(e.key, e.value),
         const SizedBox(height: 16),
-        _sectionTitle('Seminari validati'),
+        Row(
+          children: [
+            Expanded(child: _sectionTitle('Seminari validati')),
+            PopupMenuButton<String>(
+              tooltip: 'Aggiungi seminario',
+              onSelected: _addSeminar,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'NAM', child: Text('NAM')),
+                PopupMenuItem(value: 'MHF', child: Text('MHF')),
+                PopupMenuItem(value: 'NAM_MHF', child: Text('NAM + MHF')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, size: 18, color: accent),
+                    const SizedBox(width: 6),
+                    Text('Seminario', style: TextStyle(color: accent)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
         if (_seminars.isEmpty)
           const Text(
             'Nessun seminario validato.',
@@ -2862,7 +2511,16 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     );
 
     final header = <Widget>[
-      _sectionTitle('Attività manutentive validate'),
+      Row(
+        children: [
+          Expanded(child: _sectionTitle('Attività manutentive validate')),
+          TextButton.icon(
+            onPressed: _addActivity,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Attività'),
+          ),
+        ],
+      ),
       filters,
       const SizedBox(height: 8),
       Text(

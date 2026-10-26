@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
+import '../../services/gh_db_service.dart';
 import '../../services/pta_service.dart';
 
 class PtaScreen extends ConsumerStatefulWidget {
@@ -27,13 +28,19 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
   @override
   void initState() {
     super.initState();
+    GhDbService().changes.addListener(_loadData);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    GhDbService().changes.removeListener(_loadData);
+    super.dispose();
   }
 
   Future<void> _loadData() async {
     final user = ref.read(authProvider).userProfile;
     if (user == null) return;
-    setState(() => _loading = true);
 
     _unread = _ptaService.getUserUnreadPtas(user.id);
     _blocking = _ptaService.getBlockingPtaForUser(user.id);
@@ -126,7 +133,11 @@ class _PtaScreenState extends ConsumerState<PtaScreen> {
       appBar: AppBar(
         title: const Text('PTA Manutenzione'),
         actions: [
-          IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: ref.read(authProvider).sync,
+            tooltip: 'Aggiorna dal server',
+            icon: const Icon(Icons.refresh),
+          ),
         ],
       ),
       body: _loading

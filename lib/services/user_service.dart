@@ -456,9 +456,7 @@ class UserService {
     String? userId,
     bool onlyPending = false,
   }) async {
-    final names = {
-      for (final u in _db.users) u['id']: _userFullNameFromMap(u),
-    };
+    final names = {for (final u in _db.users) u['id']: _userFullNameFromMap(u)};
     return _db.privilegeRequests
         .where(
           (r) =>
@@ -498,8 +496,7 @@ class UserService {
       for (final r in _db.licenses.where(onHeli)) r['license_type_id'] as int,
     };
     final ids = {...privilegeTypeIds, if (append) ...current};
-    final license =
-        licenseTypeId ?? (append ? licenses.firstOrNull : null);
+    final license = licenseTypeId ?? (append ? licenses.firstOrNull : null);
     final unchanged =
         ids.length == current.length &&
         ids.containsAll(current) &&

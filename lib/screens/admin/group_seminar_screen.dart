@@ -385,7 +385,7 @@ class _GroupSeminarScreenState extends ConsumerState<GroupSeminarScreen> {
                             child: const Text('Annulla'),
                           ),
                           const SizedBox(width: 12),
-                          ElevatedButton.icon(
+                          FilledButton.icon(
                             onPressed: _saving ? null : _saveSeminars,
                             icon: _saving
                                 ? const SizedBox(

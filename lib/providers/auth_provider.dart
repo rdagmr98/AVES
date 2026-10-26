@@ -7,10 +7,22 @@ import '../models/reference_models.dart';
 import '../models/user_models.dart';
 import '../services/auth_service.dart';
 import '../services/currency_service.dart';
+import '../services/gh_db_service.dart';
 import '../services/notification_service.dart';
 import '../services/user_service.dart';
 
 class AuthProvider extends ChangeNotifier {
+  AuthProvider() {
+    // ponytail: un listing GitHub al minuto per client aperto; il PAT è unico
+    // (5000 richieste/h), allungare il periodo se gli utenti contemporanei crescono.
+    _poll = Timer.periodic(const Duration(seconds: 60), (_) => sync());
+    _lifecycle = AppLifecycleListener(onResume: sync);
+  }
+
+  late final Timer _poll;
+  late final AppLifecycleListener _lifecycle;
+  bool _syncing = false;
+
   final _authService = AuthService();
   final _userService = UserService();
   final _currencyService = CurrencyService();
@@ -251,6 +263,36 @@ class AuthProvider extends ChangeNotifier {
       throw Exception('Utente non autenticato');
     }
     await _authService.changePassword(userId, currentPassword, newPassword);
+  }
+
+  /// Riallinea i dati a GitHub senza ricaricare la pagina: ogni minuto con
+  /// l'app in primo piano, al ritorno in primo piano e dai tasti Aggiorna.
+  /// Le schermate aperte si ricaricano da [GhDbService.changes]; qui si
+  /// aggiornano currency, badge e notifiche di sistema dell'utente.
+  Future<void> sync() async {
+    final userId = _userProfile?.id;
+    final visible =
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.hidden &&
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.paused;
+    if (userId == null || !visible || _syncing) return;
+    _syncing = true;
+    try {
+      if (await GhDbService().refresh()) {
+        await _loadUserData(userId);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('sync: $e');
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll.cancel();
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   Future<void> refreshUserData() async {

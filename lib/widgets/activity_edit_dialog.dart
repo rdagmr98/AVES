@@ -365,6 +365,91 @@ Future<bool> editTobActivity(BuildContext context, TobActivity a) async {
   return true;
 }
 
+// Inserimento admin per un utente (scheda della dashboard): stesso dialog,
+// l'attività nasce già validata.
+
+DateTime? _date(Map<String, dynamic> f, String key) =>
+    f[key] == null ? null : DateTime.parse(f[key] as String);
+
+Future<bool> insertMaintenanceActivity(
+  BuildContext context,
+  String userId,
+  String adminId,
+) async {
+  final privileges = await UserService().getUserPrivileges(userId);
+  if (!context.mounted) return false;
+  final helis = {
+    for (final p in privileges) p.helicopterTypeId: p.helicopterCode,
+  };
+  final f = await showActivityEditDialog(
+    context,
+    title: 'Nuova attività di manutenzione',
+    date: DateTime.now(),
+    helicopters: helis,
+    helicopterId: helis.keys.firstOrNull,
+    detailLabel: 'Privilegio',
+    detailKey: 'privilege_type_id',
+    details: (heli) => {
+      for (final p in privileges.where((p) => p.helicopterTypeId == heli))
+        p.privilegeTypeId: p.privilegeName,
+    },
+    period: true,
+    texts: const {
+      'ordine_lavoro': ('Ordine di lavoro', null),
+      'matricola_militare': ('Matricola militare', null),
+      'numero_corrozzella': ('N. corrozzella', null),
+    },
+  );
+  final heli = f?['helicopter_type_id'] as int?;
+  if (f == null || heli == null) return false;
+  await ActivityService().addMaintenanceActivityValidated(
+    MaintenanceActivity(
+      userId: userId,
+      helicopterTypeId: heli,
+      privilegeTypeId: f['privilege_type_id'] as int?,
+      activityDate: _date(f, 'activity_date')!,
+      dateFrom: _date(f, 'date_from'),
+      dateTo: _date(f, 'date_to'),
+      description: f['description'] as String?,
+      ordineLavoro: f['ordine_lavoro'] as String?,
+      matricolaMilitare: f['matricola_militare'] as String?,
+      numeroCorrozzella: f['numero_corrozzella'] as String?,
+      submittedBy: adminId,
+    ),
+    adminId,
+  );
+  return true;
+}
+
+/// [type]: 'NAM', 'MHF' o 'NAM_MHF' (due seminari nella stessa data).
+Future<bool> insertSeminar(
+  BuildContext context,
+  String userId,
+  String adminId,
+  String type,
+) async {
+  final f = await showActivityEditDialog(
+    context,
+    title: 'Seminario ${type.replaceAll('_', ' + ')}',
+    date: DateTime.now(),
+    dateKey: 'seminar_date',
+  );
+  if (f == null) return false;
+  for (final t in type.split('_')) {
+    await ActivityService().addSeminarActivityValidated(
+      SeminarActivity(
+        userId: userId,
+        seminarType: t,
+        seminarDate: _date(f, 'seminar_date')!,
+        description: f['description'] as String?,
+        submittedBy: adminId,
+      ),
+      adminId,
+    );
+  }
+  return true;
+}
+
 Future<bool> editSeminarActivity(
   BuildContext context,
   SeminarActivity a,

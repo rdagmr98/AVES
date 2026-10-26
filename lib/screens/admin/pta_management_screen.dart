@@ -8,6 +8,7 @@ import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../services/gh_db_service.dart';
 import '../../services/pta_service.dart';
 
 class PtaManagementScreen extends ConsumerStatefulWidget {
@@ -30,18 +31,19 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
   @override
   void initState() {
     super.initState();
+    GhDbService().changes.addListener(_loadData);
     _tabs = TabController(length: 2, vsync: this);
     _loadData();
   }
 
   @override
   void dispose() {
+    GhDbService().changes.removeListener(_loadData);
     _tabs.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
     await _ptaService.autoCloseCompletedPtas();
     _allPta = _ptaService.getAllPta();
     _pendingAcks = _ptaService.getPendingAcknowledgments();
@@ -198,9 +200,9 @@ class _PtaManagementScreenState extends ConsumerState<PtaManagementScreen>
         ),
         actions: [
           IconButton(
-            onPressed: _loadData,
+            onPressed: ref.read(authProvider).sync,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Aggiorna',
+            tooltip: 'Aggiorna dal server',
           ),
         ],
       ),

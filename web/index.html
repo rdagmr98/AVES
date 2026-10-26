@@ -61,6 +61,15 @@
         try { new Notification(title, opts); } catch(e) {}
       }
     };
+    // Flutter web aggiorna l'altezza solo ai resize fuori dall'editing: se la
+    // tastiera si chiude con un campo ancora attivo la vista resta bassa (FAB a
+    // metà schermo, fascia vuota sotto). A editing finito un resize sintetico
+    // gli fa rileggere la viewport.
+    document.addEventListener('focusout', function() {
+      setTimeout(function() {
+        if (window.visualViewport) window.visualViewport.dispatchEvent(new Event('resize'));
+      }, 300);
+    });
     // Nuova versione deployata: il service worker si aggiorna in background,
     // ricarica una volta sola così non resta in uso la build vecchia dalla cache.
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {

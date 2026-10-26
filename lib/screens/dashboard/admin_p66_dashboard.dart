@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
+import '../../services/gh_db_service.dart';
 import '../../services/p66_service.dart';
 import '../../services/report_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
@@ -24,24 +25,24 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
   final _searchCtrl = TextEditingController();
 
   bool _loading = true;
-  bool _gridView = true;
   String _search = '';
   List<P66UserData> _rows = [];
 
   @override
   void initState() {
     super.initState();
+    GhDbService().changes.addListener(_loadData);
     _loadData();
   }
 
   @override
   void dispose() {
+    GhDbService().changes.removeListener(_loadData);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
     final rows = await _p66Service.getAllP66Data();
     if (!mounted) return;
     setState(() {
@@ -245,101 +246,6 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
     );
   }
 
-  List<Widget> _buildListView(List<P66UserData> rows) {
-    return rows
-        .map(
-          (row) => Card(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => _showUserDetail(row),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              UserAvatar(user: row.user, radius: 22),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      row.user.fullName,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                      softWrap: true,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${row.licenseTypes} · ${row.licenseNumber}',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _backgroundColor(row.status),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: _borderColor(row.status)),
-                          ),
-                          child: Text(
-                            '${row.monthCount}/24 · ${row.statusText}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        row.coveredMonths.isEmpty
-                            ? 'Mesi attività: nessuna attività valida'
-                            : 'Mesi attività: ${row.coveredMonths.join(', ')}',
-                        softWrap: true,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Seminari: ${row.seminarStatusText}',
-                        style: TextStyle(
-                          color: row.hasRequiredSeminars
-                              ? const Color(0xFF27AE60)
-                              : const Color(0xFFC0392B),
-                          fontWeight: FontWeight.w700,
-                        ),
-                        softWrap: true,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(row.statusReason, softWrap: true),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        )
-        .toList(growable: false);
-  }
-
   Widget _buildNavigationSidebar() {
     return Card(
       child: Padding(
@@ -427,16 +333,15 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: () => setState(() => _gridView = !_gridView),
-            icon: Icon(_gridView ? Icons.view_list : Icons.grid_view),
-            tooltip: _gridView ? 'Vista estesa' : 'Vista compatta',
-          ),
-          IconButton(
             onPressed: _reportService.downloadP66Report,
             icon: const Icon(Icons.picture_as_pdf_outlined),
             tooltip: 'Scarica report P-66',
           ),
-          IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: ref.read(authProvider).sync,
+            tooltip: 'Aggiorna dal server',
+            icon: const Icon(Icons.refresh),
+          ),
           IconButton(
             onPressed: () async {
               await ref.read(authProvider).signOut();
@@ -512,10 +417,8 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
                         ),
                       ),
                     )
-                  else if (_gridView)
-                    _buildUserGrid(rows)
                   else
-                    ..._buildListView(rows),
+                    _buildUserGrid(rows),
                 ];
 
                 if (isDesktop) {

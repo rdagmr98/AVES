@@ -74,7 +74,7 @@ Widget _dialog(BuildContext ctx, List<Widget> panes, VoidCallback onConfirm) =>
                     child: const Text('Annulla'),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton(
+                  FilledButton(
                     onPressed: onConfirm,
                     child: const Text('Conferma'),
                   ),

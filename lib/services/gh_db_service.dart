@@ -59,25 +59,33 @@ class GhDbService {
   /// Riallinea la cache a GitHub senza svuotarla: un solo listing e poi si
   /// scaricano solo i file il cui sha è cambiato. I file con scritture in
   /// coda o in corso si saltano, così i dati ottimistici non vengono mai
-  /// sovrascritti con la versione vecchia.
-  Future<void> refresh() async {
+  /// sovrascritti con la versione vecchia. True se è arrivato qualcosa di nuovo.
+  Future<bool> refresh() async {
     // Ritenta in background i salvataggi falliti, senza bloccare il chiamante.
     for (final f in _pending.keys.toList()) {
       _startDrain(f);
     }
     final remote = await _remoteShas();
-    if (remote == null) return; // offline: si resta sulla cache
+    if (remote == null) return false; // offline: si resta sulla cache
     bool busy(String f) => _pending.containsKey(f) || _drains.containsKey(f);
+    final stale = _files
+        .where((f) => !busy(f) && (remote[f] ?? '') != _getSha(f))
+        .toList();
     await Future.wait(
-      _files.where((f) => !busy(f) && (remote[f] ?? '') != _getSha(f)).map((
-        f,
-      ) async {
+      stale.map((f) async {
         final entry = await _fetchFile(f);
         // una scrittura può partire durante il fetch
         if (!busy(f)) _cache[f] = entry;
       }),
     );
+    if (stale.isEmpty) return false;
+    changes.value++;
+    return true;
   }
+
+  /// Cresce a ogni [refresh] che porta dati nuovi: le schermate aperte lo
+  /// ascoltano per ricaricarsi da sole.
+  final changes = ValueNotifier<int>(0);
 
   Future<void> setWritePat(String pat) async {}
 
@@ -526,7 +534,11 @@ class GhDbService {
       );
 
   Future<void> savePrivilegeRequests(List<Map<String, dynamic>> data) =>
-      _writeFile('privilege_requests.json', data, 'aggiornamento richieste privilegi');
+      _writeFile(
+        'privilege_requests.json',
+        data,
+        'aggiornamento richieste privilegi',
+      );
 }
 
 class ConflictException implements Exception {

@@ -6,6 +6,7 @@ import '../../constants/app_constants.dart';
 import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
+import '../../services/gh_db_service.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_history.dart';
 import '../../services/hours_format.dart';
@@ -46,6 +47,7 @@ class _ValidateActivitiesScreenState
   @override
   void initState() {
     super.initState();
+    GhDbService().changes.addListener(_load);
     final auth = ref.read(authProvider);
     if (auth.isAdminPriv) {
       _tabs = const [
@@ -70,12 +72,12 @@ class _ValidateActivitiesScreenState
 
   @override
   void dispose() {
+    GhDbService().changes.removeListener(_load);
     _tabController.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
     final maintenance = _tabs.contains(_ValidationTabType.maintenance)
         ? await _service.getPendingMaintenanceActivities()
         : <MaintenanceActivity>[];
@@ -134,7 +136,11 @@ class _ValidateActivitiesScreenState
               .toList(),
         ),
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: ref.read(authProvider).sync,
+            tooltip: 'Aggiorna dal server',
+            icon: const Icon(Icons.refresh),
+          ),
         ],
       ),
       body: _loading
@@ -230,14 +236,18 @@ class _ValidateActivitiesScreenState
   }
 
   String _heliCode(int id) =>
-      ref.read(authProvider).helicopterTypes
+      ref
+          .read(authProvider)
+          .helicopterTypes
           .where((h) => h.id == id)
           .firstOrNull
           ?.code ??
       '';
 
   String _privName(int id) =>
-      ref.read(authProvider).privilegeTypes
+      ref
+          .read(authProvider)
+          .privilegeTypes
           .where((p) => p.id == id)
           .firstOrNull
           ?.name ??
@@ -247,7 +257,9 @@ class _ValidateActivitiesScreenState
     if (r.licenseTypeId == null && r.privilegeTypeIds.isEmpty) {
       return 'Rimozione elicottero';
     }
-    final lic = ref.read(authProvider).licenseTypes
+    final lic = ref
+        .read(authProvider)
+        .licenseTypes
         .where((l) => l.id == r.licenseTypeId)
         .firstOrNull;
     return [
@@ -276,10 +288,8 @@ class _ValidateActivitiesScreenState
     return [
       for (final t in ojtTypes)
         if (ojt.containsValue(t))
-          '$t: ${[
-            for (final e in ojt.entries)
-              if (e.value == t) _privName(e.key),
-          ].join(', ')}',
+          '$t: ${[for (final e in ojt.entries)
+            if (e.value == t) _privName(e.key)].join(', ')}',
       if (revoked.isNotEmpty) 'Revoca: ${revoked.map(_privName).join(', ')}',
     ].join('\n');
   }
