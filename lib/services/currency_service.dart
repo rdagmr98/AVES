@@ -278,24 +278,37 @@ class CurrencyService {
       );
     }
 
-    final lastSeminar = await _activityService.getLastValidatedSeminar(userId);
-    if (lastSeminar == null) {
-      return const CurrencyStatus(
+    // GO solo con NAM e MHF entrambi validi (2 anni di calendario ciascuno):
+    // conta quello che scade per primo.
+    final seminarByType = seminarTypeExpiries(_db.seminars)[userId] ?? {};
+    final missing = [
+      for (final t in const ['NAM', 'MHF'])
+        if (!seminarByType.containsKey(t)) t,
+    ];
+    if (missing.isNotEmpty) {
+      return CurrencyStatus(
         status: CurrencyStatusEnum.expired,
-        label:
-            'Currency Manutentiva – NO GO (nessun seminario NAM/MHF registrato)',
+        label: 'Currency Manutentiva – seminario ${missing.join('/')} mancante',
       );
     }
-
-    // Validità 2 anni di calendario (stessa data due anni dopo, come il Riepilogo CAAE).
-    final sd = lastSeminar.seminarDate;
-    final seminarExpiry = DateTime(sd.year + 2, sd.month, sd.day);
+    final seminarExpiry = seminarByType.values.reduce(
+      (a, b) => a.isBefore(b) ? a : b,
+    );
+    final seminarType = const [
+      'NAM',
+      'MHF',
+    ].where((t) => seminarByType[t] == seminarExpiry).join('/');
+    final seminarDate = DateTime(
+      seminarExpiry.year - 2,
+      seminarExpiry.month,
+      seminarExpiry.day,
+    );
     final seminarDaysLeft = seminarExpiry.difference(DateTime.now()).inDays;
     if (seminarDaysLeft < 0) {
       return CurrencyStatus(
         status: CurrencyStatusEnum.expired,
-        label: 'Currency Manutentiva – seminario NAM/MHF scaduto',
-        lastActivityDate: lastSeminar.seminarDate,
+        label: 'Currency Manutentiva – seminario $seminarType scaduto',
+        lastActivityDate: seminarDate,
         expiryDate: seminarExpiry,
         daysUntilExpiry: seminarDaysLeft.clamp(-9999, 9999),
       );
@@ -333,12 +346,12 @@ class CurrencyService {
     if (seminarDaysLeft <= warningDays) {
       final seminarWarning = CurrencyStatus(
         status: CurrencyStatusEnum.warning,
-        lastActivityDate: lastSeminar.seminarDate,
+        lastActivityDate: seminarDate,
         expiryDate: taskStatus.expiryDate,
         secondaryExpiryDate: seminarExpiry,
         secondaryExpiryLabel: 'Sem. scad.',
         daysUntilExpiry: seminarDaysLeft,
-        label: 'Currency Manutentiva – seminario NAM/MHF in scadenza',
+        label: 'Currency Manutentiva – seminario $seminarType in scadenza',
       );
       if (taskStatus.isValid) {
         return seminarWarning;

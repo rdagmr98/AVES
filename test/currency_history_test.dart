@@ -50,6 +50,26 @@ void main() {
     expect(users.map((x) => x.id), ['z', 'c', 'b', 'a']);
   });
 
+  test('seminari: GO solo con NAM e MHF, vale il primo che scade', () {
+    Map<String, dynamic> s(String id, String date, String type) => {
+      'user_id': id,
+      'seminar_date': date,
+      'seminar_type': type,
+      'is_validated': true,
+    };
+    final rows = [
+      s('a', '2025-03-10', 'NAM'),
+      s('b', '2025-03-10', 'NAM'),
+      s('b', '2024-06-01', 'MHF'),
+      s('c', '2024-06-01', 'NAM/MHF'),
+    ];
+    expect(seminarExpiries(rows), {
+      'b': DateTime(2026, 6, 1),
+      'c': DateTime(2026, 6, 1),
+    });
+    expect(seminarTypeExpiries(rows)['a'], {'NAM': DateTime(2027, 3, 10)});
+  });
+
   test('OJT: iniziale tutti, ripristino scaduti, nuovo non assegnati', () {
     final privs = [
       for (final id in [1, 2, 3])

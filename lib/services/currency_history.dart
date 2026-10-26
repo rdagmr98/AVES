@@ -38,19 +38,47 @@ List<({DateTime lost, DateTime? regained})> currencyLosses(
   ];
 }
 
-/// Scadenza seminario per tecnico: ultimo seminario validato + 2 anni di
-/// calendario (stessa regola del calcolo currency). Assente = mai svolto.
-Map<String, DateTime> seminarExpiries(Iterable<Map<String, dynamic>> seminars) {
-  final expiry = <String, DateTime>{};
+/// Tipi coperti da un seminario: NAM_MHF (anche "NAM/MHF" e i dati senza
+/// tipo) vale per entrambi.
+Set<String> seminarCovers(String? type) {
+  final t = (type ?? 'NAM_MHF').trim().toUpperCase().replaceAll(
+    RegExp(r'[^A-Z]+'),
+    '_',
+  );
+  return {
+    if (t == 'NAM' || t == 'NAM_MHF') 'NAM',
+    if (t == 'MHF' || t == 'NAM_MHF') 'MHF',
+  };
+}
+
+/// Scadenza per tecnico e tipo (NAM, MHF): ultimo seminario validato di quel
+/// tipo + 2 anni di calendario, come il Riepilogo CAAE.
+Map<String, Map<String, DateTime>> seminarTypeExpiries(
+  Iterable<Map<String, dynamic>> seminars,
+) {
+  final expiry = <String, Map<String, DateTime>>{};
   for (final s in seminars) {
     final id = s['user_id'] as String?;
     final d = DateTime.tryParse(s['seminar_date'] as String? ?? '');
     if (s['is_validated'] != true || id == null || d == null) continue;
     final e = DateTime(d.year + 2, d.month, d.day);
-    if (expiry[id]?.isAfter(e) != true) expiry[id] = e;
+    final byType = expiry.putIfAbsent(id, () => {});
+    for (final t in seminarCovers(s['seminar_type'] as String?)) {
+      if (byType[t]?.isAfter(e) != true) byType[t] = e;
+    }
   }
   return expiry;
 }
+
+/// Scadenza seminari per tecnico: GO solo con NAM e MHF entrambi validi,
+/// quindi vale il primo che scade. Assente = almeno uno dei due mai svolto.
+Map<String, DateTime> seminarExpiries(
+  Iterable<Map<String, dynamic>> seminars,
+) => {
+  for (final MapEntry(:key, :value) in seminarTypeExpiries(seminars).entries)
+    if (value.length == 2)
+      key: value.values.reduce((a, b) => a.isBefore(b) ? a : b),
+};
 
 /// Mai svolto (assente o null) in cima, poi chi scade prima; a pari data
 /// alfabetico.

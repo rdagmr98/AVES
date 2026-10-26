@@ -672,24 +672,6 @@ class ActivityService {
     return items.map(_toSeminar).toList();
   }
 
-  Future<SeminarActivity?> getLastValidatedSeminar(String userId) async {
-    final items =
-        _db.seminars
-            .where(
-              (item) =>
-                  item['user_id'] == userId && item['is_validated'] == true,
-            )
-            .toList()
-          ..sort(
-            (a, b) => _parseDate(
-              b,
-              'seminar_date',
-            ).compareTo(_parseDate(a, 'seminar_date')),
-          );
-    if (items.isEmpty) return null;
-    return _toSeminar(items.first);
-  }
-
   Future<List<SeminarActivity>> getAllSeminarActivities() async {
     final items = _db.seminars.toList()
       ..sort(

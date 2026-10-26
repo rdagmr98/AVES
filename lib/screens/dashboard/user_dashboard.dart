@@ -68,15 +68,12 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
   }
 
   // GO/NO GO dice già lo stato: il sottotitolo serve solo se la causa è il seminario.
+  // Es. "Seminario MHF scaduto", "Seminario NAM mancante" (label di currency_service).
   String _maintenanceSubtitle(CurrencyStatus? status) {
-    if (status == null ||
-        !status.hasData ||
-        !status.label.toLowerCase().contains('seminario')) {
-      return '';
-    }
-    if (status.isExpired) return 'Seminario NAM/MHF scaduto';
-    if (status.isWarning) return 'Seminario NAM/MHF in scadenza';
-    return '';
+    final label = status?.label ?? '';
+    final i = label.indexOf('seminario');
+    if (i < 0 || !(status!.isExpired || status.isWarning)) return '';
+    return 'S${label.substring(i + 1)}';
   }
 
   DateTime? _maintenanceExpiryDate(CurrencyStatus? status) {

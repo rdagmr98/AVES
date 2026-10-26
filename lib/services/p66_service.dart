@@ -1,6 +1,7 @@
 import '../models/activity_models.dart';
 import '../models/reference_models.dart';
 import '../models/user_models.dart';
+import 'currency_history.dart';
 import 'gh_db_service.dart';
 import 'user_service.dart';
 
@@ -57,20 +58,6 @@ class P66Service {
     (activity['date_to'] ?? activity['activity_date']) as String,
   );
 
-  String _normalizeSeminarType(String value) {
-    final upper = value.trim().toUpperCase();
-    return upper.replaceAll(RegExp(r'[^A-Z]+'), '_');
-  }
-
-  bool _seminarMatches(String rawType, String requiredType) {
-    final normalized = _normalizeSeminarType(rawType);
-    return switch (requiredType) {
-      'NAM' => normalized == 'NAM' || normalized == 'NAM_MHF',
-      'MHF' => normalized == 'MHF' || normalized == 'NAM_MHF',
-      _ => false,
-    };
-  }
-
   List<SeminarActivity> seminarsInLast24(String userId) {
     final cutoff = _cutoff24Months();
     final items =
@@ -86,19 +73,9 @@ class P66Service {
     return items;
   }
 
-  Set<String> validSeminarTypesInLast24(String userId) {
-    final seminars = seminarsInLast24(userId);
-    final types = <String>{};
-    for (final seminar in seminars) {
-      if (_seminarMatches(seminar.seminarType, 'NAM')) {
-        types.add('NAM');
-      }
-      if (_seminarMatches(seminar.seminarType, 'MHF')) {
-        types.add('MHF');
-      }
-    }
-    return types;
-  }
+  Set<String> validSeminarTypesInLast24(String userId) => {
+    for (final s in seminarsInLast24(userId)) ...seminarCovers(s.seminarType),
+  };
 
   List<String> missingSeminarsInLast24(String userId) {
     final valid = validSeminarTypesInLast24(userId);
