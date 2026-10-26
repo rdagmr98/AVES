@@ -61,13 +61,39 @@
         try { new Notification(title, opts); } catch(e) {}
       }
     };
-    // Flutter web aggiorna l'altezza solo ai resize fuori dall'editing: se la
-    // tastiera si chiude con un campo ancora attivo la vista resta bassa (FAB a
-    // metà schermo, fascia vuota sotto). A editing finito un resize sintetico
-    // gli fa rileggere la viewport.
+    // Tastiera su Android. Flutter sostituisce il meta viewport qui sopra (perde
+    // interactive-widget=resizes-content): la tastiera allora sposta la viewport
+    // visibile invece di ridimensionare la pagina, l'AppBar esce dall'alto e se
+    // Flutter rimpicciolisce la tela sotto resta lo sfondo della pagina (fascia
+    // vuota alta quanto la tastiera). Lo rimetto dopo il primo frame.
+    window.addEventListener('flutter-first-frame', function() {
+      var m = document.querySelector('meta[name=viewport]');
+      if (m) m.content += ', interactive-widget=resizes-content';
+    });
+    // Chrome scorre il body per mostrare il campo sotto la tastiera: al campo ci
+    // pensa già Flutter, il body deve restare fermo.
+    document.addEventListener('scroll', function(e) {
+      if (e.target === document.body) document.body.scrollTop = 0;
+    }, true);
+    // Flutter aggiorna l'altezza solo ai resize fuori dall'editing: se la
+    // tastiera si chiude con un campo ancora attivo la vista resta bassa (fascia
+    // vuota sotto). Chiusa la tastiera tolgo il focus, e a editing finito un
+    // resize sintetico (isTrusted false, ignorato qui) gli fa rileggere la viewport.
+    var vv = window.visualViewport;
+    if (vv && matchMedia('(pointer: coarse)').matches) {
+      var full = vv.height, w = vv.width;
+      vv.addEventListener('resize', function(e) {
+        if (!e.isTrusted) return;
+        if (vv.width !== w) { w = vv.width; full = 0; }
+        if (vv.height < full) return;
+        full = vv.height;
+        var a = document.activeElement;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) a.blur();
+      });
+    }
     document.addEventListener('focusout', function() {
       setTimeout(function() {
-        if (window.visualViewport) window.visualViewport.dispatchEvent(new Event('resize'));
+        if (vv) vv.dispatchEvent(new Event('resize'));
       }, 300);
     });
     // Nuova versione deployata: il service worker si aggiorna in background,
