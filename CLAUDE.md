@@ -41,7 +41,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `hours_format.dart` | ore salvate decimali, inserite/mostrate h:mm (`parseHours`: `1:35`/`1.35`/`1h35`, solo cifre = minuti); widget `widgets/hours_field.dart` |
 | `name_format.dart` | forma canonica nomi: Nome = iniziale maiuscola, COGNOME = maiuscolo (applicata in `GhDbService.saveUsers`) |
 | `merge_user_rows.dart` | setter righe utente con soft delete (`active: false` + `updated_at`), conserva `created_at` = assegnazione |
-| `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
+| `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); seminari: GO solo con NAM e MHF entrambi validi (`seminarTypeExpiries`, `seminarCovers`); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
 | `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin; `insertMaintenanceActivity`/`insertSeminar` = inserimento admin già validato dalla scheda |
