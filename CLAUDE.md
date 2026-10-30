@@ -53,6 +53,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-10-30
+- 2026-10-30 (16): richiesta reset anche dal cambio password a login effettuato (`57cd246`): link nel dialog del profilo (nascosto agli admin) e in `/change-password`, via `AuthProvider.requestPasswordReset`. Provato nella demo (SnackBar ok), persistenza no.
 - 2026-10-30 (15): reset password da admin e richiesta dal login (`f62a6db`). Gate `mustChangePassword` nel `redirect` di `lib/app.dart`, verso `/change-password`. Tasto `_resetPassword` nel dettaglio utente (`user_management_screen.dart`). Admin e pre-registrati esclusi. Persistenza non provata nella demo: da provare in produzione. Nota vault `AVES Corsi/Reset password admin e richiesta utente 2026-10-30.md`.
 - 2026-10-27 (14): tastiera Android. Flutter web sostituisce il meta viewport, quindi `interactive-widget=resizes-content` va riapplicato su `flutter-first-frame` in `web/index.html`. Lì anche: body fermo a `scrollTop` 0 e blur del campo quando la tastiera si chiude, solo sui resize `isTrusted`. Seminari NAM+MHF entrambi per il GO (`ca1f806`). Nota vault `AVES Corsi/Tecnici tastiera Android fascia vuota 2026-10-27.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
