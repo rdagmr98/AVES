@@ -268,6 +268,19 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Stessa richiesta del login, con l'utente già noto. Gli admin non possono
+  /// farla: la gestione utenti non li elenca.
+  Future<void> requestPasswordReset() async {
+    final profile = _userProfile;
+    if (profile == null) {
+      throw Exception('Utente non autenticato');
+    }
+    final username = profile.username?.trim() ?? '';
+    await _userService.requestPasswordReset(
+      username.isNotEmpty ? username : profile.numeroLicenza ?? '',
+    );
+  }
+
   /// Riallinea i dati a GitHub senza ricaricare la pagina: ogni minuto con
   /// l'app in primo piano, al ritorno in primo piano e dai tasti Aggiorna.
   /// Le schermate aperte si ricaricano da [GhDbService.changes]; qui si

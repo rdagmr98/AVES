@@ -247,6 +247,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Password attuale'),
             ),
+            if (ref.read(authProvider).userProfile?.isAdmin == false)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () async {
+                    Navigator.of(dialogContext).pop();
+                    var message =
+                        'Richiesta inviata: gli amministratori ti daranno una password temporanea.';
+                    try {
+                      await ref.read(authProvider).requestPasswordReset();
+                    } catch (_) {
+                      message = 'Impossibile contattare il server. Riprova.';
+                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(message)));
+                  },
+                  child: const Text('Password dimenticata?'),
+                ),
+              ),
             const SizedBox(height: 12),
             TextField(
               controller: newPasswordCtrl,

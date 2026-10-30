@@ -59,6 +59,17 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     }
   }
 
+  Future<void> _requestReset() async {
+    var message =
+        'Richiesta inviata: gli amministratori ti daranno una password temporanea.';
+    try {
+      await ref.read(authProvider).requestPasswordReset();
+    } catch (_) {
+      message = 'Impossibile contattare il server. Riprova.';
+    }
+    if (mounted) _showError(message);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -85,6 +96,13 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                   obscureText: true,
                   decoration: const InputDecoration(
                     labelText: 'Password temporanea',
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _saving ? null : _requestReset,
+                    child: const Text('Password dimenticata?'),
                   ),
                 ),
                 const SizedBox(height: 12),
