@@ -42,6 +42,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `name_format.dart` | forma canonica nomi: Nome = iniziale maiuscola, COGNOME = maiuscolo (applicata in `GhDbService.saveUsers`) |
 | `merge_user_rows.dart` | setter righe utente con soft delete (`active: false` + `updated_at`), conserva `created_at` = assegnazione |
 | `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); seminari: GO solo con NAM e MHF entrambi validi (`seminarTypeExpiries`, `seminarCovers`); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
+| `password_reset.dart` | funzioni pure del reset: password temporanea, ricerca della riga del richiedente (test in `test/password_reset_test.dart`) |
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
 | `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin; `insertMaintenanceActivity`/`insertSeminar` = inserimento admin già validato dalla scheda |
@@ -51,8 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-10-27
+## STATO SESSIONE — aggiornato 2026-10-30
+- 2026-10-30 (15): reset password da admin e richiesta dal login (`f62a6db`). Gate `mustChangePassword` nel `redirect` di `lib/app.dart`, verso `/change-password`. Tasto `_resetPassword` nel dettaglio utente (`user_management_screen.dart`). Admin e pre-registrati esclusi. Persistenza non provata nella demo: da provare in produzione. Nota vault `AVES Corsi/Reset password admin e richiesta utente 2026-10-30.md`.
 - 2026-10-27 (14): tastiera Android. Flutter web sostituisce il meta viewport, quindi `interactive-widget=resizes-content` va riapplicato su `flutter-first-frame` in `web/index.html`. Lì anche: body fermo a `scrollTop` 0 e blur del campo quando la tastiera si chiude, solo sui resize `isTrusted`. Seminari NAM+MHF entrambi per il GO (`ca1f806`). Nota vault `AVES Corsi/Tecnici tastiera Android fascia vuota 2026-10-27.md`.
-- 2026-10-26 (13): calendari con Conferma (`FilledButton`: l'`ElevatedButton` del tema ha `minimumSize` infinito e sparisce in una Row). Sync automatico: `AuthProvider.sync()` ogni 60 s con app visibile e al resume, `GhDbService.refresh()` restituisce bool e incrementa `GhDbService().changes`, che le schermate admin ascoltano per ricaricarsi senza spinner; i tasti Aggiorna chiamano `sync`. Scheda privilegi: `insertMaintenanceActivity` / `insertSeminar` (`activity_edit_dialog.dart`). Vista estesa rimossa. `web/index.html`: resize sintetico su focusout (tastiera). Nota vault `AVES Corsi/Tecnici calendari refresh automatico e scheda admin 2026-10-26.md`.
 - Screenshot solo con `lib/demo_main.dart` (escluso da git, MockClient, PUT scartate): mai avviare l'app in locale col PAT reale, `readPat` scrive anche.
 - Deploy = solo web via GitHub Actions (`deploy.yml`): `flutter build apk` non applicabile (progetto senza cartella android). Storico sessioni precedenti nel vault (`AVES Corsi/AVES Tecnici.md`).
