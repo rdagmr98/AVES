@@ -234,6 +234,7 @@ class AuthService {
     String currentPassword,
     String newPassword,
   ) async {
+    await _db.refresh(); // la temporanea può essere appena stata impostata
     final users = _db.users;
     final index = users.indexWhere((user) => user['id'] == userId);
     if (index == -1) {
@@ -250,7 +251,7 @@ class AuthService {
       ...users[index],
       'password_hash': GhDbService.hashPassword(newPassword),
       'updated_at': DateTime.now().toIso8601String(),
-    };
+    }..remove('must_change_password')..remove('password_reset_requested_at');
     await _db.saveUsers(users);
   }
 

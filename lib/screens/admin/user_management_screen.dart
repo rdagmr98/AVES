@@ -12,6 +12,7 @@ import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_history.dart';
+import '../../services/password_reset.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/user_avatar.dart';
@@ -122,7 +123,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
 
   List<UserProfile> _filteredUsers() {
     final auth = ref.read(authProvider);
-    return _users.where((user) {
+    final filtered = _users.where((user) {
       final search = _search.trim().toLowerCase();
       final matchesSearch =
           search.isEmpty ||
@@ -140,6 +141,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       };
       return matchesSearch && matchesOrg && matchesApproval;
     }).toList();
+    // Chi ha chiesto il reset della password in cima.
+    return [
+      ...filtered.where((user) => user.passwordResetRequested),
+      ...filtered.where((user) => !user.passwordResetRequested),
+    ];
   }
 
   Future<void> _bulkApproveMaint() async {
@@ -721,6 +727,7 @@ class _UserList extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
+                          '${user.passwordResetRequested ? 'Reset password richiesto · ' : ''}'
                           '${user.numeroLicenza ?? 'Licenza non indicata'}'
                           '${user.isPreRegistered ? ' · non ancora registrato' : ''}'
                           '${user.isActive ? '' : ' · disattivato'}'
@@ -750,6 +757,10 @@ class _UserList extends StatelessWidget {
                   ),
                   // Status badge
                   const SizedBox(width: 8),
+                  if (user.passwordResetRequested) ...[
+                    const Icon(Icons.lock_reset, color: Colors.amber, size: 22),
+                    const SizedBox(width: 4),
+                  ],
                   !user.isActive
                       ? const Icon(Icons.block, color: Colors.grey, size: 22)
                       : isPending
@@ -1443,6 +1454,82 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
     }
   }
 
+  Future<void> _resetPassword() async {
+    final temp = generateTempPassword();
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reimposta password'),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _user.passwordResetRequested
+                    ? '${_user.fullName} ha chiesto il reset della password.'
+                    : 'Reimpostare la password di ${_user.fullName}?',
+              ),
+              const SizedBox(height: 12),
+              const Text('Password temporanea'),
+              SelectableText(
+                temp,
+                style: Theme.of(ctx).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Annotala e comunicala di persona dopo aver verificato l\'identità: '
+                'al primo accesso dovrà sceglierne una nuova.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annulla'),
+          ),
+          if (_user.passwordResetRequested)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('dismiss'),
+              child: const Text('Ignora richiesta'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('reset'),
+            child: const Text('Reimposta'),
+          ),
+        ],
+      ),
+    );
+    if (action == null) return;
+    try {
+      if (action == 'reset') {
+        await widget.service.resetPassword(_user.id, temp);
+      } else {
+        await widget.service.dismissPasswordResetRequest(_user.id);
+      }
+      final updated = await widget.service.getUserProfile(_user.id);
+      if (!mounted) return;
+      setState(() => _user = updated ?? _user);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == 'reset'
+                ? 'Password reimpostata.'
+                : 'Richiesta ignorata.',
+          ),
+        ),
+      );
+      widget.onSaved?.call();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _deleteUser() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -1500,6 +1587,15 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
         leading: const AdminAppBarLeading(),
         title: Text(_user.fullName, overflow: TextOverflow.ellipsis),
         actions: [
+          // Mai sui pre-registrati: un hash impedirebbe a chi si registra di
+          // prendere possesso dell'account.
+          if (!_user.isPreRegistered)
+            IconButton(
+              icon: const Icon(Icons.lock_reset),
+              color: _user.passwordResetRequested ? Colors.amber : null,
+              tooltip: 'Reimposta password',
+              onPressed: _resetPassword,
+            ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             color: Colors.redAccent,

@@ -552,6 +552,7 @@ class NotificationModel {
       );
 
   IconData get icon {
+    if (type.contains('PASSWORD_RESET')) return Icons.lock_reset;
     if (type.contains('EXPIRED')) return Icons.cancel;
     if (type.contains('EXPIRING')) return Icons.warning_amber_rounded;
     if (type.contains('VALIDATED')) return Icons.check_circle;

@@ -4,6 +4,7 @@ import 'gh_db_service.dart';
 import 'name_format.dart';
 import 'notification_service.dart';
 import 'merge_user_rows.dart';
+import 'password_reset.dart';
 
 class UserService {
   final _db = GhDbService();
@@ -82,6 +83,53 @@ class UserService {
     final cognome = user['cognome'] as String? ?? '';
     final fullName = '$nome $cognome'.trim();
     return fullName.isNotEmpty ? fullName : (user['id'] as String? ?? 'Utente');
+  }
+
+  /// Dal login, senza autenticazione: chi chiama non sa se l'utente esiste.
+  Future<void> requestPasswordReset(String login) async {
+    await _db.refresh();
+    final users = _db.users;
+    final index = resetRequestIndex(users, login);
+    if (index < 0) return;
+    users[index] = {
+      ...users[index],
+      'password_reset_requested_at': DateTime.now().toIso8601String(),
+    };
+    await _db.saveUsers(users);
+    await _notificationService.notifyAllAdmins(
+      type: 'PASSWORD_RESET_REQUEST',
+      message:
+          '${_userFullNameFromMap(users[index])} ha chiesto il reset della password.',
+      dedupeUnread: true,
+    );
+  }
+
+  /// Imposta la password temporanea: al primo accesso va cambiata.
+  Future<void> resetPassword(String userId, String tempPassword) =>
+      _updateResetState(userId, {
+        'password_hash': GhDbService.hashPassword(tempPassword),
+        'must_change_password': true,
+      });
+
+  Future<void> dismissPasswordResetRequest(String userId) =>
+      _updateResetState(userId, const {});
+
+  Future<void> _updateResetState(
+    String userId,
+    Map<String, dynamic> changes,
+  ) async {
+    await _db.refresh();
+    final users = _db.users;
+    final index = users.indexWhere((item) => item['id'] == userId);
+    if (index == -1) {
+      throw Exception('Utente non trovato');
+    }
+    users[index] = {
+      ...users[index],
+      ...changes,
+      'updated_at': DateTime.now().toIso8601String(),
+    }..remove('password_reset_requested_at');
+    await _db.saveUsers(users);
   }
 
   Future<UserProfile?> getUserProfile(String userId) async {

@@ -263,6 +263,9 @@ class AuthProvider extends ChangeNotifier {
       throw Exception('Utente non autenticato');
     }
     await _authService.changePassword(userId, currentPassword, newPassword);
+    // Fa cadere mustChangePassword: il router lascia la schermata di cambio.
+    _userProfile = await _userService.getUserProfile(userId) ?? _userProfile;
+    notifyListeners();
   }
 
   /// Riallinea i dati a GitHub senza ricaricare la pagina: ogni minuto con

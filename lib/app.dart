@@ -20,6 +20,7 @@ import 'screens/admin/insert_activity_admin_screen.dart';
 import 'screens/admin/pta_management_screen.dart';
 import 'screens/admin/user_management_screen.dart';
 import 'screens/admin/validate_activities_screen.dart';
+import 'screens/auth/change_password_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/dashboard/admin_crew_dashboard.dart';
@@ -112,6 +113,10 @@ class _AvesAppState extends ConsumerState<AvesApp> {
         builder: (context, state) => const PtaManagementScreen(),
       ),
       GoRoute(path: '/pta', builder: (context, state) => const PtaScreen()),
+      GoRoute(
+        path: '/change-password',
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
     ],
     redirect: (context, state) {
       final auth = ref.read(authProvider);
@@ -148,6 +153,13 @@ class _AvesAppState extends ConsumerState<AvesApp> {
           return '/login';
         }
         return publicRoutes.contains(location) ? null : '/login';
+      }
+
+      if (auth.userProfile?.mustChangePassword == true) {
+        return location == '/change-password' ? null : '/change-password';
+      }
+      if (location == '/change-password') {
+        return defaultHome();
       }
 
       // /register resta: signUp autentica, ma la schermata deve completare

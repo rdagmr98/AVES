@@ -24,6 +24,12 @@ class UserProfile {
   /// chi si registra con la stessa licenza ne prende possesso.
   final bool isPreRegistered;
 
+  /// Richiesta dal login, in attesa di un admin.
+  final bool passwordResetRequested;
+
+  /// Password temporanea dell'admin: va cambiata prima di usare l'app.
+  final bool mustChangePassword;
+
   static bool preRegistered(Map<String, dynamic> j) =>
       (j['password_hash'] as String? ?? '').isEmpty;
 
@@ -49,6 +55,8 @@ class UserProfile {
     required this.createdAt,
     required this.updatedAt,
     this.isPreRegistered = false,
+    this.passwordResetRequested = false,
+    this.mustChangePassword = false,
   });
 
   String get fullName => '$cognome $nome'.trim();
@@ -97,6 +105,8 @@ class UserProfile {
         j['updated_at'] as String? ?? DateTime.now().toIso8601String(),
       ),
       isPreRegistered: preRegistered(j),
+      passwordResetRequested: j['password_reset_requested_at'] != null,
+      mustChangePassword: j['must_change_password'] == true,
     );
   }
 
@@ -163,6 +173,8 @@ class UserProfile {
     createdAt: createdAt,
     updatedAt: DateTime.now(),
     isPreRegistered: isPreRegistered,
+    passwordResetRequested: passwordResetRequested,
+    mustChangePassword: mustChangePassword,
   );
 }
 

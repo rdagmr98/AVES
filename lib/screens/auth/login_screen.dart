@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../services/gh_db_service.dart';
+import '../../services/user_service.dart';
 import '../../widgets/aves_logo_widget.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -59,23 +60,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     // Se il DB è vuoto, prova a ricaricare prima di procedere
     final db = GhDbService();
-    if (db.users.isEmpty) {
-      try {
+    try {
+      if (db.users.isEmpty) {
         await db.init();
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Impossibile contattare il server. Controlla la connessione e riprova.',
-            ),
-            backgroundColor: AppColors.currencyExpired,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(label: 'Riprova', onPressed: _login),
-          ),
-        );
-        return;
+      } else {
+        // Una password reimpostata vale anche con la pagina già aperta.
+        await db.refresh();
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Impossibile contattare il server. Controlla la connessione e riprova.',
+          ),
+          backgroundColor: AppColors.currencyExpired,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(label: 'Riprova', onPressed: _login),
+        ),
+      );
+      return;
     }
 
     final auth = ref.read(authProvider);
@@ -95,6 +99,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _forgotPassword() async {
+    final ctrl = TextEditingController(text: _usernameCtrl.text.trim());
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Password dimenticata'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'La richiesta arriva agli amministratori, che ti daranno una password temporanea.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                decoration: const InputDecoration(
+                  labelText: 'Numero Licenza / Username',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (ctrl.text.trim().isNotEmpty) Navigator.of(ctx).pop(true);
+            },
+            child: const Text('Invia richiesta'),
+          ),
+        ],
+      ),
+    );
+    final login = ctrl.text.trim();
+    ctrl.dispose();
+    if (send != true || !mounted) return;
+    var message =
+        'Se l\'utente esiste, la richiesta è stata inviata agli amministratori.';
+    try {
+      final db = GhDbService();
+      if (db.users.isEmpty) await db.init();
+      await UserService().requestPasswordReset(login);
+    } catch (_) {
+      message = 'Impossibile contattare il server. Riprova.';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _navigateToDashboard() {
@@ -279,6 +339,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _forgotPassword,
+                      child: const Text('Password dimenticata?'),
+                    ),
                     TextButton(
                       onPressed: () => context.go('/register'),
                       child: const Text('Non hai un account? Registrati'),
