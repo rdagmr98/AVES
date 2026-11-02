@@ -41,7 +41,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `hours_format.dart` | ore salvate decimali, inserite/mostrate h:mm (`parseHours`: `1:35`/`1.35`/`1h35`, solo cifre = minuti); widget `widgets/hours_field.dart` |
 | `name_format.dart` | forma canonica nomi: Nome = iniziale maiuscola, COGNOME = maiuscolo (applicata in `GhDbService.saveUsers`) |
 | `merge_user_rows.dart` | setter righe utente con soft delete (`active: false` + `updated_at`), conserva `created_at` = assegnazione |
-| `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); seminari: GO solo con NAM e MHF entrambi validi (`seminarTypeExpiries`, `seminarCovers`); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
+| `currency_history.dart` | perdite currency ricavate dalle attività (`currencyLosses`, puro); seminari: GO solo con NAM e MHF entrambi validi (`seminarTypeExpiries`, `seminarCovers`); categoria B1.3/B2 con `catCovers` (nullo = tutte); storico in `CurrencyService.getCurrencyHistory` / `getFlightCurrencyHistory` |
 | `password_reset.dart` | funzioni pure del reset: password temporanea, ricerca della riga del richiedente (test in `test/password_reset_test.dart`) |
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-10-30
+## STATO SESSIONE — aggiornato 2026-11-02
+- 2026-11-02 (17): categoria B1.3/B2 su privilegi e attività (`3e8d72d`). `license_type_id` è facoltativo, nullo = tutte. Il confronto passa solo da `catCovers` (`currency_history.dart`). Fabbri è allineato in `aves-data` `8e01146`. Nota vault `AVES Corsi/Tecnici categoria su privilegi e attività 2026-11-02.md`.
 - 2026-10-30 (16): richiesta reset anche dal cambio password a login effettuato (`57cd246`): link nel dialog del profilo (nascosto agli admin) e in `/change-password`, via `AuthProvider.requestPasswordReset`. Provato nella demo (SnackBar ok), persistenza no.
 - 2026-10-30 (15): reset password da admin e richiesta dal login (`f62a6db`). Gate `mustChangePassword` nel `redirect` di `lib/app.dart`, verso `/change-password`. Tasto `_resetPassword` nel dettaglio utente (`user_management_screen.dart`). Admin e pre-registrati esclusi. Persistenza non provata nella demo: da provare in produzione. Nota vault `AVES Corsi/Reset password admin e richiesta utente 2026-10-30.md`.
 - 2026-10-27 (14): tastiera Android. Flutter web sostituisce il meta viewport, quindi `interactive-widget=resizes-content` va riapplicato su `flutter-first-frame` in `web/index.html`. Lì anche: body fermo a `scrollTop` 0 e blur del campo quando la tastiera si chiude, solo sui resize `isTrusted`. Seminari NAM+MHF entrambi per il GO (`ca1f806`). Nota vault `AVES Corsi/Tecnici tastiera Android fascia vuota 2026-10-27.md`.
