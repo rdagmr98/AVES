@@ -707,6 +707,7 @@ class _AdminPrivilegesDashboardState
                                             r.user,
                                             heliId: ps.helicopterTypeId,
                                             privId: ps.privilegeTypeId,
+                                            licId: ps.licenseTypeId,
                                           ),
                                         ),
                                         child: const Text('Riabilita (OJT)'),
@@ -1636,6 +1637,7 @@ Future<bool> _revokePrivilege(
     user.id,
     ps.helicopterTypeId,
     ps.privilegeTypeId,
+    ps.licenseTypeId,
   );
   return true;
 }
@@ -1648,21 +1650,30 @@ Future<bool> _registerOjt(
   UserProfile user, {
   int? heliId,
   int? privId,
+  int? licId,
 }) async {
   final auth = ref.read(authProvider);
   final adminId = auth.userProfile?.id;
   final privs = auth.privilegeTypes;
   // Non filtrato per il GO/NO GO: serve sapere cosa è già assegnato ovunque.
   final current = await CurrencyService().getPerPrivilegeCurrency(user.id);
+  final lics = await UserService().getUserLicenses(user.id);
   if (!context.mounted) return false;
-  Map<int, String> options(String t, int? h) =>
-      ojtOptions(t, h, privs, current);
+  // Categorie dell'utente sull'elicottero: la scelta compare solo se più
+  // d'una (B1.3 e B2); null = tutte.
+  Map<int, String> catsOn(int? h) => {
+    for (final l in lics)
+      if (l.helicopterTypeId == h) l.licenseTypeId: l.licenseCode,
+  };
+  int? cat = licId;
+  Map<int, String> options(String t, int? h, [int? c]) =>
+      ojtOptions(t, h, privs, current, c);
   final helis = auth.visibleHelicopters(keep: heliId);
   // Elicottero bloccato (da riga privilegio): resta quello anche se vuoto.
   List<HelicopterType> helisFor(String t) => heliId != null
       ? helis
       : helis.where((h) => options(t, h.id).isNotEmpty).toList();
-  var type = options(ojtTypes[1], heliId).containsKey(privId)
+  var type = options(ojtTypes[1], heliId, licId).containsKey(privId)
       ? ojtTypes[1]
       : ojtTypes[0];
   var date = DateTime.now();
@@ -1674,7 +1685,8 @@ Future<bool> _registerOjt(
     if (heliId == null && !hs.any((h) => h.id == heli)) {
       heli = hs.firstOrNull?.id;
     }
-    selected = selected.where(options(t, heli).containsKey).toSet();
+    if (catsOn(heli).length < 2) cat = null;
+    selected = selected.where(options(t, heli, cat).containsKey).toSet();
   }
 
   // ponytail: controller non disposto, come in _editActivity.
@@ -1742,11 +1754,29 @@ Future<bool> _registerOjt(
                       ? null
                       : (v) => setD(() {
                           heli = v;
+                          cat = null;
                           selected = {};
                         }),
                 ),
+                if (catsOn(heli).length > 1) ...[
+                  label('Categoria'),
+                  AppDropdown<int>(
+                    key: ValueKey('cat$heli'),
+                    initialValue: cat ?? 0,
+                    isDense: true,
+                    items: [
+                      const DropdownMenuItem(value: 0, child: Text('Tutte')),
+                      for (final MapEntry(:key, :value) in catsOn(heli).entries)
+                        DropdownMenuItem(value: key, child: Text(value)),
+                    ],
+                    onChanged: (v) => setD(() {
+                      cat = v == 0 ? null : v;
+                      setType(type);
+                    }),
+                  ),
+                ],
                 label('Privilegi'),
-                if (options(type, heli).isEmpty)
+                if (options(type, heli, cat).isEmpty)
                   Text(
                     switch (ojtTypes.indexOf(type)) {
                       1 => 'Nessun privilegio scaduto.',
@@ -1760,7 +1790,7 @@ Future<bool> _registerOjt(
                   )
                 else
                   MultiCheckList<int>(
-                    options: options(type, heli),
+                    options: options(type, heli, cat),
                     selected: selected,
                     onChanged: (ids) => setD(() => selected = ids),
                   ),
@@ -1794,13 +1824,21 @@ Future<bool> _registerOjt(
     return false;
   }
   final missing = selected.where(
-    (p) =>
-        !current.any((s) => s.helicopterTypeId == h && s.privilegeTypeId == p),
+    (p) => !current.any(
+      (s) =>
+          s.helicopterTypeId == h &&
+          s.privilegeTypeId == p &&
+          catCovers(s.licenseTypeId, cat),
+    ),
   );
   if (missing.isNotEmpty) {
     await UserService().setUserPrivileges(user.id, [
       for (final p in missing)
-        {'helicopter_type_id': h, 'privilege_type_id': p},
+        {
+          'helicopter_type_id': h,
+          'privilege_type_id': p,
+          'license_type_id': ?cat,
+        },
     ], append: true);
   }
   final note = notes.text.trim();
@@ -1810,6 +1848,7 @@ Future<bool> _registerOjt(
         userId: user.id,
         helicopterTypeId: h,
         privilegeTypeId: p,
+        licenseTypeId: cat,
         activityDate: date,
         activityType: type,
         description: note.isEmpty ? null : note,
@@ -2068,6 +2107,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
       _row.user,
       heliId: ps?.helicopterTypeId,
       privId: ps?.privilegeTypeId,
+      licId: ps?.licenseTypeId,
     );
     if (ok) await _afterChange();
   }
@@ -2416,7 +2456,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     final privOptions = <int, String>{
       for (final a in _acts)
         if (_heliId == null || a.helicopterTypeId == _heliId)
-          a.privilegeTypeId ?? -1: a.privilegeName,
+          a.privilegeTypeId ?? -1: a.privilegeName.split(' · ').first,
     };
     final filtersActive =
         _query.isNotEmpty ||

@@ -246,6 +246,8 @@ class UserPrivilege {
   final String userId;
   final int helicopterTypeId;
   final int privilegeTypeId;
+  // Categoria (B1.3, B2...) a cui vale il privilegio; null = tutte.
+  final int? licenseTypeId;
   final DateTime? expiryDate;
   final bool active;
 
@@ -253,6 +255,7 @@ class UserPrivilege {
   final String helicopterName;
   final String privilegeCode;
   final String privilegeName;
+  final String licenseCode;
   final int sortOrder;
 
   const UserPrivilege({
@@ -260,20 +263,27 @@ class UserPrivilege {
     required this.userId,
     required this.helicopterTypeId,
     required this.privilegeTypeId,
+    this.licenseTypeId,
     this.expiryDate,
     this.active = true,
     this.helicopterCode = '',
     this.helicopterName = '',
     this.privilegeCode = '',
     this.privilegeName = '',
+    this.licenseCode = '',
     this.sortOrder = 0,
   });
+
+  /// Nome con la categoria, se il privilegio ne ha una.
+  String get label =>
+      licenseCode.isEmpty ? privilegeName : '$privilegeName · $licenseCode';
 
   factory UserPrivilege.fromJson(Map<String, dynamic> j) => UserPrivilege(
     id: j['id'] as int?,
     userId: j['user_id'] as String,
     helicopterTypeId: j['helicopter_type_id'] as int,
     privilegeTypeId: j['privilege_type_id'] as int,
+    licenseTypeId: j['license_type_id'] as int?,
     expiryDate: j['expiry_date'] != null
         ? DateTime.parse(j['expiry_date'] as String)
         : null,
@@ -290,6 +300,8 @@ class UserPrivilege {
     privilegeName:
         (j['privilege_types'] as Map<String, dynamic>?)?['name'] as String? ??
         '',
+    licenseCode:
+        (j['license_types'] as Map<String, dynamic>?)?['code'] as String? ?? '',
     sortOrder:
         (j['privilege_types'] as Map<String, dynamic>?)?['sort_order']
             as int? ??
@@ -300,6 +312,7 @@ class UserPrivilege {
     'user_id': userId,
     'helicopter_type_id': helicopterTypeId,
     'privilege_type_id': privilegeTypeId,
+    if (licenseTypeId != null) 'license_type_id': licenseTypeId,
     if (expiryDate != null)
       'expiry_date': expiryDate!.toIso8601String().split('T').first,
   };

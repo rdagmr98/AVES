@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../constants/app_constants.dart';
 import '../models/activity_models.dart';
 import '../services/activity_service.dart';
+import '../services/currency_history.dart';
 import '../services/hours_format.dart';
 import '../services/user_service.dart';
 import 'app_dropdown.dart';
@@ -288,7 +289,11 @@ Future<bool> editMaintenanceActivity(
     details: (heli) => {
       // "tutti" resta solo per le righe legacy che lo hanno già
       if (a.privilegeTypeId == null) null: 'Tutti i privilegi (legacy)',
-      for (final p in privileges.where((p) => p.helicopterTypeId == heli))
+      for (final p in privileges.where(
+        (p) =>
+            p.helicopterTypeId == heli &&
+            catCovers(p.licenseTypeId, a.licenseTypeId),
+      ))
         p.privilegeTypeId: p.privilegeName,
       if (heli == a.helicopterTypeId && a.privilegeTypeId != null)
         a.privilegeTypeId: a.privilegeName,

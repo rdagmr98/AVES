@@ -998,7 +998,10 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           .map((i) => '${i.helicopterTypeId}:${i.licenseTypeId}')
           .toSet();
       _privilegeKeys = privileges
-          .map((i) => '${i.helicopterTypeId}:${i.privilegeTypeId}')
+          .map(
+            (i) =>
+                '${i.helicopterTypeId}:${i.privilegeTypeId}:${i.licenseTypeId ?? ''}',
+          )
           .toSet();
       _tCrewHelicopters = crews
           .where((i) => i.crewType == 'T')
@@ -1034,25 +1037,48 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
         .toSet();
   }
 
-  int? _selectedLicenseTypeIdFor(int helicopterTypeId) {
-    final key = _licenseKeys.firstWhere(
-      (item) => item.startsWith('$helicopterTypeId:'),
-      orElse: () => '',
-    );
-    if (key.isEmpty) {
-      return null;
-    }
-    return int.tryParse(key.split(':')[1]);
-  }
+  List<int> _selectedLicenseIdsFor(int h) => [
+    for (final k in _licenseKeys)
+      if (k.startsWith('$h:')) int.parse(k.split(':')[1]),
+  ]..sort();
 
-  void _setLicenseForHelicopter(int helicopterTypeId, int? licenseTypeId) {
-    setState(() {
-      _licenseKeys.removeWhere((key) => key.startsWith('$helicopterTypeId:'));
-      if (licenseTypeId != null) {
-        _licenseKeys.add('$helicopterTypeId:$licenseTypeId');
-      }
-    });
-  }
+  void _toggleLicense(int h, int l, bool on) => setState(() {
+    if (on) {
+      _licenseKeys.add('$h:$l');
+      return;
+    }
+    _licenseKeys.remove('$h:$l');
+    // Tolta la licenza, via i privilegi di quella categoria.
+    _privilegeKeys.removeWhere((k) => k.startsWith('$h:') && k.endsWith(':$l'));
+  });
+
+  /// [cat] null = una sola licenza sull'elicottero: conta qualsiasi riga.
+  bool _privilegeSelected(int h, int p, int? cat) => cat == null
+      ? _privilegeKeys.any((k) => k.startsWith('$h:$p:'))
+      : _privilegeKeys.contains('$h:$p:') ||
+            _privilegeKeys.contains('$h:$p:$cat');
+
+  void _togglePrivilege(int h, int p, int? cat, bool on) => setState(() {
+    if (cat == null) {
+      _privilegeKeys.removeWhere((k) => k.startsWith('$h:$p:'));
+      if (on) _privilegeKeys.add('$h:$p:');
+      return;
+    }
+    // La riga "tutte le categorie" si divide per licenza prima di cambiarne una.
+    if (_privilegeKeys.remove('$h:$p:')) {
+      _privilegeKeys.addAll([
+        for (final l in _selectedLicenseIdsFor(h)) '$h:$p:$l',
+      ]);
+    }
+    if (on) {
+      _privilegeKeys.add('$h:$p:$cat');
+    } else {
+      _privilegeKeys.remove('$h:$p:$cat');
+    }
+  });
+
+  String _licenseCode(int id) =>
+      widget.licenseTypes.where((l) => l.id == id).firstOrNull?.code ?? '$id';
 
   String _crewTypeForHelicopter(int helicopterTypeId) {
     if (_tobCrewHelicopters.contains(helicopterTypeId)) {
@@ -1201,7 +1227,11 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
   /// OJT dei privilegi appena assegnati su [heliId]: [plan] = tipo proposto
   /// dallo storico per privilegio, l'admin corregge tipo, data e note.
   /// "Senza OJT" = privilegi assegnati senza attività (come il corso T).
-  Future<void> _registerOjt(int heliId, Map<int, String> plan) async {
+  Future<void> _registerOjt(
+    int heliId,
+    Map<int, String> plan, [
+    int? cat,
+  ]) async {
     final auth = ref.read(authProvider);
     final adminId = auth.userProfile?.id;
     if (adminId == null) return;
@@ -1227,7 +1257,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       builder: (c) => StatefulBuilder(
         builder: (c, setD) => AlertDialog(
           title: Text(
-            'OJT  ·  ${_user.fullName}  ·  $heli',
+            'OJT  ·  ${_user.fullName}  ·  $heli'
+            '${cat == null ? '' : ' ${_licenseCode(cat)}'}',
             overflow: TextOverflow.ellipsis,
           ),
           content: SizedBox(
@@ -1317,6 +1348,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           userId: _user.id,
           helicopterTypeId: heliId,
           privilegeTypeId: p,
+          licenseTypeId: cat,
           activityDate: date,
           activityType: type,
           description: note.isEmpty ? null : note,
@@ -1373,14 +1405,16 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       // Privilegi nuovi: OJT col tipo dallo storico, calcolato prima di
       // salvare (dopo risultano già attivi).
       final history = widget.service.privilegeHistory(_user.id);
-      final added = <int, Set<int>>{};
+      final added = <(int, int?), Set<int>>{};
       for (final k in _privilegeKeys.difference(_savedPrivs)) {
         final p = k.split(':');
-        (added[int.parse(p[0])] ??= {}).add(int.parse(p[1]));
+        (added[(int.parse(p[0]), int.tryParse(p[2]))] ??= {}).add(
+          int.parse(p[1]),
+        );
       }
       final ojt = {
-        for (final MapEntry(key: h, value: ids) in added.entries)
-          h: proposedOjt(history, h, ids),
+        for (final MapEntry(key: (h, l), value: ids) in added.entries)
+          (h, l): proposedOjt(history, h, ids, l),
       };
       await widget.service.setUserPrivileges(
         _user.id,
@@ -1389,6 +1423,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
           return {
             'helicopter_type_id': int.parse(p[0]),
             'privilege_type_id': int.parse(p[1]),
+            'license_type_id': int.tryParse(p[2]),
           };
         }).toList(),
       );
@@ -1419,9 +1454,9 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ruoli e assegnazioni salvati.')),
       );
-      for (final MapEntry(key: h, value: plan) in ojt.entries) {
+      for (final MapEntry(key: (h, l), value: plan) in ojt.entries) {
         if (!mounted) return;
-        if (plan.isNotEmpty) await _registerOjt(h, plan);
+        if (plan.isNotEmpty) await _registerOjt(h, plan, l);
       }
       _savedPrivs = {..._privilegeKeys};
       // T e capacità nuove si acquisiscono con un corso: per la T i voli del
@@ -1515,9 +1550,7 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            action == 'reset'
-                ? 'Password reimpostata.'
-                : 'Richiesta ignorata.',
+            action == 'reset' ? 'Password reimpostata.' : 'Richiesta ignorata.',
           ),
         ),
       );
@@ -1968,8 +2001,8 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                 )
                               else
                                 ...helicopters.map((helicopter) {
-                                  final selectedLicenseId =
-                                      _selectedLicenseTypeIdFor(helicopter.id);
+                                  final selectedLicenseIds =
+                                      _selectedLicenseIdsFor(helicopter.id);
                                   final selectedPrivilegeIds =
                                       _selectedPrivilegeIdsFor(helicopter.id);
                                   final selectedPrivileges =
@@ -1998,19 +2031,17 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                             .contains(item.id),
                                       )
                                       .toList();
-                                  final licenseLabel = selectedLicenseId == null
+                                  final licenseLabel =
+                                      selectedLicenseIds.isEmpty
                                       ? 'Nessuna'
-                                      : widget.licenseTypes
-                                            .firstWhere(
-                                              (item) =>
-                                                  item.id == selectedLicenseId,
-                                              orElse: () => LicenseType(
-                                                id: selectedLicenseId,
-                                                code: '$selectedLicenseId',
-                                                name: '$selectedLicenseId',
-                                              ),
-                                            )
-                                            .code;
+                                      : selectedLicenseIds
+                                            .map(_licenseCode)
+                                            .join(', ');
+                                  // Più licenze (B1.3 e B2): privilegi per
+                                  // categoria; null = una riga sola.
+                                  final cats = selectedLicenseIds.length > 1
+                                      ? <int?>[...selectedLicenseIds]
+                                      : const <int?>[null];
                                   final privilegeLabel =
                                       selectedPrivileges.isEmpty
                                       ? 'Nessuno'
@@ -2049,46 +2080,34 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                       children: [
                                         if (widget.showMaintenanceSections) ...[
                                           const SizedBox(height: 8),
-                                          AppDropdown<int?>(
-                                            key: ValueKey(
-                                              'license_${helicopter.id}_$selectedLicenseId',
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              'Licenze',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.titleSmall,
                                             ),
-                                            initialValue: selectedLicenseId,
-                                            decoration: const InputDecoration(
-                                              labelText: 'Tipo licenza',
-                                              labelStyle: TextStyle(
-                                                color: Colors.white70,
-                                              ),
-                                              floatingLabelStyle: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              contentPadding:
-                                                  EdgeInsets.fromLTRB(
-                                                    12,
-                                                    20,
-                                                    12,
-                                                    8,
-                                                  ),
-                                            ),
-                                            items: [
-                                              const DropdownMenuItem<int?>(
-                                                value: null,
-                                                child: Text('Nessuna'),
-                                              ),
-                                              ...widget.licenseTypes.map(
-                                                (item) =>
-                                                    DropdownMenuItem<int?>(
-                                                      value: item.id,
-                                                      child: Text(item.code),
-                                                    ),
-                                              ),
-                                            ],
-                                            onChanged: (value) =>
-                                                _setLicenseForHelicopter(
-                                                  helicopter.id,
-                                                  value,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: [
+                                              for (final item
+                                                  in widget.licenseTypes)
+                                                FilterChip(
+                                                  selected: selectedLicenseIds
+                                                      .contains(item.id),
+                                                  label: Text(item.code),
+                                                  onSelected: (on) =>
+                                                      _toggleLicense(
+                                                        helicopter.id,
+                                                        item.id,
+                                                        on,
+                                                      ),
                                                 ),
+                                            ],
                                           ),
                                           const SizedBox(height: 12),
                                           Align(
@@ -2100,38 +2119,48 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                                               ).textTheme.titleSmall,
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 8,
-                                            runSpacing: 8,
-                                            children: widget.privilegeTypes
-                                                .map(
-                                                  (item) => Tooltip(
+                                          for (final cat in cats) ...[
+                                            const SizedBox(height: 8),
+                                            if (cat != null)
+                                              Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Text(
+                                                  _licenseCode(cat),
+                                                  style: Theme.of(
+                                                    context,
+                                                  ).textTheme.bodySmall,
+                                                ),
+                                              ),
+                                            if (cat != null)
+                                              const SizedBox(height: 4),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                for (final item
+                                                    in widget.privilegeTypes)
+                                                  Tooltip(
                                                     message: item.name,
                                                     child: FilterChip(
                                                       selected:
-                                                          selectedPrivilegeIds
-                                                              .contains(
-                                                                item.id,
-                                                              ),
+                                                          _privilegeSelected(
+                                                            helicopter.id,
+                                                            item.id,
+                                                            cat,
+                                                          ),
                                                       label: Text(item.code),
-                                                      onSelected: (selected) =>
-                                                          setState(() {
-                                                            final key =
-                                                                '${helicopter.id}:${item.id}';
-                                                            if (selected) {
-                                                              _privilegeKeys
-                                                                  .add(key);
-                                                            } else {
-                                                              _privilegeKeys
-                                                                  .remove(key);
-                                                            }
-                                                          }),
+                                                      onSelected: (on) =>
+                                                          _togglePrivilege(
+                                                            helicopter.id,
+                                                            item.id,
+                                                            cat,
+                                                            on,
+                                                          ),
                                                     ),
                                                   ),
-                                                )
-                                                .toList(),
-                                          ),
+                                              ],
+                                            ),
+                                          ],
                                         ],
                                         if (widget.showMaintenanceSections &&
                                             widget.showCrewSections)

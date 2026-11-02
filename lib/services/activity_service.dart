@@ -82,6 +82,10 @@ class ActivityService {
           'privilegeTypes',
           item['privilege_type_id'] as int?,
         ),
+        'license_types': _findReference(
+          'licenseTypes',
+          item['license_type_id'] as int?,
+        ),
         'user_profiles': _findUser(item['user_id'] as String),
       });
 

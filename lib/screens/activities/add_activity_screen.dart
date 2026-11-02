@@ -10,6 +10,7 @@ import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
+import '../../services/currency_history.dart';
 import '../../services/hours_format.dart';
 import '../../widgets/hours_field.dart';
 import '../../widgets/form_parts.dart';
@@ -73,6 +74,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
 
   int? _maintenanceHelicopterId;
   Set<int> _maintenancePrivilegeIds = {};
+  // Categoria (B1.3/B2) solo con più licenze sull'elicottero.
+  int? _maintenanceLicenseId;
+  bool _maintenanceNeedsLicense = false;
   DateTime _maintenanceDate = DateTime.now();
   bool _maintenanceIsWorkOrder = false;
   DateTime? _maintenanceDateFrom;
@@ -125,6 +129,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
       _showMessage('Seleziona l\'elicottero.');
       return;
     }
+    if (_maintenanceNeedsLicense && _maintenanceLicenseId == null) {
+      _showMessage('Seleziona la categoria (B1.3 / B2).');
+      return;
+    }
     if (_maintenancePrivilegeIds.isEmpty) {
       _showMessage('Seleziona almeno un privilegio esercitato.');
       return;
@@ -154,6 +162,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
             userId: user.id,
             helicopterTypeId: _maintenanceHelicopterId!,
             privilegeTypeId: privilegeId,
+            licenseTypeId: _maintenanceLicenseId,
             activityDate: _maintenanceIsWorkOrder
                 ? (_maintenanceDateTo ?? _maintenanceDate)
                 : _maintenanceDate,
@@ -355,14 +364,33 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
       _maintenanceHelicopterId,
       maintenanceHelicopters.map((item) => item.id),
     );
-    final filteredPrivileges = maintenancePrivileges
-        .where((item) => item.helicopterTypeId == _maintenanceHelicopterId)
-        .toList();
-    _maintenancePrivilegeIds.retainWhere(
-      (id) => filteredPrivileges.any((item) => item.privilegeTypeId == id),
-    );
+    final maintenanceCats = [
+      for (final l in auth.licenses)
+        if (l.helicopterTypeId == _maintenanceHelicopterId)
+          _HelicopterOption(
+            id: l.licenseTypeId,
+            code: l.licenseCode,
+            name: l.licenseCode,
+          ),
+    ];
+    _maintenanceNeedsLicense = maintenanceCats.length > 1;
+    _maintenanceLicenseId = _maintenanceNeedsLicense
+        ? _keepOrOnly(
+            _maintenanceLicenseId,
+            maintenanceCats.map((item) => item.id),
+          )
+        : null;
+    // Privilegi della categoria scelta (righe senza categoria = tutte).
+    final filteredPrivileges = <int, String>{
+      if (!_maintenanceNeedsLicense || _maintenanceLicenseId != null)
+        for (final item in maintenancePrivileges)
+          if (item.helicopterTypeId == _maintenanceHelicopterId &&
+              catCovers(item.licenseTypeId, _maintenanceLicenseId))
+            item.privilegeTypeId: item.privilegeName,
+    };
+    _maintenancePrivilegeIds.retainWhere(filteredPrivileges.containsKey);
     if (filteredPrivileges.length == 1) {
-      _maintenancePrivilegeIds = {filteredPrivileges.single.privilegeTypeId};
+      _maintenancePrivilegeIds = {filteredPrivileges.keys.single};
     }
     _flightHelicopterId = _keepOrOnly(
       _flightHelicopterId,
@@ -394,20 +422,29 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
             onSelected: (id) => setState(() => _maintenanceHelicopterId = id),
           ),
         ),
+        if (_maintenanceNeedsLicense)
+          LabeledField(
+            label: 'Categoria',
+            child: _HelicopterChips(
+              options: maintenanceCats,
+              selected: _maintenanceLicenseId,
+              onSelected: (id) => setState(() => _maintenanceLicenseId = id),
+            ),
+          ),
         LabeledField(
           label: 'Privilegi esercitati',
           child: filteredPrivileges.isEmpty
               ? Text(
                   _maintenanceHelicopterId == null
                       ? 'Scegli prima l\'elicottero.'
+                      : _maintenanceNeedsLicense &&
+                            _maintenanceLicenseId == null
+                      ? 'Scegli prima la categoria.'
                       : 'Nessun privilegio assegnato su questo elicottero.',
                   style: Theme.of(context).textTheme.bodySmall,
                 )
               : MultiCheckList<int>(
-                  options: {
-                    for (final item in filteredPrivileges)
-                      item.privilegeTypeId: item.privilegeName,
-                  },
+                  options: filteredPrivileges,
                   selected: _maintenancePrivilegeIds,
                   onChanged: (ids) =>
                       setState(() => _maintenancePrivilegeIds = ids),

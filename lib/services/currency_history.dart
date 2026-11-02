@@ -4,6 +4,11 @@ import '../models/user_models.dart';
 
 enum CurrencyEventKind { assigned, revoked, restored, lost }
 
+/// Categoria di licenza (`license_type_id`) di un privilegio e di un'attività:
+/// nulla = tutte le categorie, quindi si coprono se una delle due è nulla o
+/// se coincidono (B1.3 e B2 sullo stesso privilegio hanno currency separate).
+bool catCovers(Object? a, Object? b) => a == null || b == null || a == b;
+
 /// Evento dello storico currency di un utente (timeline della scheda).
 /// [delete] elimina la riga da cui nasce (null = evento calcolato o
 /// privilegio ancora attivo).
@@ -93,18 +98,21 @@ void sortByExpiry(List<UserProfile> users, Map<String, DateTime?> expiry) =>
 
 const ojtTypes = ['OJT iniziale', 'OJT di ripristino', 'OJT nuovo privilegio'];
 
-/// Privilegi proponibili per tipo di OJT su un elicottero: iniziale = tutti,
-/// ripristino = solo gli scaduti dell'utente, nuovo = solo i non assegnati.
+/// Privilegi proponibili per tipo di OJT su un elicottero (e categoria
+/// [cat], null = tutte): iniziale = tutti, ripristino = solo gli scaduti
+/// dell'utente, nuovo = solo i non assegnati.
 Map<int, String> ojtOptions(
   String type,
   int? heliId,
   List<PrivilegeType> privs,
-  List<PrivilegeCurrencyStatus> current,
-) {
+  List<PrivilegeCurrencyStatus> current, [
+  int? cat,
+]) {
   bool has(int p, {bool expired = false}) => current.any(
     (s) =>
         s.helicopterTypeId == heliId &&
         s.privilegeTypeId == p &&
+        catCovers(s.licenseTypeId, cat) &&
         (!expired || s.status.isExpired),
   );
   return {
@@ -115,18 +123,21 @@ Map<int, String> ojtOptions(
   };
 }
 
-/// OJT per assegnare [ids] su [heliId], dallo storico privilegi dell'utente
-/// ([history], righe anche revocate): i già attivi non lo richiedono; nessuna
-/// riga = utente nuovo (iniziale), privilegio già avuto = ripristino.
+/// OJT per assegnare [ids] su [heliId] nella categoria [cat] (null = tutte),
+/// dallo storico privilegi dell'utente ([history], righe anche revocate): i
+/// già attivi non lo richiedono; nessuna riga = utente nuovo (iniziale),
+/// privilegio già avuto = ripristino.
 Map<int, String> proposedOjt(
   List<Map<String, dynamic>> history,
   int heliId,
-  Iterable<int> ids,
-) {
+  Iterable<int> ids, [
+  int? cat,
+]) {
   bool had(int p, {bool active = false}) => history.any(
     (r) =>
         r['helicopter_type_id'] == heliId &&
         r['privilege_type_id'] == p &&
+        catCovers(r['license_type_id'], cat) &&
         (!active || r['active'] != false),
   );
   return {

@@ -548,14 +548,22 @@ class _InsertActivityAdminScreenState
       if (user == null) continue;
       final privId = p['privilege_type_id'] as int;
       final list = result.putIfAbsent(privId, () => []);
-      if (list.contains(user)) continue;
-      list.add(user);
-      final last = _currencyService.lastMaintenanceDate(
-        user.id,
-        helicopterId,
-        privId,
-      );
-      (expiry[privId] ??= {})[user.id] = last?.add(Duration(days: _periodDays));
+      if (!list.contains(user)) list.add(user);
+      final exp = _currencyService
+          .lastMaintenanceDate(
+            user.id,
+            helicopterId,
+            privId,
+            licenseTypeId: p['license_type_id'] as int?,
+          )
+          ?.add(Duration(days: _periodDays));
+      // Più categorie (B1.3, B2): conta quella che scade prima (null = mai).
+      final m = expiry[privId] ??= {};
+      final prev = m[user.id];
+      if (!m.containsKey(user.id) ||
+          (prev != null && (exp == null || exp.isBefore(prev)))) {
+        m[user.id] = exp;
+      }
     }
     for (final MapEntry(key: privId, value: users) in result.entries) {
       _sortUsers(users, expiry[privId]!);

@@ -374,19 +374,22 @@ class CurrencyService {
   }
 
   /// Ultima attività validata (data fine, o data) che tiene corrente il
-  /// privilegio su quell'elicottero; null = mai svolta.
+  /// privilegio su quell'elicottero nella categoria [licenseTypeId] (null =
+  /// tutte, vedi [catCovers]); null = mai svolta.
   DateTime? lastMaintenanceDate(
     String userId,
     int helicopterTypeId,
-    int privilegeTypeId,
-  ) {
+    int privilegeTypeId, {
+    int? licenseTypeId,
+  }) {
     DateTime? last;
     for (final a in _db.maintenanceActs) {
       if (a['user_id'] != userId ||
           a['is_validated'] != true ||
           a['helicopter_type_id'] != helicopterTypeId ||
           (a['privilege_type_id'] != null &&
-              a['privilege_type_id'] != privilegeTypeId)) {
+              a['privilege_type_id'] != privilegeTypeId) ||
+          !catCovers(a['license_type_id'], licenseTypeId)) {
         continue;
       }
       final d = DateTime.parse((a['date_to'] ?? a['activity_date']) as String);
@@ -413,9 +416,11 @@ class CurrencyService {
   Future<List<CurrencyEvent>> getCurrencyHistory(String userId) async {
     final periodDays = (await getMaintenanceCriteria())?.periodDays ?? 180;
     final now = DateTime.now();
-    String label(Object? h, Object? p) =>
-        '${_findReference('helicopterTypes', h)?['code'] ?? '?'} · '
-        '${_findReference('privilegeTypes', p)?['name'] ?? 'Tutti i privilegi'}';
+    String label(Object? h, Object? p, [Object? l]) => [
+      _findReference('helicopterTypes', h)?['code'] ?? '?',
+      _findReference('privilegeTypes', p)?['name'] ?? 'Tutti i privilegi',
+      ?_findReference('licenseTypes', l)?['code'],
+    ].join(' · ');
     DateTime date(Map<String, dynamic> a) =>
         DateTime.parse((a['date_to'] ?? a['activity_date']) as String);
     bool isOjt(Map<String, dynamic> a) =>
@@ -430,7 +435,7 @@ class CurrencyService {
           kind: CurrencyEventKind.restored,
           title:
               '${a['activity_type']}: '
-              '${label(a['helicopter_type_id'], a['privilege_type_id'])}',
+              '${label(a['helicopter_type_id'], a['privilege_type_id'], a['license_type_id'])}',
           note: a['description'] as String?,
           delete: _remove(
             () => _db.maintenanceActs,
@@ -442,9 +447,13 @@ class CurrencyService {
     // Fine del conteggio perdite per coppia: oggi se il privilegio è attivo,
     // sennò l'ultima revoca.
     // ponytail: le eventuali perdite fra revoca e riassegnazione restano.
-    final ends = <(Object?, Object?), DateTime>{};
+    final ends = <(Object?, Object?, Object?), DateTime>{};
     for (final p in _db.privileges.where((p) => p['user_id'] == userId)) {
-      final key = (p['helicopter_type_id'], p['privilege_type_id']);
+      final key = (
+        p['helicopter_type_id'],
+        p['privilege_type_id'],
+        p['license_type_id'],
+      );
       final created = DateTime.tryParse(p['created_at'] as String? ?? '');
       final revoked = p['active'] == false
           ? DateTime.tryParse(p['updated_at'] as String? ?? '') ?? now
@@ -457,7 +466,7 @@ class CurrencyService {
         events.add((
           date: created,
           kind: CurrencyEventKind.assigned,
-          title: 'Privilegio assegnato: ${label(key.$1, key.$2)}',
+          title: 'Privilegio assegnato: ${label(key.$1, key.$2, key.$3)}',
           note: null,
           delete: del,
         ));
@@ -466,7 +475,7 @@ class CurrencyService {
         events.add((
           date: revoked,
           kind: CurrencyEventKind.revoked,
-          title: 'Privilegio revocato: ${label(key.$1, key.$2)}',
+          title: 'Privilegio revocato: ${label(key.$1, key.$2, key.$3)}',
           note: null,
           delete: del,
         ));
@@ -474,11 +483,12 @@ class CurrencyService {
       final end = revoked ?? now;
       if (ends[key]?.isAfter(end) != true) ends[key] = end;
     }
-    for (final MapEntry(key: (h, p), value: end) in ends.entries) {
+    for (final MapEntry(key: (h, p, l), value: end) in ends.entries) {
       final mine = acts.where(
         (a) =>
             a['helicopter_type_id'] == h &&
-            (a['privilege_type_id'] == null || a['privilege_type_id'] == p),
+            (a['privilege_type_id'] == null || a['privilege_type_id'] == p) &&
+            catCovers(a['license_type_id'], l),
       );
       final ojtDates = {for (final a in mine.where(isOjt)) date(a)};
       for (final l in currencyLosses(mine.map(date), periodDays, end)) {
@@ -486,7 +496,7 @@ class CurrencyService {
           date: l.lost,
           kind: CurrencyEventKind.lost,
           delete: null,
-          title: 'Currency persa: ${label(h, p)}',
+          title: 'Currency persa: ${label(h, p, l)}',
           note: 'nessuna attività validata da $periodDays giorni',
         ));
         final r = l.regained;
@@ -494,7 +504,7 @@ class CurrencyService {
           events.add((
             date: r,
             kind: CurrencyEventKind.restored,
-            title: 'Currency riacquisita: ${label(h, p)}',
+            title: 'Currency riacquisita: ${label(h, p, l)}',
             note: 'con attività validata',
             delete: null,
           ));
@@ -753,6 +763,7 @@ class CurrencyService {
     for (final priv in userPrivileges) {
       final helicopterTypeId = priv['helicopter_type_id'] as int?;
       final privilegeTypeId = priv['privilege_type_id'] as int?;
+      final licenseTypeId = priv['license_type_id'] as int?;
       if (helicopterTypeId == null || privilegeTypeId == null) {
         continue;
       }
@@ -768,18 +779,24 @@ class CurrencyService {
         userId,
         helicopterTypeId,
         privilegeTypeId,
+        licenseTypeId: licenseTypeId,
       );
+      final name = [
+        privType['name'] as String? ?? '?',
+        ?_findReference('licenseTypes', licenseTypeId)?['code'] as String?,
+      ].join(' · ');
 
       result.add(
         PrivilegeCurrencyStatus(
           helicopterTypeId: helicopterTypeId,
           helicopterCode: heli['code'] as String? ?? '?',
           privilegeTypeId: privilegeTypeId,
-          privilegeName: privType['name'] as String? ?? '?',
+          licenseTypeId: licenseTypeId,
+          privilegeName: name,
           status: _computeStatus(
             lastDate: lastDate,
             periodDays: periodDays,
-            label: '${heli['code']} · ${privType['name']}',
+            label: '${heli['code']} · $name',
           ),
         ),
       );
@@ -1324,7 +1341,10 @@ class CurrencyService {
       await _upsertNotification(
         _adminPrivNotificationUserId,
         'PRIVILEGE_EXPIRED_ADMIN',
-        '${userId}_${privilege.helicopterTypeId}_${privilege.privilegeTypeId}_${isExpired ? 'expired' : 'warning'}',
+        // La categoria entra nella chiave solo se c'è: chiavi vecchie invariate.
+        '${userId}_${privilege.helicopterTypeId}_${privilege.privilegeTypeId}'
+            '${privilege.licenseTypeId == null ? '' : '/${privilege.licenseTypeId}'}'
+            '_${isExpired ? 'expired' : 'warning'}',
         message: adminMessage,
         metadata: metadata,
       );

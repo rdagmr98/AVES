@@ -599,8 +599,12 @@ class UserService {
     final heli = request.helicopterTypeId;
     final licenseTypeId = request.licenseTypeId;
     final privilegeTypeIds = request.privilegeTypeIds;
-    for (final l in await getUserLicenses(userId)) {
-      if (l.helicopterTypeId == heli && l.licenseTypeId != licenseTypeId) {
+    final licenses = (await getUserLicenses(
+      userId,
+    )).where((l) => l.helicopterTypeId == heli).toList();
+    // Licenza già posseduta (anche fra più categorie): le altre restano.
+    if (!licenses.any((l) => l.licenseTypeId == licenseTypeId)) {
+      for (final l in licenses) {
         await deleteUserLicense(l.id!);
       }
     }
@@ -609,15 +613,19 @@ class UserService {
         {'helicopter_type_id': heli, 'license_type_id': licenseTypeId},
       ], append: true);
     }
+    final held = <int>{};
     for (final p in await getUserPrivileges(userId)) {
-      if (p.helicopterTypeId == heli &&
-          !privilegeTypeIds.contains(p.privilegeTypeId)) {
-        await removePrivilege(userId, heli, p.privilegeTypeId);
+      if (p.helicopterTypeId != heli) continue;
+      held.add(p.privilegeTypeId);
+      if (!privilegeTypeIds.contains(p.privilegeTypeId)) {
+        await removePrivilege(userId, heli, p.privilegeTypeId, p.licenseTypeId);
       }
     }
+    // Già posseduti in qualche categoria: nessuna riga "tutte" in più.
     await setUserPrivileges(userId, [
       for (final p in privilegeTypeIds)
-        {'helicopter_type_id': heli, 'privilege_type_id': p},
+        if (!held.contains(p))
+          {'helicopter_type_id': heli, 'privilege_type_id': p},
     ], append: true);
     await _closePrivilegeRequest(
       request,
@@ -932,6 +940,10 @@ class UserService {
               'privilegeTypes',
               item['privilege_type_id'] as int?,
             ),
+            'license_types': _findReference(
+              'licenseTypes',
+              item['license_type_id'] as int?,
+            ),
           }),
         )
         .toList();
@@ -952,7 +964,8 @@ class UserService {
       _db.privileges,
       userId,
       privileges,
-      const ['helicopter_type_id', 'privilege_type_id'],
+      // Stesso privilegio in categorie diverse (B1.3, B2) = righe distinte.
+      const ['helicopter_type_id', 'privilege_type_id', 'license_type_id'],
       const ['expiry_date'],
       append: append,
       nextId: _nextId,
@@ -1116,11 +1129,14 @@ class UserService {
     await _db.savePrivileges(privileges);
   }
 
+  /// Revoca la riga privilegio della categoria [licenseTypeId] (null = la
+  /// riga senza categoria, quella di chi ha una sola licenza).
   Future<void> removePrivilege(
     String userId,
     int helicopterTypeId,
-    int privilegeTypeId,
-  ) async {
+    int privilegeTypeId, [
+    int? licenseTypeId,
+  ]) async {
     final privileges = _db.privileges;
     var changed = false;
     for (var i = 0; i < privileges.length; i++) {
@@ -1128,6 +1144,7 @@ class UserService {
       if (privilege['user_id'] == userId &&
           privilege['helicopter_type_id'] == helicopterTypeId &&
           privilege['privilege_type_id'] == privilegeTypeId &&
+          privilege['license_type_id'] == licenseTypeId &&
           privilege['active'] != false) {
         privileges[i] = {
           ...privilege,
@@ -1146,7 +1163,10 @@ class UserService {
     final privilege = _findReference('privilegeTypes', privilegeTypeId);
     final helicopterLabel =
         helicopter?['code'] as String? ?? helicopter?['name'] as String? ?? '-';
-    final privilegeLabel = privilege?['name'] as String? ?? 'privilegio';
+    final privilegeLabel = [
+      privilege?['name'] as String? ?? 'privilegio',
+      ?_findReference('licenseTypes', licenseTypeId)?['code'] as String?,
+    ].join(' · ');
     await _notificationService.createNotification(
       userId: userId,
       type: 'PRIVILEGE_REMOVED_BY_ADMIN',

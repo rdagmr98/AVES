@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/activity_models.dart';
 import '../models/user_models.dart';
 import 'activity_service.dart';
+import 'currency_history.dart';
 import 'currency_service.dart';
 import 'p66_service.dart';
 import 'user_service.dart';
@@ -309,7 +310,10 @@ class ReportService {
           .getPerPrivilegeCurrency(user.id);
       final goPairs = perPrivilegeCurrency
           .where((p) => !p.status.isExpired)
-          .map((p) => '${p.helicopterTypeId}_${p.privilegeTypeId}')
+          .map(
+            (p) =>
+                '${p.helicopterTypeId}_${p.privilegeTypeId}_${p.licenseTypeId}',
+          )
           .toSet();
       userDataList.add(
         _MatrixUserData(
@@ -379,26 +383,34 @@ class ReportService {
                   .where((p) => p.helicopterTypeId == heliId)
                   .toList();
               if (licForHeli.isEmpty && privsForHeli.isEmpty) continue;
-              final licStr = licForHeli
-                  .map((l) => l.licenseCode)
-                  .toSet()
-                  .join(', ');
-              final goPrivilegeIds = privsForHeli
-                  .where(
-                    (p) => data.goPairs.contains(
-                      '${p.helicopterTypeId}_${p.privilegeTypeId}',
-                    ),
-                  )
-                  .map((p) => p.privilegeTypeId)
-                  .toSet();
-              tableRows.add(
+              Set<int> goIds(int? cat) => {
+                for (final p in privsForHeli)
+                  if (catCovers(p.licenseTypeId, cat) &&
+                      data.goPairs.contains(
+                        '${p.helicopterTypeId}_${p.privilegeTypeId}_${p.licenseTypeId}',
+                      ))
+                    p.privilegeTypeId,
+              };
+              void addRow(String license, int? cat) => tableRows.add(
                 _MatrixRow(
                   name: data.user.fullName,
-                  license: licStr.isEmpty ? '-' : licStr,
+                  license: license.isEmpty ? '-' : license,
                   licenseNumber: data.user.numeroLicenza ?? '-',
-                  goPrivilegeIds: goPrivilegeIds,
+                  goPrivilegeIds: goIds(cat),
                 ),
               );
+              // Privilegi per categoria (B1.3, B2): una riga per licenza,
+              // come nell'Annesso; altrimenti una riga sola.
+              if (privsForHeli.any((p) => p.licenseTypeId != null)) {
+                for (final l in licForHeli) {
+                  addRow(l.licenseCode, l.licenseTypeId);
+                }
+              } else {
+                addRow(
+                  licForHeli.map((l) => l.licenseCode).toSet().join(', '),
+                  null,
+                );
+              }
             }
 
             if (tableRows.isEmpty) continue;

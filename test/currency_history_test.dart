@@ -75,14 +75,19 @@ void main() {
       for (final id in [1, 2, 3])
         PrivilegeType(id: id, code: '$id', name: 'P$id'),
     ];
-    PrivilegeCurrencyStatus s(int heli, int priv, CurrencyStatusEnum st) =>
-        PrivilegeCurrencyStatus(
-          helicopterTypeId: heli,
-          helicopterCode: 'H$heli',
-          privilegeTypeId: priv,
-          privilegeName: 'P$priv',
-          status: CurrencyStatus(status: st, label: ''),
-        );
+    PrivilegeCurrencyStatus s(
+      int heli,
+      int priv,
+      CurrencyStatusEnum st, [
+      int? cat,
+    ]) => PrivilegeCurrencyStatus(
+      helicopterTypeId: heli,
+      helicopterCode: 'H$heli',
+      privilegeTypeId: priv,
+      licenseTypeId: cat,
+      privilegeName: 'P$priv',
+      status: CurrencyStatus(status: st, label: ''),
+    );
     final cur = [
       s(10, 1, CurrencyStatusEnum.expired),
       s(10, 2, CurrencyStatusEnum.valid),
@@ -95,6 +100,18 @@ void main() {
     expect(o(2, 10), [3]);
     expect(o(1, 30), isEmpty);
     expect(o(2, 30), [1, 2, 3]);
+    // Stesso privilegio, categorie separate: B1.3 (3) scaduta, B2 (4) valida.
+    final byCat = [
+      s(40, 1, CurrencyStatusEnum.expired, 3),
+      s(40, 1, CurrencyStatusEnum.valid, 4),
+    ];
+    Iterable<int> c(int t, int? cat) =>
+        ojtOptions(ojtTypes[t], 40, privs, byCat, cat).keys;
+    expect(c(1, 3), [1]);
+    expect(c(1, 4), isEmpty);
+    expect(c(1, null), [1]);
+    expect(c(2, 5), [1, 2, 3]);
+    expect(c(2, 4), [2, 3]);
   });
 
   test('tipo OJT proposto dallo storico privilegi', () {
@@ -109,5 +126,20 @@ void main() {
       2: ojtTypes[1],
       3: ojtTypes[2],
     });
+    // Riga "tutte" attiva copre ogni categoria; B2 (4) mai avuta = nuovo.
+    final cat = [
+      r(10, 1),
+      {...r(30, 1), 'license_type_id': 3},
+    ];
+    expect(proposedOjt(cat, 10, [1], 4), isEmpty);
+    expect(proposedOjt(cat, 30, [1], 4), {1: ojtTypes[2]});
+    expect(proposedOjt(cat, 30, [1], 3), isEmpty);
+  });
+
+  test('categoria nulla copre tutte, diverse non si coprono', () {
+    expect(catCovers(null, 4), isTrue);
+    expect(catCovers(3, null), isTrue);
+    expect(catCovers(3, 3), isTrue);
+    expect(catCovers(3, 4), isFalse);
   });
 }

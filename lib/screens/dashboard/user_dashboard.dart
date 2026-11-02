@@ -762,7 +762,8 @@ class _HelicopterSheet extends StatelessWidget {
                   CurrencyStatus? statusFor(UserPrivilege p) {
                     if (blocked != null) return blocked;
                     for (final s in snap.data ?? const []) {
-                      if (s.privilegeTypeId == p.privilegeTypeId) {
+                      if (s.privilegeTypeId == p.privilegeTypeId &&
+                          s.licenseTypeId == p.licenseTypeId) {
                         return s.status;
                       }
                     }
@@ -773,8 +774,8 @@ class _HelicopterSheet extends StatelessWidget {
                     for (final p in sorted)
                       _SheetRow(
                         title: p.privilegeCode.isEmpty
-                            ? p.privilegeName
-                            : '${p.privilegeCode} · ${p.privilegeName}',
+                            ? p.label
+                            : '${p.privilegeCode} · ${p.label}',
                         status: snap.hasData ? statusFor(p) : null,
                         loading: !snap.hasData,
                       ),
