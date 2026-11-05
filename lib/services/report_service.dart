@@ -152,7 +152,7 @@ class ReportService {
             user.numeroLicenza ?? '-',
             user.orgUnitName,
             qualifications,
-            'MDB',
+            'MTB',
             assignment.helicopterCode,
             assignment.fascia ?? '-',
             '-',

@@ -1128,7 +1128,7 @@ class CurrencyService {
     final poligonoBaseStatus = _computeStatus(
       lastDate: lastPoligonoDate,
       periodDays: poligonoPeriodDays,
-      label: 'Poligono MDB',
+      label: 'Poligono MTB',
     );
     final poligonoStatus = poligonoCount < minPoligonoCount
         ? CurrencyStatus(
@@ -1139,14 +1139,14 @@ class CurrencyService {
             expiryDate: poligonoBaseStatus.expiryDate,
             daysUntilExpiry: poligonoBaseStatus.daysUntilExpiry,
             label:
-                'Poligono MDB ($poligonoCount/$minPoligonoCount)${poligonoCount < minPoligonoCount ? ' · Poligono mancante' : ''}',
+                'Poligono MTB ($poligonoCount/$minPoligonoCount)${poligonoCount < minPoligonoCount ? ' · Poligono mancante' : ''}',
           )
         : CurrencyStatus(
             status: poligonoBaseStatus.status,
             lastActivityDate: poligonoBaseStatus.lastActivityDate,
             expiryDate: poligonoBaseStatus.expiryDate,
             daysUntilExpiry: poligonoBaseStatus.daysUntilExpiry,
-            label: 'Poligono MDB ($poligonoCount/$minPoligonoCount)',
+            label: 'Poligono MTB ($poligonoCount/$minPoligonoCount)',
           );
 
     final statuses = [flightStatus, poligonoStatus];

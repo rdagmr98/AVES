@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app.dart';
@@ -9,7 +10,9 @@ import '../../models/activity_models.dart';
 import '../../models/user_models.dart';
 import '../../services/gh_db_service.dart';
 import '../../services/activity_service.dart';
+import '../../services/currency_history.dart';
 import '../../services/currency_service.dart';
+import '../../services/hours_format.dart';
 import '../../services/report_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
@@ -330,126 +333,35 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     await _launchCrewEmail(rowsToNotify);
   }
 
-  Future<void> _showUserDetail(_CrewUserRow row) async {
+  Future<void> _showUserDetail(_CrewUserRow initial) async {
+    var row = initial;
     var history = _currencyService.getFlightCurrencyHistory(row.user.id);
-    var deleted = false;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setD) => AlertDialog(
-          title: Text(row.user.fullName, textAlign: TextAlign.center),
-          content: SizedBox(
-            width: 600,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  UserAvatar(user: row.user, radius: 30),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: row
-                        .relevantStatuses('all', null)
-                        .map((status) => CurrencyBadgeWidget(status: status))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ...row.assignments.map(
-                        (item) => Chip(
-                          label: Text(
-                            item.crewType == 'TOB'
-                                ? '${item.helicopterCode} · TOB ${item.fascia ?? '-'}'
-                                : item.crewType == 'MTB'
-                                ? '${item.helicopterCode} · MTB ${item.fascia ?? '-'}'
-                                : '${item.helicopterCode} · T',
-                          ),
-                        ),
-                      ),
-                      ...row.tobCapabilities.map(
-                        (item) => Chip(
-                          label: Text(
-                            '${item.helicopterCode} · ${item.capabilityName}',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Storico currency volo',
-                      style: Theme.of(dialogContext).textTheme.titleSmall,
-                    ),
-                  ),
-                  FutureBuilder(
-                    future: history,
-                    builder: (_, snap) => switch (snap.data) {
-                      null => const LinearProgressIndicator(),
-                      [] => const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Nessun evento.',
-                          style: TextStyle(
-                            fontStyle: FontStyle.italic,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                      final events => Column(
-                        children: [
-                          for (final e in events)
-                            CurrencyEventTile(
-                              e,
-                              onDeleted: () => setD(() {
-                                deleted = true;
-                                history = _currencyService
-                                    .getFlightCurrencyHistory(row.user.id);
-                              }),
-                            ),
-                        ],
-                      ),
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton.icon(
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                if (await registerFlightCourse(context, ref, row.user) &&
-                    mounted) {
-                  _loadData();
-                }
-              },
-              icon: const Icon(Icons.school_outlined),
-              label: const Text('Corso'),
-            ),
-            if (row.user.email != null && row.user.email!.trim().isNotEmpty)
-              TextButton.icon(
-                onPressed: () => _launchCrewEmail([row]),
-                icon: const Icon(Icons.email_outlined),
-                label: const Text('Invia Email'),
-              ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Chiudi'),
-            ),
-          ],
+        builder: (dialogContext, setD) => _CrewRecordDialog(
+          row: row,
+          history: history,
+          onEmail: () => _launchCrewEmail([row]),
+          onCourse: () async {
+            Navigator.of(dialogContext).pop();
+            if (await registerFlightCourse(context, ref, row.user) && mounted) {
+              _loadData();
+            }
+          },
+          onChanged: () async {
+            await _loadData();
+            if (!dialogContext.mounted) return;
+            setD(() {
+              row =
+                  _rows.where((r) => r.user.id == row.user.id).firstOrNull ??
+                  row;
+              history = _currencyService.getFlightCurrencyHistory(row.user.id);
+            });
+          },
         ),
       ),
     );
-    if (deleted && mounted) _loadData();
   }
 
   Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {
@@ -1090,6 +1002,21 @@ class _CrewUserRow {
     return statuses;
   }
 
+  /// Stato peggiore tra le qualifiche: il badge unico della scheda.
+  CurrencyStatus? get worstStatus {
+    const rank = {
+      CurrencyStatusEnum.expired: 0,
+      CurrencyStatusEnum.suspended: 0,
+      CurrencyStatusEnum.warning: 1,
+      CurrencyStatusEnum.noData: 2,
+      CurrencyStatusEnum.valid: 3,
+    };
+    final s = relevantStatuses('all', null);
+    return s.isEmpty
+        ? null
+        : s.reduce((a, b) => rank[b.status]! < rank[a.status]! ? b : a);
+  }
+
   CurrencyStatusEnum? overallStatus(String crewTypeFilter) {
     final statuses = relevantStatuses(crewTypeFilter, null);
     if (statuses.isEmpty) {
@@ -1209,6 +1136,349 @@ class _CrewStatCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: content,
+      ),
+    );
+  }
+}
+
+/// Scheda equipaggio, sul modello della scheda manutentore (admincsl):
+/// una card per elicottero con una riga per qualifica, storico a parte.
+class _CrewRecordDialog extends StatelessWidget {
+  const _CrewRecordDialog({
+    required this.row,
+    required this.history,
+    required this.onEmail,
+    required this.onCourse,
+    required this.onChanged,
+  });
+
+  final _CrewUserRow row;
+  final Future<List<CurrencyEvent>> history;
+  final VoidCallback onEmail;
+  final VoidCallback onCourse;
+  final Future<void> Function() onChanged;
+
+  static final _df = DateFormat('dd/MM/yyyy');
+  static String _fmt(DateTime? d) => d == null ? '-' : _df.format(d);
+
+  Widget _sectionTitle(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 12,
+        letterSpacing: 1.2,
+        fontWeight: FontWeight.w800,
+        color: AppColors.secondary,
+      ),
+    ),
+  );
+
+  Widget _statusChip(CurrencyStatus s) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: s.color,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text(
+      s.statusText,
+      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+
+  Widget _info(IconData icon, String text, [Color? color]) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 16, color: color ?? AppColors.textSecondary),
+      const SizedBox(width: 6),
+      Flexible(
+        child: Text(
+          text,
+          style: color == null ? null : TextStyle(color: color),
+        ),
+      ),
+    ],
+  );
+
+  Widget _fitness(
+    IconData icon,
+    String label,
+    DateTime? d, {
+    bool optional = false,
+  }) {
+    if (d == null) {
+      return _info(
+        icon,
+        '$label: non inserita',
+        optional ? null : AppColors.currencyExpired,
+      );
+    }
+    return _info(icon, '$label: ${_fmt(d)}', expiryBadge(d).$2);
+  }
+
+  Widget _qualRow(String title, CurrencyStatus? s) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                s == null
+                    ? 'Nessun dato'
+                    : '${s.label}  ·  Scadenza: ${_fmt(s.expiryDate)}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (s != null) _statusChip(s),
+      ],
+    ),
+  );
+
+  Widget _heliCard(int heliId) {
+    final roles = row.assignments.where((a) => a.helicopterTypeId == heliId);
+    final caps = row.tobCapabilities.where((c) => c.helicopterTypeId == heliId);
+    final code = roles.firstOrNull?.helicopterCode ?? caps.first.helicopterCode;
+    bool has(String t) => roles.any((a) => a.crewType == t);
+    final fascia = roles
+        .where((a) => a.crewType == 'TOB')
+        .map((a) => a.fascia)
+        .firstOrNull;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              code,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            if (has('T')) _qualRow('T · 3 h a semestre', row.flightStatus),
+            if (has('TOB'))
+              _qualRow('TOB fascia ${fascia ?? '-'}', row.tobBaseStatus),
+            for (final c in caps)
+              _qualRow(
+                'Capacità: ${c.capabilityName}',
+                row.tobStatuses['${c.helicopterTypeId}:${c.tobCapabilityId}'],
+              ),
+            if (has('MTB')) _qualRow('MTB · poligono', row.mdbStatus),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQualifications() {
+    final heliIds = <int>{
+      for (final a in row.assignments) a.helicopterTypeId,
+      for (final c in row.tobCapabilities) c.helicopterTypeId,
+    }.toList()..sort();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionTitle('Equipaggi e currency'),
+        for (final id in heliIds) _heliCard(id),
+      ],
+    );
+  }
+
+  Widget _buildHistory() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _sectionTitle('Storico currency volo'),
+      FutureBuilder(
+        future: history,
+        builder: (_, snap) => switch (snap.data) {
+          null => const LinearProgressIndicator(),
+          [] => const Text(
+            'Nessun evento.',
+            style: TextStyle(
+              fontStyle: FontStyle.italic,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          final events => Column(
+            children: [
+              for (final e in events)
+                CurrencyEventTile(e, onDeleted: onChanged),
+            ],
+          ),
+        },
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final wide = size.width >= 1100;
+    final user = row.user;
+    final email = user.email?.trim() ?? '';
+    final worst = row.worstStatus;
+    final subtitle = [
+      'Lic. ${user.numeroLicenza ?? '-'}',
+      user.orgUnitName.isEmpty ? 'Unità non indicata' : user.orgUnitName,
+      if (user.isTi) 'TI',
+      if (user.isEtp) 'ETP',
+      if (user.isPreRegistered) 'non ancora registrato',
+    ].join('  ·  ');
+    final semester = row.flightStatus;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: wide ? 1280 : 760,
+          maxHeight: (size.height - 48).clamp(420, 900),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: AppColors.surface,
+              padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+              child: Row(
+                children: [
+                  UserAvatar(user: user, radius: 24),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (worst != null) CurrencyBadgeWidget(status: worst),
+                  IconButton(
+                    tooltip: 'Registra corso',
+                    icon: const Icon(Icons.school_outlined),
+                    onPressed: onCourse,
+                  ),
+                  if (email.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Invia email',
+                      icon: const Icon(Icons.email_outlined),
+                      onPressed: onEmail,
+                    ),
+                  IconButton(
+                    tooltip: 'Chiudi',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Wrap(
+                spacing: 28,
+                runSpacing: 6,
+                children: [
+                  _info(
+                    Icons.history,
+                    'Ultima attività: ${_fmt(row.lastActivityDate)}',
+                  ),
+                  if (semester?.flightHours != null)
+                    _info(
+                      Icons.schedule,
+                      'Semestre: ${formatHours(semester!.flightHours!)} h'
+                      ' / ${formatHours(semester.minFlightHours ?? 0)} h',
+                    ),
+                  _fitness(
+                    Icons.medical_services_outlined,
+                    'Idoneità volo',
+                    user.flightFitnessExpiry,
+                  ),
+                  _fitness(Icons.military_tech_outlined, 'SMI', user.smiExpiry),
+                  _fitness(
+                    Icons.health_and_safety_outlined,
+                    'Visita mansione',
+                    user.jobFitnessExpiry,
+                    optional: true,
+                  ),
+                ],
+              ),
+            ),
+            if (wide)
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildQualifications(),
+                      ),
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(
+                      flex: 2,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildHistory(),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildQualifications(),
+                      const SizedBox(height: 20),
+                      _buildHistory(),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

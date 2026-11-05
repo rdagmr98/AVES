@@ -344,7 +344,7 @@ class UserCrewAssignment {
   final int? id;
   final String userId;
   final int helicopterTypeId;
-  final String crewType; // 'T', 'TOB' or 'MDB'
+  final String crewType; // 'T', 'TOB' or 'MTB'
   final String? fascia; // 'A', 'B', 'C'
   final bool active;
 

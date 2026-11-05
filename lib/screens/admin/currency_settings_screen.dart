@@ -30,7 +30,7 @@ class _CurrencySettingsScreenState
     final auth = ref.read(authProvider);
     final isAdminCrew = auth.isAdminCrew;
 
-    // Admin priv edits MAINTENANCE; admin crew edits crew and MDB criteria.
+    // Admin priv edits MAINTENANCE; admin crew edits crew and MTB criteria.
     final canEdit =
         (auth.isAdminPriv && criteria.criteriaType == 'MAINTENANCE') ||
         (isAdminCrew &&
@@ -102,7 +102,7 @@ class _CurrencySettingsScreenState
                   HoursField(
                     controller: hoursCtrl,
                     label: criteria.criteriaType == 'MDB_FLIGHT'
-                        ? 'Ore di volo semestrale MDB'
+                        ? 'Ore di volo semestrale MTB'
                         : 'Ore minime (volo)',
                   ),
                 ],
@@ -112,7 +112,7 @@ class _CurrencySettingsScreenState
                     controller: countCtrl,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Poligoni annuali MDB',
+                      labelText: 'Poligoni annuali MTB',
                     ),
                   ),
                 ],
