@@ -2027,7 +2027,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
   bool _loading = true;
   String _query = '';
   int? _heliId;
-  int? _privId; // -1 = attività registrate su "Tutti i privilegi"
+  int? _privId;
   DateTimeRange? _period;
 
   @override
@@ -2069,7 +2069,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     final q = _query.trim().toLowerCase();
     return _acts.where((a) {
       if (_heliId != null && a.helicopterTypeId != _heliId) return false;
-      if (_privId != null && (a.privilegeTypeId ?? -1) != _privId) {
+      if (_privId != null && a.privilegeTypeId != _privId) {
         return false;
       }
       final period = _period;
@@ -2180,6 +2180,35 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
     ),
   );
+
+  /// Scadenza NAM o MHF (ultimo seminario + 2 anni), con stato come i privilegi.
+  Widget _seminarExpiry(String type) {
+    final exp = seminarTypeExpiries(
+      GhDbService().seminars,
+    )[_row.user.id]?[type];
+    final days = exp?.difference(DateTime.now()).inDays;
+    final status = CurrencyStatus(
+      status: days == null || days < 0
+          ? CurrencyStatusEnum.expired
+          : days <= CurrencyService.warningDays
+          ? CurrencyStatusEnum.warning
+          : CurrencyStatusEnum.valid,
+      label: type,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$type  ·  Scadenza: ${exp == null ? 'mai svolto' : _fmt(exp)}',
+            ),
+          ),
+          _statusChip(status),
+        ],
+      ),
+    );
+  }
 
   Widget _info(IconData icon, String text) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -2326,6 +2355,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
             ),
           ],
         ),
+        for (final t in const ['NAM', 'MHF']) _seminarExpiry(t),
         if (_seminars.isEmpty)
           const Text(
             'Nessun seminario validato.',
@@ -2455,8 +2485,9 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
     };
     final privOptions = <int, String>{
       for (final a in _acts)
-        if (_heliId == null || a.helicopterTypeId == _heliId)
-          a.privilegeTypeId ?? -1: a.privilegeName.split(' · ').first,
+        if (a.privilegeTypeId != null &&
+            (_heliId == null || a.helicopterTypeId == _heliId))
+          a.privilegeTypeId!: a.privilegeName.split(' · ').first,
     };
     final filtersActive =
         _query.isNotEmpty ||

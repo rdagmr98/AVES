@@ -15,8 +15,7 @@ import 'hours_field.dart';
 /// Modifica admin di un'attività (manutenzione, volo, TOB, seminario): mostra
 /// solo i campi passati e restituisce i campi JSON da salvare (null = annulla).
 ///
-/// [details] sono le opzioni (privilegi, capacità TOB) dell'elicottero scelto;
-/// la chiave null ("tutti") va inclusa solo per le righe legacy che la hanno.
+/// [details] sono le opzioni (privilegi, capacità TOB) dell'elicottero scelto.
 /// [texts]: chiave JSON → (etichetta, valore iniziale).
 Future<Map<String, dynamic>?> showActivityEditDialog(
   BuildContext context, {
@@ -288,8 +287,6 @@ Future<bool> editMaintenanceActivity(
     detailLabel: 'Privilegio',
     detailKey: 'privilege_type_id',
     details: (heli) => {
-      // "tutti" resta solo per le righe legacy che lo hanno già
-      if (a.privilegeTypeId == null) null: 'Tutti i privilegi (legacy)',
       for (final p in privileges.where(
         (p) =>
             p.helicopterTypeId == heli &&

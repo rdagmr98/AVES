@@ -418,7 +418,7 @@ class CurrencyService {
     final now = DateTime.now();
     String label(Object? h, Object? p, [Object? l]) => [
       _findReference('helicopterTypes', h)?['code'] ?? '?',
-      _findReference('privilegeTypes', p)?['name'] ?? 'Tutti i privilegi',
+      _findReference('privilegeTypes', p)?['name'] ?? '?',
       ?_findReference('licenseTypes', l)?['code'],
     ].join(' · ');
     DateTime date(Map<String, dynamic> a) =>
@@ -984,10 +984,10 @@ class CurrencyService {
     // Base TOB: qualsiasi volo validato, anche TOB con capacità.
     final validatedFlights = _validatedFlights(userId).toList()
       ..sort(
-            (a, b) => DateTime.parse(
-              b['activity_date'] as String,
-            ).compareTo(DateTime.parse(a['activity_date'] as String)),
-          );
+        (a, b) => DateTime.parse(
+          b['activity_date'] as String,
+        ).compareTo(DateTime.parse(a['activity_date'] as String)),
+      );
     final lastDate = validatedFlights.isEmpty
         ? null
         : DateTime.parse(validatedFlights.first['activity_date'] as String);

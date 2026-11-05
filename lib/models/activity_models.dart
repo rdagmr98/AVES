@@ -214,53 +214,52 @@ class MaintenanceActivity {
     this.userLicenza = '',
   });
 
-  factory MaintenanceActivity.fromJson(Map<String, dynamic> j) =>
-      MaintenanceActivity(
-        id: j['id'] as int?,
-        userId: j['user_id'] as String,
-        helicopterTypeId: j['helicopter_type_id'] as int,
-        privilegeTypeId: j['privilege_type_id'] as int?,
-        licenseTypeId: j['license_type_id'] as int?,
-        activityDate: DateTime.parse(j['activity_date'] as String),
-        dateFrom: j['date_from'] != null
-            ? DateTime.parse(j['date_from'] as String)
-            : null,
-        dateTo: j['date_to'] != null
-            ? DateTime.parse(j['date_to'] as String)
-            : null,
-        description: j['description'] as String?,
-        activityType: j['activity_type'] as String?,
-        matricolaMilitare: j['matricola_militare'] as String?,
-        numeroCorrozzella: j['numero_corrozzella'] as String?,
-        ordineLavoro: j['ordine_lavoro'] as String?,
-        isValidated: j['is_validated'] as bool? ?? false,
-        validatedBy: j['validated_by'] as String?,
-        validatedAt: j['validated_at'] != null
-            ? DateTime.parse(j['validated_at'] as String)
-            : null,
-        submittedBy: j['submitted_by'] as String?,
-        createdAt: j['created_at'] != null
-            ? DateTime.parse(j['created_at'] as String)
-            : null,
-        helicopterCode:
-            (j['helicopter_types'] as Map<String, dynamic>?)?['code']
-                as String? ??
-            '',
-        privilegeName: [
-          (j['privilege_types'] as Map<String, dynamic>?)?['name'] as String? ??
-              (j['privilege_type_id'] == null ? 'Tutti i privilegi' : ''),
-          ?(j['license_types'] as Map<String, dynamic>?)?['code'] as String?,
-        ].join(' · '),
-        userFullName: () {
-          final u = j['user_profiles'] as Map<String, dynamic>?;
-          if (u == null) return '';
-          return '${u['cognome'] ?? ''} ${u['nome'] ?? ''}'.trim();
-        }(),
-        userLicenza:
-            (j['user_profiles'] as Map<String, dynamic>?)?['numero_licenza']
-                as String? ??
-            '',
-      );
+  factory MaintenanceActivity.fromJson(
+    Map<String, dynamic> j,
+  ) => MaintenanceActivity(
+    id: j['id'] as int?,
+    userId: j['user_id'] as String,
+    helicopterTypeId: j['helicopter_type_id'] as int,
+    privilegeTypeId: j['privilege_type_id'] as int?,
+    licenseTypeId: j['license_type_id'] as int?,
+    activityDate: DateTime.parse(j['activity_date'] as String),
+    dateFrom: j['date_from'] != null
+        ? DateTime.parse(j['date_from'] as String)
+        : null,
+    dateTo: j['date_to'] != null
+        ? DateTime.parse(j['date_to'] as String)
+        : null,
+    description: j['description'] as String?,
+    activityType: j['activity_type'] as String?,
+    matricolaMilitare: j['matricola_militare'] as String?,
+    numeroCorrozzella: j['numero_corrozzella'] as String?,
+    ordineLavoro: j['ordine_lavoro'] as String?,
+    isValidated: j['is_validated'] as bool? ?? false,
+    validatedBy: j['validated_by'] as String?,
+    validatedAt: j['validated_at'] != null
+        ? DateTime.parse(j['validated_at'] as String)
+        : null,
+    submittedBy: j['submitted_by'] as String?,
+    createdAt: j['created_at'] != null
+        ? DateTime.parse(j['created_at'] as String)
+        : null,
+    helicopterCode:
+        (j['helicopter_types'] as Map<String, dynamic>?)?['code'] as String? ??
+        '',
+    privilegeName: [
+      (j['privilege_types'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+      ?(j['license_types'] as Map<String, dynamic>?)?['code'] as String?,
+    ].join(' · '),
+    userFullName: () {
+      final u = j['user_profiles'] as Map<String, dynamic>?;
+      if (u == null) return '';
+      return '${u['cognome'] ?? ''} ${u['nome'] ?? ''}'.trim();
+    }(),
+    userLicenza:
+        (j['user_profiles'] as Map<String, dynamic>?)?['numero_licenza']
+            as String? ??
+        '',
+  );
 
   Map<String, dynamic> toInsertJson() => {
     'user_id': userId,
