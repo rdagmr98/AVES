@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-11-05
+## STATO SESSIONE — aggiornato 2026-11-06
+- 2026-11-06 (19): registrazione dei pre-registrati per nome e cognome (`802f69b`): `_checkName` in `register_screen.dart`, `signUp(claimUserId:)`, privilegi in sola lettura col profilo agganciato. Scimonello riportato a pre-registrato (`aves-data` `16c6e11`). Prossimo: provarlo con Scimonello. Nota vault `AVES Corsi/Tecnici registrazione per nome e cognome 2026-11-06.md`.
 - 2026-11-05 (18): scheda persona admin volo come admincsl (`_CrewRecordDialog`, `35261b4`). Voli TOB con ore che valgono per la T, TOB senza capacità, scadenze SMI/visita mansione nel profilo, precarico dei pre-registrati in `register_screen.dart` (invia solo le differenze). MDB→MTB solo nelle etichette. Niente più «Tutti i privilegi»: attività null espanse per privilegio (`aves-data` `c208554`), scadenza NAM/MHF nella scheda admincsl (`5ed152e`). Dati allineati all'Annesso 29/10 (`aves-data` `63d921d`). Nota vault `AVES Corsi/Tecnici volo TOB ore SMI e precarico pre-registrati 2026-11-05.md`.
 - 2026-11-02 (17): categoria B1.3/B2 su privilegi e attività (`3e8d72d`). `license_type_id` è facoltativo, nullo = tutte. Il confronto passa solo da `catCovers` (`currency_history.dart`). Fabbri è allineato in `aves-data` `8e01146`. Nota vault `AVES Corsi/Tecnici categoria su privilegi e attività 2026-11-02.md`.
 - 2026-10-30 (16): richiesta reset anche dal cambio password a login effettuato (`57cd246`): link nel dialog del profilo (nascosto agli admin) e in `/change-password`, via `AuthProvider.requestPasswordReset`. Provato nella demo (SnackBar ok), persistenza no.
