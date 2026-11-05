@@ -118,6 +118,7 @@ class AuthService {
     required String email,
     bool isTi = false,
     bool isEtp = false,
+    String? claimUserId,
   }) async {
     nome = formatNome(nome);
     cognome = formatCognome(cognome);
@@ -131,9 +132,19 @@ class AuthService {
     final normalizedUsername = _normalizeUsername(normalizedLicense);
     final now = DateTime.now().toIso8601String();
 
+    // claimUserId: pre-registrato trovato per nome, anche senza licenza.
     final existing = users.indexWhere(
-      (user) => _userUsername(user) == normalizedUsername,
+      (user) => claimUserId != null
+          ? user['id'] == claimUserId
+          : _userUsername(user) == normalizedUsername,
     );
+    if (claimUserId != null &&
+        users.any(
+          (u) =>
+              u['id'] != claimUserId && _userUsername(u) == normalizedUsername,
+        )) {
+      throw Exception('Numero licenza già usato da un altro account');
+    }
     if (existing >= 0) {
       final preset = users[existing];
       if (!UserProfile.preRegistered(preset)) {
@@ -150,6 +161,8 @@ class AuthService {
         'cognome': (preset['cognome'] as String?)?.trim().isNotEmpty == true
             ? preset['cognome']
             : cognome,
+        'username': normalizedLicense,
+        'numero_licenza': normalizedLicense,
         'email': email.trim().toLowerCase(),
         'is_ti': isTi,
         'is_etp': isEtp,
@@ -247,11 +260,14 @@ class AuthService {
       throw Exception('Password attuale non corretta');
     }
 
-    users[index] = {
-      ...users[index],
-      'password_hash': GhDbService.hashPassword(newPassword),
-      'updated_at': DateTime.now().toIso8601String(),
-    }..remove('must_change_password')..remove('password_reset_requested_at');
+    users[index] =
+        {
+            ...users[index],
+            'password_hash': GhDbService.hashPassword(newPassword),
+            'updated_at': DateTime.now().toIso8601String(),
+          }
+          ..remove('must_change_password')
+          ..remove('password_reset_requested_at');
     await _db.saveUsers(users);
   }
 

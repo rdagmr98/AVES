@@ -37,11 +37,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _isTi = false;
   bool _isEtp = false;
 
-  // Account pre-registrato dall'admin con la stessa licenza: le sue
-  // assegnazioni sono precaricate e all'invio partono solo le novità.
+  // Account pre-registrato dall'admin, trovato per nome e cognome (i tecnici
+  // spesso non ricordano la licenza) o per licenza: le sue assegnazioni sono
+  // precaricate, i privilegi restano bloccati e all'invio partono solo le
+  // novità (licenze, equipaggi).
+  bool _nameStep = true;
+  bool _checking = false;
+  String? _nameNotice;
   String? _lookedUpLicense;
-  String? _presetName;
+  UserProfile? _preset;
   Set<String> _presetKeys = {};
+
+  String? get _presetName =>
+      _preset == null ? null : '${_preset!.nome} ${_preset!.cognome}'.trim();
+
+  bool get _presetHasLicense =>
+      _preset != null && _accountId(_preset!).isNotEmpty;
 
   static String _key(String kind, Map<String, dynamic> r, String field) =>
       '$kind:${r['helicopter_type_id']}:${r[field]}';
@@ -49,50 +60,103 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _isNew(String kind, Map<String, dynamic> r, String field) =>
       !_presetKeys.contains(_key(kind, r, field));
 
+  static String _accountId(UserProfile u) =>
+      ((u.username?.trim().isNotEmpty ?? false)
+              ? u.username!
+              : u.numeroLicenza ?? '')
+          .trim()
+          .toUpperCase();
+
+  // "D'Angelo", "Dangelo" e "d angelo" coincidono; accenti ignorati.
+  static String _norm(String s) {
+    const from = 'àáâäèéêëìíîïòóôöùúûü';
+    const to = 'aaaaeeeeiiiioooouuuu';
+    final lower = s.toLowerCase();
+    final buf = StringBuffer();
+    for (final ch in lower.split('')) {
+      final i = from.indexOf(ch);
+      buf.write(i >= 0 ? to[i] : ch);
+    }
+    return buf.toString().replaceAll(RegExp(r'[^a-z]'), '');
+  }
+
+  static bool _sameName(UserProfile u, String nome, String cognome) {
+    final n = _norm(nome), c = _norm(cognome);
+    final un = _norm(u.nome), uc = _norm(u.cognome);
+    // anche invertiti: capita di scrivere il cognome nel campo nome
+    return (un == n && uc == c) || (un == c && uc == n);
+  }
+
+  Future<void> _checkName() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _checking = true);
+    final matches = (await _userService.getAllUsers())
+        .where((u) => _sameName(u, _nomeCtrl.text, _cognomeCtrl.text))
+        .toList();
+    final pre = matches.where((u) => u.isPreRegistered).toList();
+    if (pre.length == 1) await _applyPreset(pre.single);
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _nameStep = false;
+      _nameNotice = pre.length > 1
+          ? 'Ci sono più account con questo nome: inserisci il numero di '
+                'licenza per trovare il tuo.'
+          : pre.isEmpty && matches.isNotEmpty
+          ? 'Esiste già un account attivo a nome '
+                '${matches.first.nome} ${matches.first.cognome}: se è il tuo '
+                'torna al login e accedi (o chiedi il reset della password). '
+                'Prosegui solo se sei un\'altra persona.'
+          : null;
+    });
+  }
+
+  void _changeName() => setState(() {
+    _nameStep = true;
+    _nameNotice = null;
+    _preset = null;
+    _presetKeys = {};
+    _lookedUpLicense = null;
+    _licenseCtrl.clear();
+    _pendingLicenses.clear();
+    _pendingPrivileges.clear();
+    _pendingCrew.clear();
+    _pendingTobCaps.clear();
+  });
+
+  // Ripiego per licenza, attivo solo finché non c'è un account trovato.
   Future<void> _loadPreset(String value) async {
     final license = value.trim().toUpperCase();
-    if (!RegExp(r'^[A-Z]{2}\d{6}$').hasMatch(license) ||
+    if (_preset != null ||
+        !RegExp(r'^[A-Z]{2}\d{6}$').hasMatch(license) ||
         license == _lookedUpLicense) {
       return;
     }
     _lookedUpLicense = license;
-    String accountId(UserProfile u) =>
-        ((u.username?.trim().isNotEmpty ?? false)
-                ? u.username!
-                : u.numeroLicenza ?? '')
-            .trim()
-            .toUpperCase();
     final preset = (await _userService.getAllUsers())
-        .where((u) => u.isPreRegistered && accountId(u) == license)
+        .where((u) => u.isPreRegistered && _accountId(u) == license)
         .firstOrNull;
-    final licenses = preset == null
-        ? const <UserLicense>[]
-        : await _userService.getUserLicenses(preset.id);
-    final privileges = preset == null
-        ? const <UserPrivilege>[]
-        : await _userService.getUserPrivileges(preset.id);
-    final crew = preset == null
-        ? const <UserCrewAssignment>[]
-        : await _userService.getUserCrewAssignments(preset.id);
-    final caps = preset == null
-        ? const <UserTobCapability>[]
-        : await _userService.getUserTobCapabilities(preset.id);
-    if (!mounted || _lookedUpLicense != license) return;
-    if (preset == null && _presetName == null) return;
+    if (preset == null || !mounted || _lookedUpLicense != license) return;
+    await _applyPreset(preset);
+  }
+
+  Future<void> _applyPreset(UserProfile preset) async {
+    final licenses = await _userService.getUserLicenses(preset.id);
+    final privileges = await _userService.getUserPrivileges(preset.id);
+    final crew = await _userService.getUserCrewAssignments(preset.id);
+    final caps = await _userService.getUserTobCapabilities(preset.id);
+    if (!mounted) return;
     setState(() {
-      // Cambio licenza: via le assegnazioni del pre-registrato precedente.
       _pendingLicenses.clear();
       _pendingPrivileges.clear();
       _pendingCrew.clear();
       _pendingTobCaps.clear();
-      _presetName = null;
-      if (preset == null) {
-        _presetKeys = {};
-        return;
-      }
-      _presetName = '${preset.nome} ${preset.cognome}'.trim();
+      _preset = preset;
+      _nameNotice = null;
       if (preset.nome.trim().isNotEmpty) _nomeCtrl.text = preset.nome;
       if (preset.cognome.trim().isNotEmpty) _cognomeCtrl.text = preset.cognome;
+      if (_accountId(preset).isNotEmpty) _licenseCtrl.text = _accountId(preset);
+      if ((preset.email ?? '').isNotEmpty) _emailCtrl.text = preset.email!;
       _orgUnitId = preset.orgUnitId ?? _orgUnitId;
       _isTi = preset.isTi;
       _isEtp = preset.isEtp;
@@ -176,6 +240,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       email: _emailCtrl.text.trim().toLowerCase(),
       isTi: _isTi,
       isEtp: _isEtp,
+      claimUserId: _preset?.id,
     );
 
     if (!mounted) {
@@ -483,6 +548,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
   }
 
+  static String _privNames(List<PrivilegeType> types, Set<int> ids) {
+    final names = [
+      for (final pt in types)
+        if (ids.contains(pt.id)) pt.name,
+    ];
+    return names.isEmpty ? 'Nessuno' : names.join('\n');
+  }
+
   Future<void> _manageMaintenance(
     List<HelicopterType> helicopterTypes,
     List<LicenseType> licenseTypes,
@@ -501,6 +574,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               .where((p) => p['helicopter_type_id'] == forHelicopterId)
               .map((p) => p['privilege_type_id'] as int)
               .toSet();
+    // Account trovato: privilegi in sola lettura, licenze assegnate bloccate.
+    final locked = _preset != null;
+    bool presetLic(int? h) =>
+        h != null &&
+        _pendingLicenses.any(
+          (l) =>
+              l['helicopter_type_id'] == h &&
+              !_isNew('L', l, 'license_type_id'),
+        );
 
     final result = await showDialog<_MaintenanceDialogResult>(
       context: context,
@@ -519,6 +601,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   menuMaxHeight: 300,
                   decoration: const InputDecoration(labelText: 'Elicottero'),
                   items: helicopterTypes
+                      .where((h) => !presetLic(h.id))
                       .map(
                         (h) => DropdownMenuItem<int>(
                           value: h.id,
@@ -547,23 +630,36 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                   ),
                 ],
-                onChanged: (v) => setDialogState(() => selectedLicenseId = v),
+                onChanged: presetLic(selectedHelicopter)
+                    ? null
+                    : (v) => setDialogState(() => selectedLicenseId = v),
               ),
               const SizedBox(height: 16),
               Text(
-                'Privilegi manutentivi',
+                locked
+                    ? 'Privilegi manutentivi (li assegna l\'amministratore)'
+                    : 'Privilegi manutentivi',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
-              MultiCheckList<int>(
-                options: {for (final pt in privilegeTypes) pt.id: pt.name},
-                selected: selectedPrivilegeIds,
-                onChanged: (ids) => setDialogState(
-                  () => selectedPrivilegeIds
-                    ..clear()
-                    ..addAll(ids),
+              if (locked)
+                Text(
+                  _privNames(privilegeTypes, {
+                    for (final p in _pendingPrivileges)
+                      if (p['helicopter_type_id'] == selectedHelicopter)
+                        p['privilege_type_id'] as int,
+                  }),
+                )
+              else
+                MultiCheckList<int>(
+                  options: {for (final pt in privilegeTypes) pt.id: pt.name},
+                  selected: selectedPrivilegeIds,
+                  onChanged: (ids) => setDialogState(
+                    () => selectedPrivilegeIds
+                      ..clear()
+                      ..addAll(ids),
+                  ),
                 ),
-              ),
             ]),
             actions: [
               TextButton(
@@ -593,18 +689,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (result == null || !mounted) return;
 
     setState(() {
-      _pendingLicenses.removeWhere(
-        (l) => l['helicopter_type_id'] == result.helicopterId,
-      );
+      if (!presetLic(result.helicopterId)) {
+        _pendingLicenses.removeWhere(
+          (l) => l['helicopter_type_id'] == result.helicopterId,
+        );
+        if (result.licenseTypeId != null) {
+          _pendingLicenses.add({
+            'helicopter_type_id': result.helicopterId,
+            'license_type_id': result.licenseTypeId,
+          });
+        }
+      }
+      if (locked) return;
       _pendingPrivileges.removeWhere(
         (p) => p['helicopter_type_id'] == result.helicopterId,
       );
-      if (result.licenseTypeId != null) {
-        _pendingLicenses.add({
-          'helicopter_type_id': result.helicopterId,
-          'license_type_id': result.licenseTypeId,
-        });
-      }
       for (final privId in result.privilegeTypeIds) {
         _pendingPrivileges.add({
           'helicopter_type_id': result.helicopterId,
@@ -715,13 +814,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Inserisci i dati del profilo e le qualifiche iniziali.',
+                        _nameStep
+                            ? 'Inserisci nome e cognome: se l\'amministratore '
+                                  'ha già creato il tuo profilo lo ritrovi '
+                                  'precompilato.'
+                            : 'Completa i dati del profilo e le qualifiche.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 24),
                       TextFormField(
                         controller: _nomeCtrl,
+                        readOnly: !_nameStep,
                         decoration: const InputDecoration(labelText: 'Nome'),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
@@ -731,300 +835,338 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _cognomeCtrl,
+                        readOnly: !_nameStep,
                         decoration: const InputDecoration(labelText: 'Cognome'),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
                             ? 'Campo obbligatorio'
                             : null,
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _licenseCtrl,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[A-Za-z0-9]'),
+                      if (_nameStep) ...[
+                        const SizedBox(height: 24),
+                        if (_checking)
+                          const Center(child: CircularProgressIndicator())
+                        else
+                          ElevatedButton(
+                            onPressed: _checkName,
+                            child: const Text('Avanti'),
                           ),
-                          LengthLimitingTextInputFormatter(20),
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Numero licenza',
+                      ] else ...[
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _changeName,
+                            icon: const Icon(Icons.edit, size: 16),
+                            label: const Text('Cambia nome e cognome'),
+                          ),
                         ),
-                        onChanged: _loadPreset,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Campo obbligatorio';
-                          }
-                          final cleaned = value.trim().toUpperCase();
-                          if (!RegExp(r'^[A-Z]{2}\d{6}$').hasMatch(cleaned)) {
-                            return 'Formato MAML non valido. Esempio: EI123456 (2 lettere + 6 cifre)';
-                          }
-                          return null;
-                        },
-                      ),
-                      if (_presetName != null) ...[
+                        if (_presetName != null || _nameNotice != null) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  (_presetName != null
+                                          ? AppColors.currencyValid
+                                          : AppColors.primary)
+                                      .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Text(
+                              _presetName != null
+                                  ? 'Profilo già creato dall\'amministratore per '
+                                        '$_presetName: licenze, privilegi ed '
+                                        'equipaggi assegnati sono già qui sotto. '
+                                        'Completa i dati mancanti e aggiungi le '
+                                        'licenze che mancano. I privilegi non si '
+                                        'modificano in registrazione: li assegna '
+                                        'l\'amministratore.'
+                                  : _nameNotice!,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _licenseCtrl,
+                          readOnly: _presetHasLicense,
+                          textCapitalization: TextCapitalization.characters,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[A-Za-z0-9]'),
+                            ),
+                            LengthLimitingTextInputFormatter(20),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Numero licenza',
+                          ),
+                          onChanged: _loadPreset,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Campo obbligatorio';
+                            }
+                            final cleaned = value.trim().toUpperCase();
+                            if (!RegExp(r'^[A-Z]{2}\d{6}$').hasMatch(cleaned)) {
+                              return 'Formato MAML non valido. Esempio: EI123456 (2 lettere + 6 cifre)';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Email istituzionale',
+                            hintText: 'nome.cognome@esercito.difesa.it',
+                          ),
+                          validator: _validateInstitutionalEmail,
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Istruttore Tecnico-Aeronautico (TI)',
+                          ),
+                          value: _isTi,
+                          onChanged: (v) => setState(() => _isTi = v),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Esaminatore Teorico-Pratico (ETP)',
+                          ),
+                          value: _isEtp,
+                          onChanged: (v) => setState(() => _isEtp = v),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _passwordCtrl,
+                          obscureText: _obscure,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            suffixIcon: IconButton(
+                              onPressed: () =>
+                                  setState(() => _obscure = !_obscure),
+                              icon: Icon(
+                                _obscure
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                            ),
+                          ),
+                          validator: (value) => value == null || value.isEmpty
+                              ? 'Campo obbligatorio'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        AppDropdown<int>(
+                          initialValue: _orgUnitId,
+                          menuMaxHeight: 300,
+                          decoration: const InputDecoration(
+                            labelText: 'Unità organizzativa',
+                          ),
+                          items: orgUnitItems,
+                          onChanged: (value) =>
+                              setState(() => _orgUnitId = value),
+                          validator: (value) =>
+                              value == null ? 'Campo obbligatorio' : null,
+                        ),
+                        const SizedBox(height: 24),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Manutenzione (${byHeli.length} elicotteri)',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    const Spacer(),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _manageMaintenance(
+                                        helicopterTypes,
+                                        licenseTypes,
+                                        privilegeTypes,
+                                      ),
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Aggiungi'),
+                                    ),
+                                  ],
+                                ),
+                                if (byHeli.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 12),
+                                    child: Text(
+                                      'Nessun elicottero configurato.',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  )
+                                else
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: byHeli.map((item) {
+                                        return InkWell(
+                                          onTap: () => _manageMaintenance(
+                                            helicopterTypes,
+                                            licenseTypes,
+                                            privilegeTypes,
+                                            forHelicopterId: item.helicopterId,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(
+                                                color: AppColors.border,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              color: AppColors.primary
+                                                  .withValues(alpha: 0.06),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      item.helicopterCode,
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .bodyLarge
+                                                          ?.copyWith(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Icon(
+                                                      Icons.edit,
+                                                      size: 14,
+                                                      color: AppColors
+                                                          .textSecondary,
+                                                    ),
+                                                  ],
+                                                ),
+                                                if (item.licenseLabel != null)
+                                                  Text(
+                                                    item.licenseLabel!,
+                                                    style: Theme.of(
+                                                      context,
+                                                    ).textTheme.bodySmall,
+                                                  ),
+                                                Text(
+                                                  '${item.privilegeCount} privilegi',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: AppColors
+                                                            .textSecondary,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 12),
+                        _PendingSection(
+                          title: 'Equipaggi di Volo',
+                          itemCount: _pendingCrew.length,
+                          emptyText: 'Nessun equipaggio aggiunto.',
+                          onAdd: () =>
+                              _addCrew(helicopterTypes, tobCapabilities),
+                          addLabel: 'Aggiungi equipaggio',
+                          children: _pendingCrew
+                              .asMap()
+                              .entries
+                              .map(
+                                (entry) => ListTile(
+                                  title: Text(
+                                    "${_helicopterLabel(helicopterTypes, entry.value['helicopter_type_id'] as int)} · ${entry.value['crew_type']}",
+                                  ),
+                                  subtitle: entry.value['crew_type'] == 'TOB'
+                                      ? Text(
+                                          'Fascia ${entry.value['tob_grade']} · ${_pendingTobCaps.where((item) => item['helicopter_type_id'] == entry.value['helicopter_type_id']).length} capacità',
+                                        )
+                                      : null,
+                                  trailing:
+                                      !_isNew('C', entry.value, 'crew_type')
+                                      ? const Tooltip(
+                                          message: 'Già assegnato',
+                                          child: Icon(Icons.lock_outline),
+                                        )
+                                      : IconButton(
+                                          onPressed: () => setState(() {
+                                            final removed = _pendingCrew
+                                                .removeAt(entry.key);
+                                            if (removed['crew_type'] == 'TOB') {
+                                              _pendingTobCaps.removeWhere(
+                                                (item) =>
+                                                    item['helicopter_type_id'] ==
+                                                    removed['helicopter_type_id'],
+                                              );
+                                            }
+                                          }),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                          ),
+                                        ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        const SizedBox(height: 24),
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.currencyValid.withValues(
-                              alpha: 0.12,
-                            ),
+                            color: AppColors.primary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: AppColors.border),
                           ),
                           child: Text(
-                            'Account già creato dall\'amministratore per '
-                            '$_presetName: licenze, privilegi ed equipaggi '
-                            'assegnati sono già selezionati qui sotto. '
-                            'Aggiungi solo ciò che manca; per togliere '
-                            'un\'assegnazione contatta l\'amministratore.',
+                            _preset != null
+                                ? 'Dopo la registrazione potrai accedere subito; '
+                                      'le licenze aggiunte attendono '
+                                      'l\'approvazione.'
+                                : 'Dopo la registrazione il profilo resterà in '
+                                      'attesa di approvazione amministrativa.',
                           ),
                         ),
+                        const SizedBox(height: 24),
+                        if (auth.isLoading)
+                          const Center(child: CircularProgressIndicator())
+                        else
+                          ElevatedButton(
+                            onPressed: _register,
+                            child: const Text('Registrati'),
+                          ),
                       ],
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _emailCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email istituzionale',
-                          hintText: 'nome.cognome@esercito.difesa.it',
-                        ),
-                        validator: _validateInstitutionalEmail,
-                      ),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Istruttore Tecnico-Aeronautico (TI)',
-                        ),
-                        value: _isTi,
-                        onChanged: (v) => setState(() => _isTi = v),
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Esaminatore Teorico-Pratico (ETP)'),
-                        value: _isEtp,
-                        onChanged: (v) => setState(() => _isEtp = v),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordCtrl,
-                        obscureText: _obscure,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          suffixIcon: IconButton(
-                            onPressed: () =>
-                                setState(() => _obscure = !_obscure),
-                            icon: Icon(
-                              _obscure
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                            ),
-                          ),
-                        ),
-                        validator: (value) => value == null || value.isEmpty
-                            ? 'Campo obbligatorio'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-                      AppDropdown<int>(
-                        initialValue: _orgUnitId,
-                        menuMaxHeight: 300,
-                        decoration: const InputDecoration(
-                          labelText: 'Unità organizzativa',
-                        ),
-                        items: orgUnitItems,
-                        onChanged: (value) =>
-                            setState(() => _orgUnitId = value),
-                        validator: (value) =>
-                            value == null ? 'Campo obbligatorio' : null,
-                      ),
-                      const SizedBox(height: 24),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'Manutenzione (${byHeli.length} elicotteri)',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium,
-                                  ),
-                                  const Spacer(),
-                                  OutlinedButton.icon(
-                                    onPressed: () => _manageMaintenance(
-                                      helicopterTypes,
-                                      licenseTypes,
-                                      privilegeTypes,
-                                    ),
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Aggiungi'),
-                                  ),
-                                ],
-                              ),
-                              if (byHeli.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 12),
-                                  child: Text(
-                                    'Nessun elicottero configurato.',
-                                    textAlign: TextAlign.center,
-                                  ),
-                                )
-                              else
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: byHeli.map((item) {
-                                      return InkWell(
-                                        onTap: () => _manageMaintenance(
-                                          helicopterTypes,
-                                          licenseTypes,
-                                          privilegeTypes,
-                                          forHelicopterId: item.helicopterId,
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            border: Border.all(
-                                              color: AppColors.border,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            color: AppColors.primary.withValues(
-                                              alpha: 0.06,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    item.helicopterCode,
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .bodyLarge
-                                                        ?.copyWith(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Icon(
-                                                    Icons.edit,
-                                                    size: 14,
-                                                    color:
-                                                        AppColors.textSecondary,
-                                                  ),
-                                                ],
-                                              ),
-                                              if (item.licenseLabel != null)
-                                                Text(
-                                                  item.licenseLabel!,
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall,
-                                                ),
-                                              Text(
-                                                '${item.privilegeCount} privilegi',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                      color: AppColors
-                                                          .textSecondary,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _PendingSection(
-                        title: 'Equipaggi di Volo',
-                        itemCount: _pendingCrew.length,
-                        emptyText: 'Nessun equipaggio aggiunto.',
-                        onAdd: () => _addCrew(helicopterTypes, tobCapabilities),
-                        addLabel: 'Aggiungi equipaggio',
-                        children: _pendingCrew
-                            .asMap()
-                            .entries
-                            .map(
-                              (entry) => ListTile(
-                                title: Text(
-                                  "${_helicopterLabel(helicopterTypes, entry.value['helicopter_type_id'] as int)} · ${entry.value['crew_type']}",
-                                ),
-                                subtitle: entry.value['crew_type'] == 'TOB'
-                                    ? Text(
-                                        'Fascia ${entry.value['tob_grade']} · ${_pendingTobCaps.where((item) => item['helicopter_type_id'] == entry.value['helicopter_type_id']).length} capacità',
-                                      )
-                                    : null,
-                                trailing: !_isNew('C', entry.value, 'crew_type')
-                                    ? const Tooltip(
-                                        message: 'Già assegnato',
-                                        child: Icon(Icons.lock_outline),
-                                      )
-                                    : IconButton(
-                                        onPressed: () => setState(() {
-                                          final removed = _pendingCrew.removeAt(
-                                            entry.key,
-                                          );
-                                          if (removed['crew_type'] == 'TOB') {
-                                            _pendingTobCaps.removeWhere(
-                                              (item) =>
-                                                  item['helicopter_type_id'] ==
-                                                  removed['helicopter_type_id'],
-                                            );
-                                          }
-                                        }),
-                                        icon: const Icon(Icons.delete_outline),
-                                      ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: const Text(
-                          'Dopo la registrazione il profilo resterà in attesa di approvazione amministrativa.',
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      if (auth.isLoading)
-                        const Center(child: CircularProgressIndicator())
-                      else
-                        ElevatedButton(
-                          onPressed: _register,
-                          child: const Text('Registrati'),
-                        ),
                       TextButton(
                         onPressed: () => context.go('/login'),
                         child: const Text('Hai già un account? Torna al login'),

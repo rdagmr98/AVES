@@ -214,6 +214,7 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     bool isTi = false,
     bool isEtp = false,
+    String? claimUserId,
   }) async {
     _isLoading = true;
     _error = null;
@@ -228,6 +229,7 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         isTi: isTi,
         isEtp: isEtp,
+        claimUserId: claimUserId,
       );
       await _loadReferenceData();
       await _authService.saveSession(_userProfile!.id, _userProfile!.role);
