@@ -57,6 +57,7 @@ class _InsertActivityAdminScreenState
   final _seminarDescCtrl = TextEditingController();
   final _flightHoursCtrl = TextEditingController();
   final _crewFlightHoursCtrl = TextEditingController();
+  final _tobHoursCtrl = TextEditingController();
   final _crewFlightDescCtrl = TextEditingController();
   final _workOrderMatricolaCtrl = TextEditingController();
   final _workOrderNumCarrCtrl = TextEditingController();
@@ -142,6 +143,7 @@ class _InsertActivityAdminScreenState
     _seminarDescCtrl.dispose();
     _flightHoursCtrl.dispose();
     _crewFlightHoursCtrl.dispose();
+    _tobHoursCtrl.dispose();
     _crewFlightDescCtrl.dispose();
     _workOrderMatricolaCtrl.dispose();
     _workOrderNumCarrCtrl.dispose();
@@ -299,27 +301,46 @@ class _InsertActivityAdminScreenState
   Future<void> _submitTob() async {
     final user = _selectedUser;
     final adminId = ref.read(authProvider).userProfile?.id;
+    final hours = parseHours(_tobHoursCtrl.text);
     if (user == null ||
         adminId == null ||
         _tobHelicopterId == null ||
-        _tobCapabilityId == null) {
+        hours == null ||
+        hours <= 0) {
       return;
     }
+    final desc = _tobDescCtrl.text.trim().isEmpty
+        ? null
+        : _tobDescCtrl.text.trim();
     setState(() => _saving = true);
     try {
-      await _activityService.addTobActivityValidated(
-        TobActivity(
-          userId: user.id,
-          helicopterTypeId: _tobHelicopterId!,
-          tobCapabilityId: _tobCapabilityId!,
-          activityDate: _tobDate,
-          description: _tobDescCtrl.text.trim().isEmpty
-              ? null
-              : _tobDescCtrl.text.trim(),
-          submittedBy: adminId,
-        ),
-        adminId,
-      );
+      // Senza capacità è un volo base TOB: attività di volo.
+      if (_tobCapabilityId == null) {
+        await _activityService.addFlightActivityValidated(
+          FlightActivity(
+            userId: user.id,
+            helicopterTypeId: _tobHelicopterId!,
+            activityDate: _tobDate,
+            flightHours: hours,
+            description: desc,
+            submittedBy: adminId,
+          ),
+          adminId,
+        );
+      } else {
+        await _activityService.addTobActivityValidated(
+          TobActivity(
+            userId: user.id,
+            helicopterTypeId: _tobHelicopterId!,
+            tobCapabilityId: _tobCapabilityId!,
+            activityDate: _tobDate,
+            flightHours: hours,
+            description: desc,
+            submittedBy: adminId,
+          ),
+          adminId,
+        );
+      }
       _finish();
     } catch (e) {
       if (mounted) {
@@ -1023,12 +1044,10 @@ class _InsertActivityAdminScreenState
       );
       return;
     }
-    if (_crewEntries.any((e) => e.role == 'T' || e.role == 'MTB') &&
-        (hours == null || hours <= 0)) {
+    // Le ore valgono per tutti: anche i TOB le sommano al semestre T.
+    if (hours == null || hours <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Inserisci le ore di volo per i membri T/MTB.'),
-        ),
+        const SnackBar(content: Text('Inserisci le ore di volo.')),
       );
       return;
     }
@@ -1038,47 +1057,33 @@ class _InsertActivityAdminScreenState
           ? null
           : _crewFlightDescCtrl.text.trim();
       for (final entry in _crewEntries) {
-        if (entry.role == 'T' || entry.role == 'MTB') {
+        if (entry.role == 'TOB' && entry.tobCapabilityId != null) {
+          await _activityService.addTobActivityValidated(
+            TobActivity(
+              userId: entry.user.id,
+              helicopterTypeId: helicopterId,
+              tobCapabilityId: entry.tobCapabilityId!,
+              activityDate: _crewFlightDate,
+              flightHours: hours,
+              description: desc,
+              submittedBy: adminId,
+            ),
+            adminId,
+          );
+        } else {
+          // T, MTB e TOB senza capacità (volo base TOB).
           await _activityService.addFlightActivityValidated(
             FlightActivity(
               userId: entry.user.id,
               helicopterTypeId: helicopterId,
               activityDate: _crewFlightDate,
-              flightHours: hours ?? 0,
+              flightHours: hours,
               description: desc,
-              isPoligono: entry.role == 'MTB' ? _crewFlightIsPoligono : false,
+              isPoligono: entry.role == 'MTB' && _crewFlightIsPoligono,
               submittedBy: adminId,
             ),
             adminId,
           );
-        } else if (entry.role == 'TOB') {
-          if (entry.tobCapabilityId != null) {
-            await _activityService.addTobActivityValidated(
-              TobActivity(
-                userId: entry.user.id,
-                helicopterTypeId: helicopterId,
-                tobCapabilityId: entry.tobCapabilityId!,
-                activityDate: _crewFlightDate,
-                description: desc,
-                submittedBy: adminId,
-              ),
-              adminId,
-            );
-          } else if (hours != null && hours > 0) {
-            // Base TOB (no capability): record as a flight activity
-            await _activityService.addFlightActivityValidated(
-              FlightActivity(
-                userId: entry.user.id,
-                helicopterTypeId: helicopterId,
-                activityDate: _crewFlightDate,
-                flightHours: hours,
-                description: desc,
-                isPoligono: false,
-                submittedBy: adminId,
-              ),
-              adminId,
-            );
-          }
         }
       }
       if (mounted) {
@@ -1255,7 +1260,7 @@ class _InsertActivityAdminScreenState
                                 const SizedBox(height: 16),
                                 HoursField(
                                   controller: _crewFlightHoursCtrl,
-                                  label: 'Ore di volo (per membri T/MTB)',
+                                  label: 'Ore di volo',
                                 ),
                                 if (_crewEntries.any(
                                   (entry) => entry.role == 'MTB',
@@ -1461,7 +1466,8 @@ class _InsertActivityAdminScreenState
                                       setState(() => _tobHelicopterId = value),
                                 ),
                                 const SizedBox(height: 16),
-                                AppDropdown<int>(
+                                AppDropdown<int?>(
+                                  key: ValueKey('tobcap$_tobHelicopterId'),
                                   initialValue:
                                       filteredCapabilities.any(
                                         (item) =>
@@ -1471,27 +1477,36 @@ class _InsertActivityAdminScreenState
                                       ? _tobCapabilityId
                                       : null,
                                   decoration: const InputDecoration(
-                                    labelText: 'Capacità TOB',
+                                    labelText:
+                                        'Capacità aggiuntiva (facoltativa)',
                                   ),
-                                  items: filteredCapabilities
-                                      .map(
-                                        (item) => DropdownMenuItem<int>(
-                                          value: item.tobCapabilityId,
-                                          child: Text(item.capabilityName),
-                                        ),
-                                      )
-                                      .toList(),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                      value: null,
+                                      child: Text('Nessuna (solo volo)'),
+                                    ),
+                                    for (final item in filteredCapabilities)
+                                      DropdownMenuItem<int?>(
+                                        value: item.tobCapabilityId,
+                                        child: Text(item.capabilityName),
+                                      ),
+                                  ],
                                   onChanged: (value) =>
                                       setState(() => _tobCapabilityId = value),
                                 ),
                                 const SizedBox(height: 16),
                                 _AdminDateButton(
-                                  label: 'Data attività TOB',
+                                  label: 'Data volo TOB',
                                   date: _tobDate,
                                   onPressed: () => _pickDate(
                                     (value) => _tobDate = value,
                                     _tobDate,
                                   ),
+                                ),
+                                const SizedBox(height: 16),
+                                HoursField(
+                                  controller: _tobHoursCtrl,
+                                  label: 'Ore di volo',
                                 ),
                                 const SizedBox(height: 16),
                                 TextField(

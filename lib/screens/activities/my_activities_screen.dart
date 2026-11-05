@@ -189,7 +189,7 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                     .map(
                       (item) => _ActivityListTile(
                         title:
-                            '${item.helicopterCode} · ${item.capabilityName}',
+                            '${item.helicopterCode} · ${item.capabilityName} · ${formatHours(item.flightHours)} h',
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,

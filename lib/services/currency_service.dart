@@ -538,6 +538,7 @@ class CurrencyService {
         .toList();
     final crew = _db.crew.where((r) => r['user_id'] == userId).toList();
     final caps = _db.tobUserCaps.where((r) => r['user_id'] == userId).toList();
+    final allFlights = [...flights, ...tobActs];
     final courseFlights = {for (final a in flights.where(isCourse)) day(a)};
 
     final events = <CurrencyEvent>[
@@ -660,10 +661,7 @@ class CurrencyService {
       addLosses(
         'Volo T',
         flightSemesterLosses(
-          [
-            for (final a in flights)
-              (date: day(a), hours: (a['flight_hours'] as num).toDouble()),
-          ],
+          [for (final a in allFlights) (date: day(a), hours: _hours(a))],
           minHours,
           tEnd,
         ),
@@ -686,7 +684,7 @@ class CurrencyService {
           (fascia == 'A' ? 90 : 120);
       addLosses(
         'Base TOB',
-        currencyLosses(flights.map(day), period, tobEnd),
+        currencyLosses(allFlights.map(day), period, tobEnd),
         'nessun volo validato da $period giorni',
         courseFlights,
       );
@@ -810,22 +808,26 @@ class CurrencyService {
     return result;
   }
 
+  /// Voli validati dell'utente: attività di volo e TOB. Le ore TOB contano
+  /// per il semestre T e ogni volo TOB vale come volo base TOB.
+  Iterable<Map<String, dynamic>> _validatedFlights(String userId) => [
+    ..._db.flightActs,
+    ..._db.tobActs,
+  ].where((a) => a['user_id'] == userId && a['is_validated'] == true);
+
+  static double _hours(Map<String, dynamic> a) =>
+      (a['flight_hours'] as num?)?.toDouble() ?? 0;
+
   Future<CurrencyStatus> getFlightCurrency(String userId) async {
     final criteria = await getFlightTCriteria();
     final minHours = criteria?.minHours ?? 3.0;
 
     // T: >= minHours in ciascun semestre di calendario (non più rolling 180 gg);
     // criteria.periodDays non è usato.
-    final acts = _db.flightActs
-        .where((i) => i['user_id'] == userId && i['is_validated'] == true)
-        .map<FlightAct>((i) {
-          final d = DateTime.parse(i['activity_date'] as String);
-          return (
-            date: DateTime(d.year, d.month, d.day),
-            hours: (i['flight_hours'] as num).toDouble(),
-          );
-        })
-        .toList();
+    final acts = _validatedFlights(userId).map<FlightAct>((i) {
+      final d = DateTime.parse(i['activity_date'] as String);
+      return (date: DateTime(d.year, d.month, d.day), hours: _hours(i));
+    }).toList();
     final now = DateTime.now();
     final sem = flightSemesterState(acts, minHours, now);
     final lastDate = acts.isEmpty
@@ -979,15 +981,9 @@ class CurrencyService {
     final periodDays =
         criteria?.periodForFascia(fascia) ?? (fascia == 'A' ? 90 : 120);
 
-    // TOB base uses any validated flight activity
-    final validatedFlights =
-        _db.flightActs
-            .where(
-              (item) =>
-                  item['user_id'] == userId && item['is_validated'] == true,
-            )
-            .toList()
-          ..sort(
+    // Base TOB: qualsiasi volo validato, anche TOB con capacità.
+    final validatedFlights = _validatedFlights(userId).toList()
+      ..sort(
             (a, b) => DateTime.parse(
               b['activity_date'] as String,
             ).compareTo(DateTime.parse(a['activity_date'] as String)),
@@ -1039,7 +1035,7 @@ class CurrencyService {
     String userId,
     List<UserCrewAssignment> crewAssignments,
   ) async {
-    if (!crewAssignments.any((item) => item.crewType == 'MDB')) {
+    if (!crewAssignments.any((item) => item.crewType == 'MTB')) {
       return const CurrencyStatus(
         status: CurrencyStatusEnum.noData,
         label: 'Nessuna assegnazione Mitragliere di Bordo',

@@ -29,15 +29,16 @@ const _types = [
     icon: Icons.flight,
     label: 'Volo',
     title: 'Attività di volo',
-    hint: 'Ore di volo come equipaggio T o MDB.',
+    hint: 'Ore di volo come equipaggio T o MTB.',
     submit: 'Invia attività di volo',
-    disabled: 'Nessuna abilitazione equipaggio T o MDB assegnata.',
+    disabled: 'Nessuna abilitazione equipaggio T o MTB assegnata.',
   ),
   (
     icon: Icons.groups_outlined,
     label: 'TOB',
     title: 'Attività TOB',
-    hint: 'Attività svolta con una capacità TOB.',
+    hint:
+        'Volo come equipaggio TOB, con o senza capacità aggiuntiva. Le ore contano anche per le 3 ore a semestre.',
     submit: 'Invia attività TOB',
     disabled: 'Nessuna abilitazione equipaggio TOB assegnata.',
   ),
@@ -69,6 +70,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
   final _tobDescCtrl = TextEditingController();
   final _seminarDescCtrl = TextEditingController();
   final _flightHoursCtrl = TextEditingController();
+  final _tobHoursCtrl = TextEditingController();
 
   late int _type = widget.initialTab.clamp(0, 3);
 
@@ -106,6 +108,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     _tobDescCtrl.dispose();
     _seminarDescCtrl.dispose();
     _flightHoursCtrl.dispose();
+    _tobHoursCtrl.dispose();
     super.dispose();
   }
 
@@ -227,24 +230,41 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
   }
 
   Future<void> _submitTob(UserProfile user) async {
-    if (_tobHelicopterId == null || _tobCapabilityId == null) {
-      _showMessage('Seleziona elicottero e capacità TOB.');
+    final hours = parseHours(_tobHoursCtrl.text);
+    if (_tobHelicopterId == null || hours == null || hours <= 0) {
+      _showMessage('Inserisci elicottero e ore di volo valide (h:mm o minuti).');
       return;
     }
+    final description = _tobDescCtrl.text.trim().isEmpty
+        ? null
+        : _tobDescCtrl.text.trim();
     setState(() => _saving = true);
     try {
-      await _service.addTobActivity(
-        TobActivity(
-          userId: user.id,
-          helicopterTypeId: _tobHelicopterId!,
-          tobCapabilityId: _tobCapabilityId!,
-          activityDate: _tobDate,
-          description: _tobDescCtrl.text.trim().isEmpty
-              ? null
-              : _tobDescCtrl.text.trim(),
-          submittedBy: user.id,
-        ),
-      );
+      // Senza capacità è un volo base TOB: si salva come attività di volo.
+      if (_tobCapabilityId == null) {
+        await _service.addFlightActivity(
+          FlightActivity(
+            userId: user.id,
+            helicopterTypeId: _tobHelicopterId!,
+            activityDate: _tobDate,
+            flightHours: hours,
+            description: description,
+            submittedBy: user.id,
+          ),
+        );
+      } else {
+        await _service.addTobActivity(
+          TobActivity(
+            userId: user.id,
+            helicopterTypeId: _tobHelicopterId!,
+            tobCapabilityId: _tobCapabilityId!,
+            activityDate: _tobDate,
+            flightHours: hours,
+            description: description,
+            submittedBy: user.id,
+          ),
+        );
+      }
       _finishSubmit();
     } catch (e) {
       if (mounted) {
@@ -299,6 +319,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     _flightDescCtrl.clear();
     _tobDescCtrl.clear();
     _flightHoursCtrl.clear();
+    _tobHoursCtrl.clear();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Attività inserita e inviata per la validazione.'),
@@ -342,7 +363,7 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
         .where((item) => item.crewType == 'T')
         .toList();
     final mdbCrewAssignments = auth.crewAssignments
-        .where((item) => item.crewType == 'MDB')
+        .where((item) => item.crewType == 'MTB')
         .toList();
     final tobCrewAssignments = auth.crewAssignments
         .where((item) => item.crewType == 'TOB')
@@ -407,10 +428,10 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     final filteredCapabilities = auth.tobCapabilities
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
-    _tobCapabilityId = _keepOrOnly(
-      _tobCapabilityId,
-      filteredCapabilities.map((item) => item.tobCapabilityId),
-    );
+    // Capacità facoltativa: null = solo volo base TOB, niente auto-selezione.
+    if (!filteredCapabilities.any((c) => c.tobCapabilityId == _tobCapabilityId)) {
+      _tobCapabilityId = null;
+    }
 
     final fields = switch (type) {
       0 => <Widget>[
@@ -622,31 +643,35 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
           ),
         ),
         LabeledField(
-          label: 'Capacità TOB',
-          child: AppDropdown<int>(
-            initialValue: _tobCapabilityId,
-            menuMaxHeight: 300,
-            hint: Text(
-              _tobHelicopterId == null
-                  ? 'Scegli prima l\'elicottero'
-                  : 'Seleziona la capacità',
-            ),
-            items: filteredCapabilities
-                .map(
-                  (item) => DropdownMenuItem<int>(
-                    value: item.tobCapabilityId,
-                    child: Text(item.capabilityName),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (value) => setState(() => _tobCapabilityId = value),
-          ),
-        ),
-        LabeledField(
-          label: 'Data attività TOB',
+          label: 'Data volo',
           child: _DateTile(
             date: _tobDate,
             onTap: () => _pickDate((value) => _tobDate = value, _tobDate),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: HoursField(controller: _tobHoursCtrl, label: 'Ore di volo'),
+        ),
+        LabeledField(
+          label: 'Capacità aggiuntiva',
+          optional: true,
+          child: AppDropdown<int?>(
+            key: ValueKey('tobcap$_tobHelicopterId'),
+            initialValue: _tobCapabilityId,
+            menuMaxHeight: 300,
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('Nessuna (solo volo)'),
+              ),
+              for (final item in filteredCapabilities)
+                DropdownMenuItem<int?>(
+                  value: item.tobCapabilityId,
+                  child: Text(item.capabilityName),
+                ),
+            ],
+            onChanged: (value) => setState(() => _tobCapabilityId = value),
           ),
         ),
         LabeledField(

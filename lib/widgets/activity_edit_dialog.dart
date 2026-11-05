@@ -168,7 +168,8 @@ Future<Map<String, dynamic>?> showActivityEditDialog(
             // h:mm arrotonda al minuto: riscrive solo se l'admin ha cambiato
             if (hours != null && hoursCtrl.text != hoursText)
               'flight_hours': parsedHours,
-            if (hours != null) 'is_poligono': poligono,
+            if (hours != null && poligonoHelicopters.isNotEmpty)
+              'is_poligono': poligono,
             'description': text(desc),
             for (final MapEntry(:key, :value) in textCtrls.entries)
               key: text(value),
@@ -331,7 +332,7 @@ Future<bool> editFlightActivity(BuildContext context, FlightActivity a) async {
     poligono: a.isPoligono,
     poligonoHelicopters: {
       for (final c in crew)
-        if (c.crewType == 'MDB') c.helicopterTypeId,
+        if (c.crewType == 'MTB') c.helicopterTypeId,
       if (a.isPoligono) a.helicopterTypeId,
     },
   );
@@ -364,6 +365,7 @@ Future<bool> editTobActivity(BuildContext context, TobActivity a) async {
       if (heli == a.helicopterTypeId) a.tobCapabilityId: a.capabilityName,
     },
     detailId: a.tobCapabilityId,
+    hours: a.flightHours,
   );
   if (fields == null) return false;
   await ActivityService().updateTobActivity(a.id!, fields);

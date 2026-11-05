@@ -223,7 +223,7 @@ class _ValidateActivitiesScreenState
           row: (i) => (
             i.userFullName,
             i.helicopterCode,
-            i.capabilityName,
+            '${i.capabilityName} · ${formatHours(i.flightHours)} h',
             i.description,
             i.activityDate,
           ),

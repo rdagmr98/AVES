@@ -207,7 +207,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                   'Capacità TOB',
                   crewStatus('tob_${heli.id}_${cap.tobCapabilityId}'),
                 ),
-            if (crewTypes.contains('MDB'))
+            if (crewTypes.contains('MTB'))
               ('Mitragliere di Bordo', '', crewStatus('mdb')),
           ],
         ),

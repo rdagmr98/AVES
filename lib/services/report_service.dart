@@ -123,7 +123,7 @@ class ReportService {
       final flightStatus = assignments.any((item) => item.crewType == 'T')
           ? await _currencyService.getFlightCurrency(user.id)
           : null;
-      final mdbStatus = assignments.any((item) => item.crewType == 'MDB')
+      final mdbStatus = assignments.any((item) => item.crewType == 'MTB')
           ? await _currencyService.getMdbCurrency(user.id, assignments)
           : null;
 
@@ -145,7 +145,7 @@ class ReportService {
           continue;
         }
 
-        if (assignment.crewType == 'MDB') {
+        if (assignment.crewType == 'MTB') {
           rows.add([
             user.cognome,
             user.nome,

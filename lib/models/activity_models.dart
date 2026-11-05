@@ -383,6 +383,10 @@ class TobActivity {
   final int helicopterTypeId;
   final int tobCapabilityId;
   final DateTime activityDate;
+
+  /// Ore di volo: contano anche per il semestre della currency T. 0 sulle
+  /// righe precedenti all'introduzione del campo.
+  final double flightHours;
   final String? description;
 
   /// "Corso iniziale" / "Corso di ripristino" (storico).
@@ -404,6 +408,7 @@ class TobActivity {
     required this.helicopterTypeId,
     required this.tobCapabilityId,
     required this.activityDate,
+    this.flightHours = 0,
     this.description,
     this.activityType,
     this.isValidated = false,
@@ -423,6 +428,7 @@ class TobActivity {
     helicopterTypeId: j['helicopter_type_id'] as int,
     tobCapabilityId: j['tob_capability_id'] as int,
     activityDate: DateTime.parse(j['activity_date'] as String),
+    flightHours: (j['flight_hours'] as num?)?.toDouble() ?? 0,
     description: j['description'] as String?,
     activityType: j['activity_type'] as String?,
     isValidated: j['is_validated'] as bool? ?? false,
@@ -456,6 +462,7 @@ class TobActivity {
     'helicopter_type_id': helicopterTypeId,
     'tob_capability_id': tobCapabilityId,
     'activity_date': activityDate.toIso8601String().split('T').first,
+    'flight_hours': flightHours,
     'description': description,
     'submitted_by': submittedBy,
     if (activityType != null) 'activity_type': activityType,
