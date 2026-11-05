@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-11-02
+## STATO SESSIONE — aggiornato 2026-11-05
+- 2026-11-05 (18): scheda persona admin volo come admincsl (`_CrewRecordDialog`, `35261b4`). Voli TOB con ore che valgono per la T, TOB senza capacità, scadenze SMI/visita mansione nel profilo, precarico dei pre-registrati in `register_screen.dart` (invia solo le differenze). MDB→MTB solo nelle etichette. Dati allineati all'Annesso 29/10 (`aves-data` `63d921d`). Nota vault `AVES Corsi/Tecnici volo TOB ore SMI e precarico pre-registrati 2026-11-05.md`.
 - 2026-11-02 (17): categoria B1.3/B2 su privilegi e attività (`3e8d72d`). `license_type_id` è facoltativo, nullo = tutte. Il confronto passa solo da `catCovers` (`currency_history.dart`). Fabbri è allineato in `aves-data` `8e01146`. Nota vault `AVES Corsi/Tecnici categoria su privilegi e attività 2026-11-02.md`.
 - 2026-10-30 (16): richiesta reset anche dal cambio password a login effettuato (`57cd246`): link nel dialog del profilo (nascosto agli admin) e in `/change-password`, via `AuthProvider.requestPasswordReset`. Provato nella demo (SnackBar ok), persistenza no.
 - 2026-10-30 (15): reset password da admin e richiesta dal login (`f62a6db`). Gate `mustChangePassword` nel `redirect` di `lib/app.dart`, verso `/change-password`. Tasto `_resetPassword` nel dettaglio utente (`user_management_screen.dart`). Admin e pre-registrati esclusi. Persistenza non provata nella demo: da provare in produzione. Nota vault `AVES Corsi/Reset password admin e richiesta utente 2026-10-30.md`.
