@@ -7,6 +7,7 @@ import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
+import '../../models/user_models.dart';
 import '../../services/user_service.dart';
 import '../../widgets/form_parts.dart';
 
@@ -35,6 +36,103 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscure = true;
   bool _isTi = false;
   bool _isEtp = false;
+
+  // Account pre-registrato dall'admin con la stessa licenza: le sue
+  // assegnazioni sono precaricate e all'invio partono solo le novità.
+  String? _lookedUpLicense;
+  String? _presetName;
+  Set<String> _presetKeys = {};
+
+  static String _key(String kind, Map<String, dynamic> r, String field) =>
+      '$kind:${r['helicopter_type_id']}:${r[field]}';
+
+  bool _isNew(String kind, Map<String, dynamic> r, String field) =>
+      !_presetKeys.contains(_key(kind, r, field));
+
+  Future<void> _loadPreset(String value) async {
+    final license = value.trim().toUpperCase();
+    if (!RegExp(r'^[A-Z]{2}\d{6}$').hasMatch(license) ||
+        license == _lookedUpLicense) {
+      return;
+    }
+    _lookedUpLicense = license;
+    String accountId(UserProfile u) =>
+        ((u.username?.trim().isNotEmpty ?? false)
+                ? u.username!
+                : u.numeroLicenza ?? '')
+            .trim()
+            .toUpperCase();
+    final preset = (await _userService.getAllUsers())
+        .where((u) => u.isPreRegistered && accountId(u) == license)
+        .firstOrNull;
+    final licenses = preset == null
+        ? const <UserLicense>[]
+        : await _userService.getUserLicenses(preset.id);
+    final privileges = preset == null
+        ? const <UserPrivilege>[]
+        : await _userService.getUserPrivileges(preset.id);
+    final crew = preset == null
+        ? const <UserCrewAssignment>[]
+        : await _userService.getUserCrewAssignments(preset.id);
+    final caps = preset == null
+        ? const <UserTobCapability>[]
+        : await _userService.getUserTobCapabilities(preset.id);
+    if (!mounted || _lookedUpLicense != license) return;
+    if (preset == null && _presetName == null) return;
+    setState(() {
+      // Cambio licenza: via le assegnazioni del pre-registrato precedente.
+      _pendingLicenses.clear();
+      _pendingPrivileges.clear();
+      _pendingCrew.clear();
+      _pendingTobCaps.clear();
+      _presetName = null;
+      if (preset == null) {
+        _presetKeys = {};
+        return;
+      }
+      _presetName = '${preset.nome} ${preset.cognome}'.trim();
+      if (preset.nome.trim().isNotEmpty) _nomeCtrl.text = preset.nome;
+      if (preset.cognome.trim().isNotEmpty) _cognomeCtrl.text = preset.cognome;
+      _orgUnitId = preset.orgUnitId ?? _orgUnitId;
+      _isTi = preset.isTi;
+      _isEtp = preset.isEtp;
+      _pendingLicenses.addAll([
+        for (final l in licenses)
+          {
+            'helicopter_type_id': l.helicopterTypeId,
+            'license_type_id': l.licenseTypeId,
+          },
+      ]);
+      _pendingPrivileges.addAll([
+        for (final p in privileges)
+          {
+            'helicopter_type_id': p.helicopterTypeId,
+            'privilege_type_id': p.privilegeTypeId,
+          },
+      ]);
+      _pendingCrew.addAll([
+        for (final c in crew)
+          {
+            'helicopter_type_id': c.helicopterTypeId,
+            'crew_type': c.crewType,
+            'tob_grade': c.fascia,
+          },
+      ]);
+      _pendingTobCaps.addAll([
+        for (final c in caps)
+          {
+            'helicopter_type_id': c.helicopterTypeId,
+            'tob_capability_id': c.tobCapabilityId,
+          },
+      ]);
+      _presetKeys = {
+        for (final l in _pendingLicenses) _key('L', l, 'license_type_id'),
+        for (final p in _pendingPrivileges) _key('P', p, 'privilege_type_id'),
+        for (final c in _pendingCrew) _key('C', c, 'crew_type'),
+        for (final c in _pendingTobCaps) _key('K', c, 'tob_capability_id'),
+      };
+    });
+  }
 
   @override
   void dispose() {
@@ -109,11 +207,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       );
 
       // Licenze e privilegi attendono l'approvazione dell'admin (con OJT);
-      // append: si sommano a quelli già assegnati dall'admin.
+      // append: si sommano a quelli già assegnati. Solo elicotteri con novità
+      // rispetto al pre-registrato, niente richieste doppie.
       final heliIds = {
-        for (final r in [..._pendingLicenses, ..._pendingPrivileges])
-          r['helicopter_type_id'] as int,
+        for (final l in _pendingLicenses)
+          if (_isNew('L', l, 'license_type_id')) l['helicopter_type_id'] as int,
+        for (final p in _pendingPrivileges)
+          if (_isNew('P', p, 'privilege_type_id'))
+            p['helicopter_type_id'] as int,
       };
+      final newCrew = [
+        for (final c in _pendingCrew)
+          if (_isNew('C', c, 'crew_type')) c,
+      ];
+      final newCaps = [
+        for (final c in _pendingTobCaps)
+          if (_isNew('K', c, 'tob_capability_id')) c,
+      ];
       for (final h in heliIds) {
         await _userService.requestPrivilegeChange(
           userId,
@@ -130,17 +240,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           append: true,
         );
       }
-      if (_pendingCrew.isNotEmpty) {
+      if (newCrew.isNotEmpty) {
         await _userService.setUserCrewAssignments(
           userId,
-          _pendingCrew,
+          newCrew,
           append: true,
         );
       }
-      if (_pendingTobCaps.isNotEmpty) {
+      if (newCaps.isNotEmpty) {
         await _userService.setUserTobCapabilities(
           userId,
-          _pendingTobCaps,
+          newCaps,
           append: true,
         );
       }
@@ -640,6 +750,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Numero licenza',
                         ),
+                        onChanged: _loadPreset,
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return 'Campo obbligatorio';
@@ -651,6 +762,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           return null;
                         },
                       ),
+                      if (_presetName != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.currencyValid.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Text(
+                            'Account già creato dall\'amministratore per '
+                            '$_presetName: licenze, privilegi ed equipaggi '
+                            'assegnati sono già selezionati qui sotto. '
+                            'Aggiungi solo ciò che manca; per togliere '
+                            'un\'assegnazione contatta l\'amministratore.',
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _emailCtrl,
@@ -850,21 +981,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                         'Fascia ${entry.value['tob_grade']} · ${_pendingTobCaps.where((item) => item['helicopter_type_id'] == entry.value['helicopter_type_id']).length} capacità',
                                       )
                                     : null,
-                                trailing: IconButton(
-                                  onPressed: () => setState(() {
-                                    final removed = _pendingCrew.removeAt(
-                                      entry.key,
-                                    );
-                                    if (removed['crew_type'] == 'TOB') {
-                                      _pendingTobCaps.removeWhere(
-                                        (item) =>
-                                            item['helicopter_type_id'] ==
-                                            removed['helicopter_type_id'],
-                                      );
-                                    }
-                                  }),
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
+                                trailing: !_isNew('C', entry.value, 'crew_type')
+                                    ? const Tooltip(
+                                        message: 'Già assegnato',
+                                        child: Icon(Icons.lock_outline),
+                                      )
+                                    : IconButton(
+                                        onPressed: () => setState(() {
+                                          final removed = _pendingCrew.removeAt(
+                                            entry.key,
+                                          );
+                                          if (removed['crew_type'] == 'TOB') {
+                                            _pendingTobCaps.removeWhere(
+                                              (item) =>
+                                                  item['helicopter_type_id'] ==
+                                                  removed['helicopter_type_id'],
+                                            );
+                                          }
+                                        }),
+                                        icon: const Icon(Icons.delete_outline),
+                                      ),
                               ),
                             )
                             .toList(),
