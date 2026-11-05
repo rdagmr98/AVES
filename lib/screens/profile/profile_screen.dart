@@ -37,6 +37,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isTi = false;
   bool _isEtp = false;
   DateTime? _flightFitnessExpiry;
+  DateTime? _smiExpiry;
+  DateTime? _jobFitnessExpiry;
   String? _lastProfileSyncKey;
   AccountDeletionRequest? _pendingDeletionRequest;
   Map<int, PrivilegeRequest> _privilegeRequests = {};
@@ -53,6 +55,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _isTi = profile?.isTi ?? false;
     _isEtp = profile?.isEtp ?? false;
     _flightFitnessExpiry = profile?.flightFitnessExpiry;
+    _smiExpiry = profile?.smiExpiry;
+    _jobFitnessExpiry = profile?.jobFitnessExpiry;
     _lastProfileSyncKey = _profileSyncKey(profile);
     _loadDeletionRequest();
     _loadPrivilegeRequests();
@@ -137,6 +141,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           isTi: _isTi,
           isEtp: _isEtp,
           flightFitnessExpiry: _flightFitnessExpiry,
+          smiExpiry: _smiExpiry,
+          jobFitnessExpiry: _jobFitnessExpiry,
         ),
       ),
       successMessage: 'Profilo aggiornato con successo.',
@@ -389,6 +395,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       '${profile.isTi}',
       '${profile.isEtp}',
       profile.flightFitnessExpiry?.toIso8601String() ?? '',
+      profile.smiExpiry?.toIso8601String() ?? '',
+      profile.jobFitnessExpiry?.toIso8601String() ?? '',
     ].join('|');
   }
 
@@ -405,6 +413,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _isTi = profile.isTi;
     _isEtp = profile.isEtp;
     _flightFitnessExpiry = profile.flightFitnessExpiry;
+    _smiExpiry = profile.smiExpiry;
+    _jobFitnessExpiry = profile.jobFitnessExpiry;
     _lastProfileSyncKey = syncKey;
   }
 
@@ -415,18 +425,72 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return DateFormat('dd/MM/yyyy').format(value);
   }
 
-  Future<void> _pickFlightFitnessExpiry() async {
+  /// Campo scadenza (idoneità volo, SMI, mansione): tap = data, X = rimuovi.
+  Widget _expiryField({
+    required String label,
+    required IconData icon,
+    required DateTime? value,
+    required ValueChanged<DateTime?> onChanged,
+    bool optional = false,
+  }) {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _flightFitnessExpiry ?? now,
-      firstDate: DateTime(now.year - 10),
-      lastDate: DateTime(now.year + 20),
+    final days = value
+        ?.difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+    return LabeledField(
+      label: label,
+      optional: optional,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () async {
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: value ?? now,
+            firstDate: DateTime(now.year - 10),
+            lastDate: DateTime(now.year + 20),
+          );
+          if (picked != null && mounted) setState(() => onChanged(picked));
+        },
+        child: InputDecorator(
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon),
+            errorText: days != null && days < 0
+                ? 'Scaduta: tocca per aggiornare la data'
+                : null,
+            suffixIcon: value == null
+                ? null
+                : IconButton(
+                    tooltip: 'Rimuovi',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => onChanged(null)),
+                  ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value == null ? 'Seleziona la scadenza' : _formatDate(value),
+                  style: value == null
+                      ? const TextStyle(color: AppColors.textHint)
+                      : null,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (days != null)
+                _Pill(
+                  text: days < 0
+                      ? 'Scaduta'
+                      : days == 0
+                      ? 'Scade oggi'
+                      : 'Tra $days gg',
+                  color: expiryBadge(value).$2,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
-    if (picked == null || !mounted) {
-      return;
-    }
-    setState(() => _flightFitnessExpiry = picked);
   }
 
   Future<_MaintenanceEntry?> _showMaintenanceDialog(
@@ -898,11 +962,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _syncProfileState(profile);
     final isAdminProfile = profile.isAdmin;
     final textTheme = Theme.of(context).textTheme;
-    final now = DateTime.now();
-    final fitnessDays = _flightFitnessExpiry
-        ?.difference(DateTime(now.year, now.month, now.day))
-        .inDays;
-    final isFlightFitnessExpired = fitnessDays != null && fitnessDays < 0;
     final unitName = auth.orgUnits
         .where((u) => u.id == _orgUnitId)
         .firstOrNull
@@ -1123,60 +1182,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        LabeledField(
+                        _expiryField(
                           label: 'Idoneità al volo',
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: _pickFlightFitnessExpiry,
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(
-                                  Icons.medical_services_outlined,
-                                ),
-                                errorText: isFlightFitnessExpired
-                                    ? 'Scaduta: tocca per aggiornare la data'
-                                    : null,
-                                suffixIcon: _flightFitnessExpiry == null
-                                    ? null
-                                    : IconButton(
-                                        tooltip: 'Rimuovi',
-                                        icon: const Icon(Icons.close),
-                                        onPressed: () => setState(
-                                          () => _flightFitnessExpiry = null,
-                                        ),
-                                      ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      _flightFitnessExpiry == null
-                                          ? 'Seleziona la scadenza'
-                                          : _formatDate(_flightFitnessExpiry),
-                                      style: _flightFitnessExpiry == null
-                                          ? const TextStyle(
-                                              color: AppColors.textHint,
-                                            )
-                                          : null,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  if (fitnessDays != null)
-                                    _Pill(
-                                      text: fitnessDays < 0
-                                          ? 'Scaduta'
-                                          : fitnessDays == 0
-                                          ? 'Scade oggi'
-                                          : 'Tra $fitnessDays gg',
-                                      color: expiryBadge(
-                                        _flightFitnessExpiry,
-                                      ).$2,
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          icon: Icons.medical_services_outlined,
+                          value: _flightFitnessExpiry,
+                          onChanged: (d) => _flightFitnessExpiry = d,
+                        ),
+                        _expiryField(
+                          label: 'Idoneità SMI',
+                          icon: Icons.military_tech_outlined,
+                          value: _smiExpiry,
+                          onChanged: (d) => _smiExpiry = d,
+                        ),
+                        _expiryField(
+                          label: 'Visita alla mansione',
+                          icon: Icons.health_and_safety_outlined,
+                          value: _jobFitnessExpiry,
+                          onChanged: (d) => _jobFitnessExpiry = d,
+                          optional: true,
                         ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,

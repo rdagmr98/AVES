@@ -16,6 +16,12 @@ class UserProfile {
   final bool isTi;
   final bool isEtp;
   final DateTime? flightFitnessExpiry;
+
+  /// Idoneità SMI (Servizio Militare Incondizionato), visita periodica.
+  final DateTime? smiExpiry;
+
+  /// Visita alla mansione (sorveglianza sanitaria), facoltativa.
+  final DateTime? jobFitnessExpiry;
   final String? note;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -51,6 +57,8 @@ class UserProfile {
     this.isTi = false,
     this.isEtp = false,
     this.flightFitnessExpiry,
+    this.smiExpiry,
+    this.jobFitnessExpiry,
     this.note,
     required this.createdAt,
     required this.updatedAt,
@@ -97,6 +105,10 @@ class UserProfile {
       flightFitnessExpiry: j['flight_fitness_expiry'] != null
           ? DateTime.parse(j['flight_fitness_expiry'] as String)
           : null,
+      smiExpiry: DateTime.tryParse(j['smi_expiry'] as String? ?? ''),
+      jobFitnessExpiry: DateTime.tryParse(
+        j['job_fitness_expiry'] as String? ?? '',
+      ),
       note: j['note'] as String?,
       createdAt: DateTime.parse(
         j['created_at'] as String? ?? DateTime.now().toIso8601String(),
@@ -126,6 +138,8 @@ class UserProfile {
     'is_ti': isTi,
     'is_etp': isEtp,
     'flight_fitness_expiry': flightFitnessExpiry?.toIso8601String(),
+    'smi_expiry': smiExpiry?.toIso8601String(),
+    'job_fitness_expiry': jobFitnessExpiry?.toIso8601String(),
     'note': note,
   };
 
@@ -148,6 +162,8 @@ class UserProfile {
     bool? isTi,
     bool? isEtp,
     Object? flightFitnessExpiry = _sentinel,
+    Object? smiExpiry = _sentinel,
+    Object? jobFitnessExpiry = _sentinel,
     String? note,
   }) => UserProfile(
     id: id,
@@ -169,6 +185,12 @@ class UserProfile {
     flightFitnessExpiry: identical(flightFitnessExpiry, _sentinel)
         ? this.flightFitnessExpiry
         : flightFitnessExpiry as DateTime?,
+    smiExpiry: identical(smiExpiry, _sentinel)
+        ? this.smiExpiry
+        : smiExpiry as DateTime?,
+    jobFitnessExpiry: identical(jobFitnessExpiry, _sentinel)
+        ? this.jobFitnessExpiry
+        : jobFitnessExpiry as DateTime?,
     note: note ?? this.note,
     createdAt: createdAt,
     updatedAt: DateTime.now(),
