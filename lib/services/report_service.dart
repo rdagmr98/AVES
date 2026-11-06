@@ -9,10 +9,13 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/activity_models.dart';
+import '../models/reference_models.dart';
 import '../models/user_models.dart';
+import 'activity_service.dart';
 import 'currency_history.dart';
 import 'currency_service.dart';
 import 'p66_service.dart';
+import 'useful_days.dart';
 import 'user_service.dart';
 
 pw.Widget _matrixHeaderCell(
@@ -87,6 +90,7 @@ class ReportService {
   final _currencyService = CurrencyService();
   final _p66Service = P66Service();
   final _userService = UserService();
+  final _activityService = ActivityService();
 
   String _qualificationLabel(UserProfile user) {
     final quals = <String>[];
@@ -479,16 +483,151 @@ class ReportService {
       ),
     );
 
-    final Uint8List bytes = await pdf.save();
-    final blob = html.Blob([bytes], 'application/pdf');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.AnchorElement(href: url)
-      ..setAttribute(
-        'download',
-        'matrice_privilegi_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
-      )
-      ..click();
-    html.Url.revokeObjectUrl(url);
+    await _save(
+      pdf,
+      'matrice_privilegi_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+    );
+  }
+
+  /// Allegato D-P3-02 del MdQ (Em. 1): registro giornate lavorative utili già
+  /// compilato con le attività validate; restano da apporre le firme dei
+  /// tecnici, del Capo Squadra / Capo Linea e il visto del Capo Sezione.
+  Future<void> downloadUsefulDaysRegister({
+    required DateTime from,
+    required DateTime to,
+    OrgUnit? unit,
+  }) async {
+    final users = await _userService.getAllUsers();
+    final acts = <MaintenanceActivity>[];
+    for (final u in users.where(
+      (u) => unit == null || u.orgUnitId == unit.id,
+    )) {
+      acts.addAll(await _activityService.getUserMaintenanceActivities(u.id));
+    }
+    final rows = usefulDayRows(acts, from, to);
+    final df = DateFormat('dd/MM/yyyy');
+    final signer = unit == null
+        ? 'IL CAPO SQUADRA / IL CAPO LINEA'
+        : unit.code == 'LINEA'
+        ? 'IL CAPO LINEA'
+        : 'IL CAPO SQUADRA';
+    pw.Widget sign(String title) => pw.Column(
+      children: [
+        pw.Text(
+          title,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.SizedBox(height: 30),
+        pw.Container(width: 200, height: 0.6, color: PdfColors.black),
+      ],
+    );
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(28),
+        header: (_) => pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 8),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'Allegato D-P3-02 · Registro giornate lavorative utili',
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.Text(
+                'U.O.: ${unit?.name ?? 'tutte'}    '
+                'Periodo: ${df.format(from)} - ${df.format(to)}',
+                style: const pw.TextStyle(fontSize: 10),
+              ),
+            ],
+          ),
+        ),
+        footer: (ctx) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'Pagina ${ctx.pageNumber} di ${ctx.pagesCount}',
+            style: const pw.TextStyle(fontSize: 8),
+          ),
+        ),
+        build: (_) => [
+          pw.TableHelper.fromTextArray(
+            headers: const [
+              'N.',
+              'Data',
+              'Grado Cognome Nome',
+              'Certificato / abilitazione',
+              'Task svolto',
+              'C.I.P. / OdL / WO',
+              'Firma',
+            ],
+            data: [
+              for (var i = 0; i < rows.length; i++)
+                [
+                  '${i + 1}',
+                  df.format(rows[i].day),
+                  rows[i].name,
+                  [
+                    if (rows[i].licenseNumber.isNotEmpty)
+                      'Lic. ${rows[i].licenseNumber}',
+                    ...rows[i].qualifications,
+                  ].join('\n'),
+                  rows[i].tasks.join('; '),
+                  rows[i].orders.join(', '),
+                  '',
+                ],
+              // ponytail: righe vuote per chi non ha registrato nell'app.
+              for (var i = 0; i < 6; i++)
+                ['${rows.length + i + 1}', '', '', '', '', '', ''],
+            ],
+            headerStyle: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white,
+            ),
+            headerDecoration: const pw.BoxDecoration(
+              color: PdfColors.blueGrey800,
+            ),
+            cellStyle: const pw.TextStyle(fontSize: 8.5),
+            cellHeight: 26,
+            cellAlignment: pw.Alignment.centerLeft,
+            cellAlignments: const {
+              0: pw.Alignment.center,
+              1: pw.Alignment.center,
+            },
+            columnWidths: const {
+              0: pw.FlexColumnWidth(0.45),
+              1: pw.FlexColumnWidth(0.8),
+              2: pw.FlexColumnWidth(1.75),
+              3: pw.FlexColumnWidth(1.55),
+              4: pw.FlexColumnWidth(2.4),
+              5: pw.FlexColumnWidth(1.2),
+              6: pw.FlexColumnWidth(1.5),
+            },
+          ),
+          pw.SizedBox(height: 28),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+            children: [
+              sign(signer),
+              sign('VISTO\nIL CAPO SEZIONE MANTENIMENTO'),
+            ],
+          ),
+        ],
+      ),
+    );
+    final unitCode = unit == null ? '' : '_${unit.code}';
+    await _save(
+      pdf,
+      'registro_D-P3-02$unitCode'
+      '_${DateFormat('yyyyMMdd').format(from)}'
+      '_${DateFormat('yyyyMMdd').format(to)}.pdf',
+    );
   }
 
   Future<void> _downloadPdf({
@@ -536,6 +675,10 @@ class ReportService {
       ),
     );
 
+    await _save(pdf, fileName);
+  }
+
+  Future<void> _save(pw.Document pdf, String fileName) async {
     final Uint8List bytes = await pdf.save();
     final blob = html.Blob([bytes], 'application/pdf');
     final url = html.Url.createObjectUrlFromBlob(blob);

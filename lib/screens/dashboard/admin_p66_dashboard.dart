@@ -5,11 +5,14 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../constants/app_constants.dart';
+import '../../models/reference_models.dart';
 import '../../services/gh_db_service.dart';
 import '../../services/p66_service.dart';
 import '../../services/report_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/app_dropdown.dart';
 import '../../widgets/aves_logo_widget.dart';
+import '../../widgets/date_range_dialog.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminP66Dashboard extends ConsumerStatefulWidget {
@@ -290,9 +293,94 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
               icon: Icons.picture_as_pdf_outlined,
               onTap: _reportService.downloadP66Report,
             ),
+            const SizedBox(height: 8),
+            _NavButton(
+              label: 'Registro D-P3-02',
+              icon: Icons.assignment_outlined,
+              onTap: _printRegister,
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Registro giornate utili (D-P3-02): periodo predefinito = trimestre in
+  /// corso, perché a fine trimestre il Reparto comunica il 25%.
+  Future<void> _printRegister() async {
+    final now = DateTime.now();
+    final q = DateTime(now.year, (now.month - 1) ~/ 3 * 3 + 1);
+    var period = DateTimeRange(start: q, end: DateTime(q.year, q.month + 3, 0));
+    OrgUnit? unit;
+    final units = ref.read(authProvider).orgUnits;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Registro D-P3-02'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Giornate lavorative utili precompilate con le attività '
+                  'validate. Restano da firmare.',
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.date_range, size: 18),
+                  label: Text(
+                    '${_formatDate(period.start)} – ${_formatDate(period.end)}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: () async {
+                    final r = await showDateRangeDialog(
+                      ctx,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(now.year + 1, 12, 31),
+                      initialDateRange: period,
+                    );
+                    if (r != null) setDialogState(() => period = r);
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Text('U.O.'),
+                const SizedBox(height: 4),
+                AppDropdown<OrgUnit?>(
+                  initialValue: unit,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Tutte')),
+                    for (final u in units)
+                      DropdownMenuItem(
+                        value: u,
+                        child: Text(u.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => setDialogState(() => unit = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Annulla'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Stampa'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await _reportService.downloadUsefulDaysRegister(
+      from: period.start,
+      to: period.end,
+      unit: unit,
     );
   }
 
@@ -336,6 +424,11 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
             onPressed: _reportService.downloadP66Report,
             icon: const Icon(Icons.picture_as_pdf_outlined),
             tooltip: 'Scarica report P-66',
+          ),
+          IconButton(
+            onPressed: _printRegister,
+            icon: const Icon(Icons.assignment_outlined),
+            tooltip: 'Registro giornate utili D-P3-02',
           ),
           IconButton(
             onPressed: ref.read(authProvider).sync,
