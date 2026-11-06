@@ -1,6 +1,6 @@
 // node push/notify.test.mjs — quali notifiche diventano push.
 import assert from "node:assert/strict";
-import { nuove, payload } from "./notify.mjs";
+import { nuove, payload, scadute } from "./notify.mjs";
 
 const now = Date.parse("2026-10-22T10:00:00");
 const n = (id, user_id, extra = {}) => ({ id, user_id, type: "X", message: "m" + id, is_read: false, created_at: "2026-10-22T09:59:00.000", ...extra });
@@ -15,4 +15,8 @@ assert.deepEqual(got([{ ...before[0], is_read: true }]), {});
 assert.deepEqual(got([...before, n(6, "a", { is_read: true }), n(7, "a", { created_at: "2026-10-20T08:00:00.000" })]), {});
 assert.equal(payload(["x"]).body, "x");
 assert.equal(payload(["x", "y"]).body, "Hai 2 nuove notifiche:\nx\ny");
+// subscription scadute: solo 404/410, non gli errori transitori
+const subs = ["e1", "e2", "e3", "e4"].map((endpoint) => ({ endpoint }));
+const res = [{ status: "fulfilled" }, { reason: { statusCode: 410 } }, { reason: { statusCode: 500 } }, { reason: { statusCode: 404 } }];
+assert.deepEqual([...scadute(subs, res)], ["e2", "e4"]);
 console.log("notify ok");

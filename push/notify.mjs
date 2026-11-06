@@ -3,6 +3,7 @@
 // Uso: node push/notify.mjs <cartella checkout aves-data>   (env VAPID_PUBLIC, VAPID_PRIVATE)
 // Sta qui e non nel repo dati: il PAT pubblico del sito scrive su aves-data e non deve poter cambiare codice che vede i secret.
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 // ponytail: created_at è ora locale senza fuso; finestra larga solo contro notifiche vecchie riscritte da una cache datata
@@ -18,6 +19,10 @@ export function nuove(before, after, now = Date.now()) {
   return out;
 }
 
+/** Endpoint scaduti: il servizio push risponde 404/410 (browser disinstallato, permesso revocato). */
+export const scadute = (subs, results) =>
+  new Set(subs.filter((_, i) => [404, 410].includes(results[i].reason?.statusCode)).map((s) => s.endpoint));
+
 export const payload = (l) => ({ title: "AVES Tecnici", body: l.length === 1 ? l[0] : `Hai ${l.length} nuove notifiche:\n${l.join("\n")}` });
 
 async function main(dir) {
@@ -27,11 +32,14 @@ async function main(dir) {
   const subs = show("HEAD", "db/push_subscriptions.json");
   const { default: wp } = await import("web-push");
   wp.setVapidDetails("https://rdagmr98.github.io/AVES/", process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
-  const jobs = [...out].flatMap(([id, l]) => subs.filter((s) => s.user_id === id).map((s) =>
-    wp.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify(payload(l)), { TTL: 86400, urgency: "high" })));
-  const r = await Promise.allSettled(jobs);
+  const sent = subs.filter((s) => out.has(s.user_id));
+  const r = await Promise.allSettled(sent.map((s) =>
+    wp.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify(payload(out.get(s.user_id))), { TTL: 86400, urgency: "high" })));
+  // Le scadute escono dal file (stesso formato di GhDbService); il commit lo fa lo step successivo di push.yml.
+  const dead = scadute(sent, r);
+  if (dead.size) writeFileSync(`${dir}/db/push_subscriptions.json`, JSON.stringify(subs.filter((s) => !dead.has(s.endpoint))));
   // solo conteggi nel log: niente nomi né endpoint
-  console.log(`destinatari ${out.size}, invii ${r.filter((x) => x.status === "fulfilled").length}/${r.length}`);
+  console.log(`destinatari ${out.size}, invii ${r.filter((x) => x.status === "fulfilled").length}/${r.length}, scadute rimosse ${dead.size}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) await main(process.argv[2] || ".");
