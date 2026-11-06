@@ -560,7 +560,7 @@ class ReportService {
             headers: const [
               'N.',
               'Data',
-              'Grado Cognome Nome',
+              'Cognome Nome',
               'Certificato / abilitazione',
               'Task svolto',
               'C.I.P. / OdL / WO',
