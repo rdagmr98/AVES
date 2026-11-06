@@ -197,9 +197,13 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
             helicopterTypeIds: {heli.id},
           ),
           flight: [
-            if (crewTypes.contains('T') || crewTypes.contains('TOB'))
+            if (crewTypes.isNotEmpty)
               (
-                crewTypes.contains('T') ? 'Volo T' : 'Volo TOB',
+                crewTypes.contains('T')
+                    ? 'Volo T'
+                    : crewTypes.contains('TOB')
+                    ? 'Volo TOB'
+                    : 'Volo MTB',
                 '3 h a semestre',
                 crewStatus('flight_t'),
               ),
@@ -213,7 +217,7 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
                   crewStatus('tob_${heli.id}_${cap.tobCapabilityId}'),
                 ),
             if (crewTypes.contains('MTB'))
-              ('Mitragliere di Bordo', '', crewStatus('mdb')),
+              ('Mitragliere di Bordo', 'Poligono', crewStatus('mtb')),
           ],
         ),
       );
@@ -228,9 +232,13 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           expiry: _maintenanceExpiryDate(auth.currency['maintenance']),
           onTap: () => context.go('/activities/my?type=maintenance'),
         ),
-      if (auth.hasTCrew || auth.hasTobCrew)
+      if (auth.hasTCrew || auth.hasTobCrew || auth.hasMdbCrew)
         _CurrencyCard(
-          title: auth.hasTCrew ? 'Volo T' : 'Ore volo TOB',
+          title: auth.hasTCrew
+              ? 'Volo T'
+              : auth.hasTobCrew
+              ? 'Ore volo TOB'
+              : 'Ore volo MTB',
           status: crewStatus('flight_t'),
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'
@@ -266,11 +274,9 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
       if (auth.hasMdbCrew)
         _CurrencyCard(
           title: 'Mitragliere di Bordo',
-          status: crewStatus('mdb'),
-          subtitle: flightFitnessBlocking
-              ? 'Idoneità scaduta'
-              : _flightSubtitle(auth.currency['mdb']),
-          expiry: crewExpiry('mdb'),
+          status: crewStatus('mtb'),
+          subtitle: flightFitnessBlocking ? 'Idoneità scaduta' : 'Poligono',
+          expiry: crewExpiry('mtb'),
           onTap: () => context.go('/activities/my?type=flight'),
         ),
     ];

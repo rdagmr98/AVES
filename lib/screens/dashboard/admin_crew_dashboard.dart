@@ -149,9 +149,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       CurrencyStatus? flightStatus;
       CurrencyStatus? tobBaseStatus;
       CurrencyStatus? mdbStatus;
-      if (assignments.any((i) => i.crewType == 'T' || i.crewType == 'TOB')) {
-        flightStatus = await _currencyService.getFlightCurrency(user.id);
-      }
+      flightStatus = await _currencyService.getFlightCurrency(user.id);
       if (assignments.any((item) => item.crewType == 'TOB')) {
         tobBaseStatus = await _currencyService.getTobBaseCurrency(
           user.id,
@@ -992,12 +990,7 @@ class _CrewUserRow {
     int? capabilityId,
   ) {
     final statuses = <CurrencyStatus>[];
-    if ((crewTypeFilter == 'all' ||
-            crewTypeFilter == 'T' ||
-            crewTypeFilter == 'TOB') &&
-        flightStatus != null) {
-      statuses.add(flightStatus!);
-    }
+    if (flightStatus != null) statuses.add(flightStatus!);
     if (crewTypeFilter == 'all' || crewTypeFilter == 'TOB') {
       if (tobBaseStatus != null) {
         statuses.add(tobBaseStatus!);
@@ -1295,9 +1288,13 @@ class _CrewRecordDialog extends StatelessWidget {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            if (has('T') || has('TOB'))
+            if (roles.isNotEmpty)
               _qualRow(
-                '${has('T') ? 'T' : 'TOB'} · 3 h a semestre',
+                '${has('T')
+                    ? 'T'
+                    : has('TOB')
+                    ? 'TOB'
+                    : 'MTB'} · 3 h a semestre',
                 row.flightStatus,
               ),
             if (has('TOB'))
@@ -1436,11 +1433,13 @@ class _CrewRecordDialog extends StatelessWidget {
                   _flightTile(
                     context,
                     date: a.activityDate,
-                    title: [
-                      a.helicopterCode,
-                      a.isPoligono ? 'Volo poligono' : 'Volo',
-                      ?a.activityType,
-                    ].join('  ·  ') + hours(a.flightHours),
+                    title:
+                        [
+                          a.helicopterCode,
+                          a.isPoligono ? 'Volo poligono' : 'Volo',
+                          ?a.activityType,
+                        ].join('  ·  ') +
+                        hours(a.flightHours),
                     description: a.description,
                     edit: () => editFlightActivity(context, a),
                     what: 'il volo',
@@ -1453,11 +1452,13 @@ class _CrewRecordDialog extends StatelessWidget {
                   _flightTile(
                     context,
                     date: a.activityDate,
-                    title: [
-                      a.helicopterCode,
-                      'TOB ${a.tobCapabilityId == null ? 'volo base' : a.capabilityName}',
-                      ?a.activityType,
-                    ].join('  ·  ') + hours(a.flightHours),
+                    title:
+                        [
+                          a.helicopterCode,
+                          'TOB ${a.tobCapabilityId == null ? 'volo base' : a.capabilityName}',
+                          ?a.activityType,
+                        ].join('  ·  ') +
+                        hours(a.flightHours),
                     description: a.description,
                     edit: () => editTobActivity(context, a),
                     what: 'il TOB',

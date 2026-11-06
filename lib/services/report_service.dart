@@ -10,7 +10,6 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../models/activity_models.dart';
 import '../models/user_models.dart';
-import 'activity_service.dart';
 import 'currency_history.dart';
 import 'currency_service.dart';
 import 'p66_service.dart';
@@ -85,7 +84,6 @@ pw.Widget _matrixEmptyCell() {
 }
 
 class ReportService {
-  final _activityService = ActivityService();
   final _currencyService = CurrencyService();
   final _p66Service = P66Service();
   final _userService = UserService();
@@ -109,108 +107,63 @@ class ReportService {
       final tobCapabilities = await _userService.getUserTobCapabilities(
         user.id,
       );
-      final flightActivities = await _activityService.getUserFlightActivities(
-        user.id,
-      );
-      FlightActivity? lastFlight;
-      for (final activity in flightActivities) {
-        if (activity.isValidated) {
-          lastFlight = activity;
-          break;
-        }
-      }
       final qualifications = _qualificationLabel(user);
-      final flightStatus = assignments.any((item) => item.crewType == 'T')
-          ? await _currencyService.getFlightCurrency(user.id)
-          : null;
-      final mdbStatus = assignments.any((item) => item.crewType == 'MTB')
-          ? await _currencyService.getMdbCurrency(user.id, assignments)
+      // 3 h a semestre per T, TOB e MTB, come la dashboard.
+      final flightStatus = await _currencyService.getFlightCurrency(user.id);
+      final mtbStatus = assignments.any((item) => item.crewType == 'MTB')
+          ? await _currencyService.getMtbCurrency(
+              user.id,
+              assignments,
+              user.isTi,
+            )
           : null;
 
       for (final assignment in assignments) {
-        if (assignment.crewType == 'T') {
-          rows.add([
-            user.cognome,
-            user.nome,
-            user.numeroLicenza ?? '-',
-            user.orgUnitName,
-            qualifications,
-            'T',
-            assignment.helicopterCode,
-            '-',
-            '-',
-            _formatDate(lastFlight?.activityDate),
-            flightStatus?.statusText ?? 'NESSUN DATO',
-          ]);
-          continue;
-        }
-
+        List<String> row(String requisito, CurrencyStatus? status) => [
+          user.cognome,
+          user.nome,
+          user.numeroLicenza ?? '-',
+          user.orgUnitName,
+          qualifications,
+          assignment.crewType,
+          assignment.helicopterCode,
+          assignment.fascia ?? '-',
+          requisito,
+          _formatDate(status?.lastActivityDate),
+          status?.statusText ?? 'NESSUN DATO',
+        ];
+        rows.add(row('3 h a semestre', flightStatus));
+        if (assignment.crewType == 'T') continue;
         if (assignment.crewType == 'MTB') {
-          rows.add([
-            user.cognome,
-            user.nome,
-            user.numeroLicenza ?? '-',
-            user.orgUnitName,
-            qualifications,
-            'MTB',
-            assignment.helicopterCode,
-            assignment.fascia ?? '-',
-            '-',
-            _formatDate(lastFlight?.activityDate),
-            mdbStatus?.statusText ?? 'NESSUN DATO',
-          ]);
+          rows.add(row('Poligono', mtbStatus));
           continue;
         }
 
-        final capsForHelicopter = tobCapabilities
-            .where(
-              (item) => item.helicopterTypeId == assignment.helicopterTypeId,
-            )
-            .toList();
-
-        if (capsForHelicopter.isEmpty) {
-          rows.add([
-            user.cognome,
-            user.nome,
-            user.numeroLicenza ?? '-',
-            user.orgUnitName,
-            qualifications,
-            'TOB',
-            assignment.helicopterCode,
-            assignment.fascia ?? '-',
-            '-',
-            '-',
-            'NESSUN DATO',
-          ]);
-          continue;
-        }
-
-        for (final capability in capsForHelicopter) {
-          final status = await _currencyService.getTobCapabilityCurrencyStatus(
-            user.id,
-            capability.helicopterTypeId,
-            capability.tobCapabilityId,
-            capability.capabilityName,
-          );
-          final lastActivity = await _activityService
-              .getLastValidatedTobActivity(
+        // TOB: base (fascia) e capacità sull'elicottero, come la dashboard.
+        rows.add(
+          row(
+            'Base TOB',
+            await _currencyService.getTobBaseCurrency(
+              user.id,
+              assignment.fascia,
+            ),
+          ),
+        );
+        for (final capability in tobCapabilities.where(
+          (c) => c.helicopterTypeId == assignment.helicopterTypeId,
+        )) {
+          rows.add(
+            row(
+              capability.capabilityName,
+              await _currencyService.getTobCapabilityCurrencyStatus(
                 user.id,
+                capability.helicopterTypeId,
                 capability.tobCapabilityId,
-                helicopterTypeId: capability.helicopterTypeId,
-              );
-          rows.add([
-            user.cognome,
-            user.nome,
-            user.numeroLicenza ?? '-',
-            user.orgUnitName,
-            qualifications,
-            'TOB',
-            assignment.helicopterCode,
-            assignment.fascia ?? '-',
-            capability.capabilityName,
-            _formatDate(lastActivity?.activityDate),
-            status.statusText,
-          ]);
+                capability.capabilityName,
+                fascia: assignment.fascia,
+              ),
+            ),
+          );
         }
       }
     }
@@ -226,7 +179,7 @@ class ReportService {
         'Tipo Eq.',
         'Elicottero',
         'Fascia',
-        'Cap. TOB',
+        'Requisito',
         'Ultima Att.',
         'Stato',
       ],

@@ -244,6 +244,8 @@ class _CurrencySettingsScreenState
 
     // Filter criteria by admin type
     final criteria = provider.criteria.where((c) {
+      // MDB_FLIGHT non è più usato: le ore MTB sono le 3 h a semestre di FLIGHT_T.
+      if (c.criteriaType == 'MDB_FLIGHT') return false;
       if (auth.isAdminPriv && auth.isAdminCrew) return true;
       if (auth.isAdminPriv) return c.criteriaType == 'MAINTENANCE';
       if (auth.isAdminCrew) {
@@ -301,7 +303,7 @@ class _CurrencySettingsScreenState
       case 'MAINTENANCE':
         return 'Currency manutentiva';
       case 'FLIGHT_T':
-        return 'Currency volo T (piloti/copiloti)';
+        return 'Ore di volo a semestre (T, TOB, MTB)';
       case 'TOB_BASE':
         return 'Currency base TOB (qualsiasi volo come equipaggio)';
       case 'TOB_CAPABILITY':

@@ -656,8 +656,8 @@ class CurrencyService {
     Iterable<Map<String, dynamic>> crewOf(String type) =>
         crew.where((r) => r['crew_type'] == type);
 
-    // Le 3 h a semestre valgono per T e TOB.
-    final tEnd = endOf([...crewOf('T'), ...crewOf('TOB')]);
+    // Le 3 h a semestre valgono per T, TOB e MTB.
+    final tEnd = endOf(crew);
     if (tEnd != null) {
       final minHours = (await getFlightTCriteria())?.minHours ?? 3.0;
       addLosses(
@@ -873,24 +873,6 @@ class CurrencyService {
     return null;
   }
 
-  Future<CurrencyCriteria?> getMdbFlightCriteria() async {
-    for (final item in _db.criteria) {
-      if (item['criteria_type'] == 'MDB_FLIGHT') {
-        return CurrencyCriteria.fromJson(item);
-      }
-    }
-    return null;
-  }
-
-  Future<CurrencyCriteria?> getMdbPoligonoCriteria() async {
-    for (final item in _db.criteria) {
-      if (item['criteria_type'] == 'MDB_POLIGONO') {
-        return CurrencyCriteria.fromJson(item);
-      }
-    }
-    return null;
-  }
-
   Future<CurrencyCriteria?> getMtbPoligonoCriteria() async {
     for (final item in _db.criteria) {
       // criteria.json ha solo MDB_POLIGONO (nome storico): è quello che
@@ -1036,174 +1018,6 @@ class CurrencyService {
     );
   }
 
-  Future<CurrencyStatus> getMdbCurrency(
-    String userId,
-    List<UserCrewAssignment> crewAssignments,
-  ) async {
-    if (!crewAssignments.any((item) => item.crewType == 'MTB')) {
-      return const CurrencyStatus(
-        status: CurrencyStatusEnum.noData,
-        label: 'Nessuna assegnazione Mitragliere di Bordo',
-      );
-    }
-
-    final flightCriteria = await getMdbFlightCriteria();
-    final poligonoCriteria = await getMdbPoligonoCriteria();
-    final flightPeriodDays = flightCriteria?.periodDays ?? 180;
-    final minHours = flightCriteria?.minHours ?? 3.0;
-    final poligonoPeriodDays = poligonoCriteria?.periodDays ?? 365;
-    final minPoligonoCount = poligonoCriteria?.minCount ?? 1;
-
-    final flightHours = await _activityService.getFlightHoursInPeriod(
-      userId,
-      flightPeriodDays,
-    );
-    final validatedFlights =
-        _db.flightActs
-            .where(
-              (item) =>
-                  item['user_id'] == userId && item['is_validated'] == true,
-            )
-            .toList()
-          ..sort(
-            (a, b) => DateTime.parse(
-              b['activity_date'] as String,
-            ).compareTo(DateTime.parse(a['activity_date'] as String)),
-          );
-    final lastFlightDate = validatedFlights.isEmpty
-        ? null
-        : DateTime.parse(validatedFlights.first['activity_date'] as String);
-
-    final flightLabel =
-        'Mitragliere di Bordo (${formatHours(flightHours)} h / ${formatHours(minHours)} h)';
-    final flightExpiry = lastFlightDate?.add(Duration(days: flightPeriodDays));
-    final flightDaysLeft = flightExpiry?.difference(DateTime.now()).inDays;
-    final flightStatus = flightHours < minHours
-        ? CurrencyStatus(
-            status: lastFlightDate == null
-                ? CurrencyStatusEnum.expired
-                : CurrencyStatusEnum.warning,
-            lastActivityDate: lastFlightDate,
-            expiryDate: flightExpiry,
-            daysUntilExpiry: flightDaysLeft?.clamp(-9999, 9999),
-            label: flightLabel,
-            flightHours: flightHours,
-            minFlightHours: minHours,
-          )
-        : CurrencyStatus(
-            status: _computeStatus(
-              lastDate: lastFlightDate,
-              periodDays: flightPeriodDays,
-              label: flightLabel,
-            ).status,
-            lastActivityDate: lastFlightDate,
-            expiryDate: flightExpiry,
-            daysUntilExpiry: flightDaysLeft?.clamp(-9999, 9999),
-            label: flightLabel,
-            flightHours: flightHours,
-            minFlightHours: minHours,
-          );
-
-    final poligonoSince = DateTime.now().subtract(
-      Duration(days: poligonoPeriodDays),
-    );
-    final poligonoActs =
-        _db.flightActs
-            .where(
-              (item) =>
-                  item['user_id'] == userId &&
-                  item['is_validated'] == true &&
-                  item['is_poligono'] == true,
-            )
-            .toList()
-          ..sort(
-            (a, b) => DateTime.parse(
-              b['activity_date'] as String,
-            ).compareTo(DateTime.parse(a['activity_date'] as String)),
-          );
-    final recentPoligonoActs = poligonoActs.where(
-      (item) => !DateTime.parse(
-        item['activity_date'] as String,
-      ).isBefore(poligonoSince),
-    );
-    final poligonoCount = recentPoligonoActs.length;
-    final lastPoligonoDate = poligonoActs.isEmpty
-        ? null
-        : DateTime.parse(poligonoActs.first['activity_date'] as String);
-    final poligonoBaseStatus = _computeStatus(
-      lastDate: lastPoligonoDate,
-      periodDays: poligonoPeriodDays,
-      label: 'Poligono MTB',
-    );
-    final poligonoStatus = poligonoCount < minPoligonoCount
-        ? CurrencyStatus(
-            status: poligonoBaseStatus.lastActivityDate == null
-                ? CurrencyStatusEnum.expired
-                : poligonoBaseStatus.status,
-            lastActivityDate: poligonoBaseStatus.lastActivityDate,
-            expiryDate: poligonoBaseStatus.expiryDate,
-            daysUntilExpiry: poligonoBaseStatus.daysUntilExpiry,
-            label:
-                'Poligono MTB ($poligonoCount/$minPoligonoCount)${poligonoCount < minPoligonoCount ? ' · Poligono mancante' : ''}',
-          )
-        : CurrencyStatus(
-            status: poligonoBaseStatus.status,
-            lastActivityDate: poligonoBaseStatus.lastActivityDate,
-            expiryDate: poligonoBaseStatus.expiryDate,
-            daysUntilExpiry: poligonoBaseStatus.daysUntilExpiry,
-            label: 'Poligono MTB ($poligonoCount/$minPoligonoCount)',
-          );
-
-    final statuses = [flightStatus, poligonoStatus];
-    CurrencyStatusEnum overallStatus = CurrencyStatusEnum.valid;
-    if (statuses.any((item) => item.status == CurrencyStatusEnum.expired)) {
-      overallStatus = CurrencyStatusEnum.expired;
-    } else if (statuses.any(
-      (item) => item.status == CurrencyStatusEnum.warning,
-    )) {
-      overallStatus = CurrencyStatusEnum.warning;
-    }
-
-    final reasons = <String>[];
-    if (flightHours < minHours) {
-      reasons.add('Ore insufficienti');
-    }
-    if (poligonoCount < minPoligonoCount) {
-      reasons.add('Poligono mancante');
-    }
-    if (poligonoStatus.status == CurrencyStatusEnum.expired &&
-        !reasons.contains('Poligono scaduto')) {
-      reasons.add('Poligono scaduto');
-    }
-
-    final labelSuffix = reasons.isEmpty ? 'OK' : reasons.join(' · ');
-    final daysCandidates = [
-      flightStatus.daysUntilExpiry,
-      poligonoStatus.daysUntilExpiry,
-    ].whereType<int>().toList();
-    daysCandidates.sort();
-
-    return CurrencyStatus(
-      status: overallStatus,
-      lastActivityDate: [lastFlightDate, lastPoligonoDate]
-          .whereType<DateTime>()
-          .fold<DateTime?>(null, (latest, value) {
-            if (latest == null || value.isAfter(latest)) {
-              return value;
-            }
-            return latest;
-          }),
-      expiryDate: flightStatus.expiryDate,
-      secondaryExpiryDate: poligonoStatus.expiryDate,
-      secondaryExpiryLabel: 'Poligono',
-      daysUntilExpiry: daysCandidates.isEmpty ? null : daysCandidates.first,
-      label:
-          'Mitragliere di Bordo · ${formatHours(flightHours)}/${formatHours(minHours)} h · Poligono $poligonoCount/$minPoligonoCount · $labelSuffix',
-      flightHours: flightHours,
-      minFlightHours: minHours,
-    );
-  }
-
   Future<Map<String, CurrencyStatus>> getFullCurrency(
     String userId,
     List<UserTobCapability> tobCaps,
@@ -1216,8 +1030,8 @@ class CurrencyService {
     );
     final crewTypes = crews.map((item) => item['crew_type'] as String).toSet();
 
-    // 3 h a semestre: anche per i TOB senza T.
-    if (crewTypes.contains('T') || crewTypes.contains('TOB')) {
+    // 3 h a semestre per ogni equipaggio: T, TOB e MTB (MTB anche poligono).
+    if (crewTypes.isNotEmpty) {
       result['flight_t'] = await getFlightCurrency(userId);
     }
 

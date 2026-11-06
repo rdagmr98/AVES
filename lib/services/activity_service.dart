@@ -411,21 +411,6 @@ class ActivityService {
     return items.map(_toFlight).toList();
   }
 
-  Future<double> getFlightHoursInPeriod(String userId, int periodDays) async {
-    final since = DateTime.now().subtract(Duration(days: periodDays));
-    return _db.flightActs
-        .where(
-          (item) =>
-              item['user_id'] == userId &&
-              item['is_validated'] == true &&
-              !_parseDate(item, 'activity_date').isBefore(since),
-        )
-        .fold<double>(
-          0.0,
-          (sum, item) => sum + (item['flight_hours'] as num).toDouble(),
-        );
-  }
-
   Future<void> addTobActivity(TobActivity act) async {
     final rows = _db.tobActs;
     final now = DateTime.now().toIso8601String();
