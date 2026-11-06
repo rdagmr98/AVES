@@ -44,7 +44,8 @@ Future<Map<String, dynamic>?> showActivityEditDialog(
   // ponytail: controller non disposti, il dialog li usa ancora durante
   // l'animazione di chiusura; il GC li raccoglie.
   final desc = TextEditingController(text: description ?? '');
-  final hoursText = hours == null ? '' : formatHours(hours);
+  // 0 = da inserire (nuovo volo, TOB vecchi senza ore): campo vuoto.
+  final hoursText = hours == null || hours == 0 ? '' : formatHours(hours);
   final hoursCtrl = TextEditingController(text: hoursText);
   final textCtrls = {
     for (final MapEntry(:key, value: (_, initial)) in texts.entries)
@@ -425,6 +426,108 @@ Future<bool> insertMaintenanceActivity(
   );
   return true;
 }
+
+const _volo = -1;
+
+/// Volo inserito dall'admin dalla scheda equipaggio, già validato: T e MTB
+/// in `flight_acts`, TOB in `tob_acts` (capacità nulla = volo base).
+Future<bool> insertFlight(
+  BuildContext context,
+  String userId,
+  String adminId,
+) async {
+  final users = UserService();
+  final crew = await users.getUserCrewAssignments(userId);
+  final caps = await users.getUserTobCapabilities(userId);
+  if (!context.mounted) return false;
+  final helis = {for (final c in crew) c.helicopterTypeId: c.helicopterCode};
+  bool has(int heli, String type) =>
+      crew.any((c) => c.helicopterTypeId == heli && c.crewType == type);
+  final f = await showActivityEditDialog(
+    context,
+    title: 'Nuovo volo',
+    date: DateTime.now(),
+    helicopters: helis,
+    helicopterId: helis.keys.firstOrNull,
+    detailLabel: 'Tipo',
+    detailKey: 'kind',
+    details: (heli) => {
+      if (has(heli, 'T') || has(heli, 'MTB')) _volo: 'Volo',
+      if (has(heli, 'TOB')) ...{
+        null: 'TOB · volo base',
+        for (final cap in caps.where((c) => c.helicopterTypeId == heli))
+          cap.tobCapabilityId: 'TOB · ${cap.capabilityName}',
+      },
+    },
+    // Volo se c'è T/MTB, altrimenti il dialog ripiega sul TOB volo base.
+    detailId: _volo,
+    hours: 0,
+    poligonoHelicopters: {
+      for (final c in crew)
+        if (c.crewType == 'MTB') c.helicopterTypeId,
+    },
+  );
+  final heli = f?['helicopter_type_id'] as int?;
+  if (f == null || heli == null) return false;
+  final date = _date(f, 'activity_date')!;
+  final hours = (f['flight_hours'] as num).toDouble();
+  final desc = f['description'] as String?;
+  final kind = f['kind'] as int?;
+  final acts = ActivityService();
+  if (kind == _volo) {
+    await acts.addFlightActivityValidated(
+      FlightActivity(
+        userId: userId,
+        helicopterTypeId: heli,
+        activityDate: date,
+        flightHours: hours,
+        description: desc,
+        isPoligono: f['is_poligono'] == true,
+        submittedBy: adminId,
+      ),
+      adminId,
+    );
+  } else {
+    await acts.addTobActivityValidated(
+      TobActivity(
+        userId: userId,
+        helicopterTypeId: heli,
+        tobCapabilityId: kind,
+        activityDate: date,
+        flightHours: hours,
+        description: desc,
+        submittedBy: adminId,
+      ),
+      adminId,
+    );
+  }
+  return true;
+}
+
+Future<bool> confirmAction(
+  BuildContext context,
+  String title,
+  String message,
+  String action,
+) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    ) ==
+    true;
 
 /// [type]: 'NAM', 'MHF' o 'NAM_MHF' (due seminari nella stessa data).
 Future<bool> insertSeminar(

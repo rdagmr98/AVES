@@ -15,6 +15,7 @@ import '../../services/currency_service.dart';
 import '../../services/hours_format.dart';
 import '../../services/report_service.dart';
 import '../../services/user_service.dart';
+import '../../widgets/activity_edit_dialog.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/currency_badge_widget.dart';
@@ -333,15 +334,30 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     await _launchCrewEmail(rowsToNotify);
   }
 
+  Future<(List<FlightActivity>, List<TobActivity>)> _validatedFlights(
+    String userId,
+  ) async => (
+    (await _activityService.getUserFlightActivities(
+      userId,
+    )).where((a) => a.isValidated).toList(),
+    (await _activityService.getUserTobActivities(
+      userId,
+    )).where((a) => a.isValidated).toList(),
+  );
+
   Future<void> _showUserDetail(_CrewUserRow initial) async {
     var row = initial;
     var history = _currencyService.getFlightCurrencyHistory(row.user.id);
+    var flights = _validatedFlights(row.user.id);
+    final adminId = ref.read(authProvider).userProfile!.id;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setD) => _CrewRecordDialog(
           row: row,
           history: history,
+          flights: flights,
+          adminId: adminId,
           onEmail: () => _launchCrewEmail([row]),
           onCourse: () async {
             Navigator.of(dialogContext).pop();
@@ -357,6 +373,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
                   _rows.where((r) => r.user.id == row.user.id).firstOrNull ??
                   row;
               history = _currencyService.getFlightCurrencyHistory(row.user.id);
+              flights = _validatedFlights(row.user.id);
             });
           },
         ),
@@ -1149,6 +1166,8 @@ class _CrewRecordDialog extends StatelessWidget {
   const _CrewRecordDialog({
     required this.row,
     required this.history,
+    required this.flights,
+    required this.adminId,
     required this.onEmail,
     required this.onCourse,
     required this.onChanged,
@@ -1156,6 +1175,8 @@ class _CrewRecordDialog extends StatelessWidget {
 
   final _CrewUserRow row;
   final Future<List<CurrencyEvent>> history;
+  final Future<(List<FlightActivity>, List<TobActivity>)> flights;
+  final String adminId;
   final VoidCallback onEmail;
   final VoidCallback onCourse;
   final Future<void> Function() onChanged;
@@ -1307,6 +1328,159 @@ class _CrewRecordDialog extends StatelessWidget {
     );
   }
 
+  Widget _flightTile(
+    BuildContext context, {
+    required DateTime date,
+    required String title,
+    String? description,
+    required Future<bool> Function() edit,
+    required String what,
+    required Future<void> Function() delete,
+  }) => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              _fmt(date),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if ((description ?? '').isNotEmpty)
+                  Text(
+                    description!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Modifica',
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            onPressed: () async {
+              if (await edit()) await onChanged();
+            },
+          ),
+          IconButton(
+            tooltip: 'Elimina',
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 20,
+              color: AppColors.currencyExpired,
+            ),
+            onPressed: () async {
+              final ok = await confirmAction(
+                context,
+                'Elimina $what',
+                'Eliminare $what del ${_fmt(date)}? La currency verrà ricalcolata.',
+                'Elimina',
+              );
+              if (!ok) return;
+              await delete();
+              await onChanged();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildFlights(BuildContext context) {
+    final acts = ActivityService();
+    String hours(double h) => h > 0 ? '  ·  ${formatHours(h)} h' : '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _sectionTitle('Voli validati')),
+            TextButton.icon(
+              onPressed: () async {
+                if (await insertFlight(context, row.user.id, adminId)) {
+                  await onChanged();
+                }
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Volo'),
+            ),
+          ],
+        ),
+        FutureBuilder(
+          future: flights,
+          builder: (_, snap) {
+            final data = snap.data;
+            if (data == null) return const LinearProgressIndicator();
+            final (fl, tob) = data;
+            final tiles = <(DateTime, Widget)>[
+              for (final a in fl)
+                (
+                  a.activityDate,
+                  _flightTile(
+                    context,
+                    date: a.activityDate,
+                    title: [
+                      a.helicopterCode,
+                      a.isPoligono ? 'Volo poligono' : 'Volo',
+                      ?a.activityType,
+                    ].join('  ·  ') + hours(a.flightHours),
+                    description: a.description,
+                    edit: () => editFlightActivity(context, a),
+                    what: 'il volo',
+                    delete: () => acts.deleteFlightActivity(a.id!),
+                  ),
+                ),
+              for (final a in tob)
+                (
+                  a.activityDate,
+                  _flightTile(
+                    context,
+                    date: a.activityDate,
+                    title: [
+                      a.helicopterCode,
+                      'TOB ${a.tobCapabilityId == null ? 'volo base' : a.capabilityName}',
+                      ?a.activityType,
+                    ].join('  ·  ') + hours(a.flightHours),
+                    description: a.description,
+                    edit: () => editTobActivity(context, a),
+                    what: 'il TOB',
+                    delete: () => acts.deleteTobActivity(a.id!),
+                  ),
+                ),
+            ]..sort((a, b) => b.$1.compareTo(a.$1));
+            if (tiles.isEmpty) {
+              return const Text(
+                'Nessun volo validato.',
+                style: TextStyle(
+                  fontStyle: FontStyle.italic,
+                  color: AppColors.textSecondary,
+                ),
+              );
+            }
+            return Column(children: [for (final t in tiles) t.$2]);
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildHistory() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -1452,18 +1626,25 @@ class _CrewRecordDialog extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      flex: 3,
+                      flex: 2,
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
-                        child: _buildQualifications(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildQualifications(),
+                            const SizedBox(height: 16),
+                            _buildHistory(),
+                          ],
+                        ),
                       ),
                     ),
                     const VerticalDivider(width: 1),
                     Expanded(
-                      flex: 2,
+                      flex: 3,
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
-                        child: _buildHistory(),
+                        child: _buildFlights(context),
                       ),
                     ),
                   ],
@@ -1477,6 +1658,8 @@ class _CrewRecordDialog extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildQualifications(),
+                      const SizedBox(height: 20),
+                      _buildFlights(context),
                       const SizedBox(height: 20),
                       _buildHistory(),
                     ],

@@ -1595,38 +1595,13 @@ class _StatCardData {
   final VoidCallback? onTap;
 }
 
-Future<bool> _confirmAction(
-  BuildContext context,
-  String title,
-  String message,
-  String action,
-) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(c).pop(false),
-            child: const Text('Annulla'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(c).pop(true),
-            child: Text(action),
-          ),
-        ],
-      ),
-    ) ==
-    true;
-
 /// Revoca con conferma: la riga passa ad `active: false` e resta nello storico.
 Future<bool> _revokePrivilege(
   BuildContext context,
   UserProfile user,
   PrivilegeCurrencyStatus ps,
 ) async {
-  final ok = await _confirmAction(
+  final ok = await confirmAction(
     context,
     'Togli privilegio',
     'Togliere il privilegio ${ps.privilegeName} su ${ps.helicopterCode} a ${user.fullName}? Resta nello storico currency; l\'utente torna GO se era l\'unico privilegio scaduto.',
@@ -2094,7 +2069,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
   }
 
   Future<bool> _confirm(String title, String message, String action) =>
-      _confirmAction(context, title, message, action);
+      confirmAction(context, title, message, action);
 
   Future<void> _removePrivilege(PrivilegeCurrencyStatus ps) async {
     if (await _revokePrivilege(context, _row.user, ps)) await _afterChange();
