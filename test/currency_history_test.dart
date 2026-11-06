@@ -179,4 +179,21 @@ void main() {
       isTrue,
     );
   });
+
+  test('potatura notifiche: lette/cancellate 180 gg, tutte 365 gg', () {
+    final now = DateTime(2026, 11, 6);
+    Map<String, dynamic> n(int days, bool read) => {
+      'id': days * 10 + (read ? 1 : 0),
+      'is_read': read,
+      'created_at': now.subtract(Duration(days: days)).toIso8601String(),
+    };
+    final kept = pruneNotifications([
+      n(10, true),
+      n(200, true),
+      n(200, false),
+      n(400, false),
+      {'id': 1, 'is_read': true},
+    ], now);
+    expect(kept.map((e) => e['id']), [101, 2000, 1]);
+  });
 }

@@ -151,6 +151,21 @@ Map<int, String> proposedOjt(
   };
 }
 
+/// Notifiche da tenere: notifications.json oltre 1 MB non si legge più con la
+/// Contents API, quindi via le lette/cancellate dopo 180 giorni e tutte dopo
+/// un anno.
+// ponytail: una currency ancora scaduta dopo 180 giorni torna notificata una
+// volta (la letta non c'è più): fa da promemoria, va bene così.
+List<Map<String, dynamic>> pruneNotifications(
+  List<Map<String, dynamic>> notifications,
+  DateTime now,
+) => notifications.where((n) {
+  final created = DateTime.tryParse(n['created_at'] as String? ?? '');
+  if (created == null) return true;
+  final age = now.difference(created).inDays;
+  return age <= 365 && (age <= 180 || n['is_read'] == false);
+}).toList();
+
 /// Notifica di currency già inviata: non letta, oppure letta ma dello stesso
 /// episodio (stessa scadenza). Così una notifica letta non torna a ogni sync.
 bool currencyNotificationSent(

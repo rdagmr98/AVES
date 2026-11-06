@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/gh_config.dart';
 import '../models/activity_models.dart';
+import '../models/user_models.dart';
 import 'gh_db_service.dart';
 import 'web_notification_service.dart';
 
@@ -60,6 +61,10 @@ class NotificationService {
     return _defaultTitle;
   }
 
+  /// Pre-registrato (nessuna password): non ha un account per leggerle.
+  bool _noAccount(String userId) =>
+      _db.users.any((u) => u['id'] == userId && UserProfile.preRegistered(u));
+
   Future<void> createNotification({
     required String userId,
     required String type,
@@ -67,6 +72,7 @@ class NotificationService {
     bool dedupeUnread = false,
     Map<String, dynamic>? metadata,
   }) async {
+    if (_noAccount(userId)) return;
     final notifications = _db.notifications;
     final exists =
         dedupeUnread &&
@@ -108,6 +114,7 @@ class NotificationService {
     final notifications = _db.notifications;
     var changed = false;
     for (final entry in entries) {
+      if (_noAccount(entry.userId)) continue;
       final exists =
           dedupeUnread &&
           notifications.any(
@@ -196,7 +203,11 @@ class NotificationService {
 
   Future<List<NotificationModel>> getNotifications(String userId) async {
     final items =
-        _db.notifications.where((item) => item['user_id'] == userId).toList()
+        _db.notifications
+            .where(
+              (item) => item['user_id'] == userId && item['deleted'] != true,
+            )
+            .toList()
           ..sort(
             (a, b) => DateTime.parse(
               b['created_at'] as String,
@@ -253,21 +264,22 @@ class NotificationService {
     }
   }
 
-  Future<void> deleteNotification(int notificationId) async {
-    final notifications = _db.notifications;
-    final updated = notifications
-        .where((n) => n['id'] != notificationId)
-        .toList();
-    if (updated.length != notifications.length) {
-      await _db.saveNotifications(updated);
-    }
-  }
+  /// Le notifiche di currency (con `episode`) restano come traccia nascosta:
+  /// senza, il sync successivo le ricreerebbe finché la scadenza è la stessa.
+  List<Map<String, dynamic>> _delete(bool Function(Map<String, dynamic>) hit) =>
+      [
+        for (final n in _db.notifications)
+          if (!hit(n))
+            n
+          else if (n['episode'] != null)
+            {...n, 'deleted': true, 'is_read': true},
+      ];
 
-  Future<void> deleteAll(String userId) async {
-    final notifications = _db.notifications;
-    final updated = notifications.where((n) => n['user_id'] != userId).toList();
-    await _db.saveNotifications(updated);
-  }
+  Future<void> deleteNotification(int notificationId) =>
+      _db.saveNotifications(_delete((n) => n['id'] == notificationId));
+
+  Future<void> deleteAll(String userId) =>
+      _db.saveNotifications(_delete((n) => n['user_id'] == userId));
 
   Future<void> syncUnreadSystemNotifications(String userId) async {
     final unread = await getUnreadNotifications(userId);

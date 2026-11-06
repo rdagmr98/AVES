@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/gh_config.dart';
 import 'crypto_service.dart';
+import 'currency_history.dart';
 import 'name_format.dart';
 
 class GhDbService {
@@ -480,7 +481,7 @@ class GhDbService {
     bool fresh = false,
   }) => _writeFile(
     'notifications.json',
-    data,
+    pruneNotifications(data, DateTime.now()),
     fresh || _pending['notifications.json'] == pushCommitMsg
         ? pushCommitMsg
         : 'aggiornamento notifiche',
