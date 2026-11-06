@@ -8,7 +8,6 @@ import '../../widgets/date_range_dialog.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
 import '../../models/activity_models.dart';
-import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/currency_history.dart';
@@ -30,14 +29,7 @@ class InsertActivityAdminScreen extends ConsumerStatefulWidget {
       _InsertActivityAdminScreenState();
 }
 
-enum _AdminInsertTabType {
-  workOrder,
-  maintenance,
-  seminar,
-  flight,
-  tob,
-  crewFlight,
-}
+enum _AdminInsertTabType { workOrder, maintenance, seminar, crewFlight }
 
 class _InsertActivityAdminScreenState
     extends ConsumerState<InsertActivityAdminScreen>
@@ -52,12 +44,8 @@ class _InsertActivityAdminScreenState
   final _maintenanceMatricolaCtrl = TextEditingController();
   final _maintenanceNumCarrCtrl = TextEditingController();
   final _maintenanceOrdLavCtrl = TextEditingController();
-  final _flightDescCtrl = TextEditingController();
-  final _tobDescCtrl = TextEditingController();
   final _seminarDescCtrl = TextEditingController();
-  final _flightHoursCtrl = TextEditingController();
   final _crewFlightHoursCtrl = TextEditingController();
-  final _tobHoursCtrl = TextEditingController();
   final _crewFlightDescCtrl = TextEditingController();
   final _workOrderMatricolaCtrl = TextEditingController();
   final _workOrderNumCarrCtrl = TextEditingController();
@@ -69,9 +57,6 @@ class _InsertActivityAdminScreenState
   bool _loading = true;
   bool _saving = false;
   List<UserProfile> _users = [];
-  UserProfile? _selectedUser;
-  List<UserCrewAssignment> _crews = [];
-  List<UserTobCapability> _tobCapabilities = [];
 
   int? _maintenanceHelicopterId;
   // privilegio -> tecnici selezionati
@@ -79,13 +64,6 @@ class _InsertActivityAdminScreenState
   String _maintenanceUserSearch = '';
   DateTime _maintenanceDate = DateTime.now();
 
-  int? _flightHelicopterId;
-  DateTime _flightDate = DateTime.now();
-  bool _flightIsPoligono = false;
-
-  int? _tobHelicopterId;
-  int? _tobCapabilityId;
-  DateTime _tobDate = DateTime.now();
   DateTime _seminarDate = DateTime.now();
   String _seminarType = 'NAM';
   final Set<String> _seminarUserIds = {};
@@ -101,7 +79,9 @@ class _InsertActivityAdminScreenState
   int? _crewFlightHelicopterId;
   DateTime _crewFlightDate = DateTime.now();
   bool _crewFlightIsPoligono = false;
-  final List<_CrewEntry> _crewEntries = [];
+  // persona -> ruolo nel volo: 'T', 'MTB', 'TOB' (volo base) o 'TOB:<capacità>'
+  final Map<String, String> _crewPick = {};
+  String _crewSearch = '';
 
   @override
   void initState() {
@@ -114,17 +94,12 @@ class _InsertActivityAdminScreenState
         _AdminInsertTabType.seminar,
       ];
     } else if (auth.isAdminCrew) {
-      _tabs = const [
-        _AdminInsertTabType.crewFlight,
-        _AdminInsertTabType.flight,
-        _AdminInsertTabType.tob,
-      ];
+      _tabs = const [_AdminInsertTabType.crewFlight];
     } else {
       _tabs = const [
         _AdminInsertTabType.maintenance,
         _AdminInsertTabType.seminar,
-        _AdminInsertTabType.flight,
-        _AdminInsertTabType.tob,
+        _AdminInsertTabType.crewFlight,
       ];
     }
     _tabController = TabController(length: _tabs.length, vsync: this);
@@ -138,12 +113,8 @@ class _InsertActivityAdminScreenState
     _maintenanceMatricolaCtrl.dispose();
     _maintenanceNumCarrCtrl.dispose();
     _maintenanceOrdLavCtrl.dispose();
-    _flightDescCtrl.dispose();
-    _tobDescCtrl.dispose();
     _seminarDescCtrl.dispose();
-    _flightHoursCtrl.dispose();
     _crewFlightHoursCtrl.dispose();
-    _tobHoursCtrl.dispose();
     _crewFlightDescCtrl.dispose();
     _workOrderMatricolaCtrl.dispose();
     _workOrderNumCarrCtrl.dispose();
@@ -171,26 +142,6 @@ class _InsertActivityAdminScreenState
         return item.isApproved;
       }).toList();
       _loading = false;
-    });
-  }
-
-  Future<void> _selectUser(UserProfile? user) async {
-    setState(() {
-      _selectedUser = user;
-      _crews = [];
-      _tobCapabilities = [];
-    });
-    if (user == null) {
-      return;
-    }
-    final crews = await _userService.getUserCrewAssignments(user.id);
-    final tobCapabilities = await _userService.getUserTobCapabilities(user.id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _crews = crews;
-      _tobCapabilities = tobCapabilities;
     });
   }
 
@@ -249,84 +200,6 @@ class _InsertActivityAdminScreenState
           );
         }
       }
-      _finish();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
-  }
-
-  Future<void> _submitFlight() async {
-    final user = _selectedUser;
-    final adminId = ref.read(authProvider).userProfile?.id;
-    final hours = parseHours(_flightHoursCtrl.text);
-    if (user == null ||
-        adminId == null ||
-        _flightHelicopterId == null ||
-        hours == null ||
-        hours <= 0) {
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      await _activityService.addFlightActivityValidated(
-        FlightActivity(
-          userId: user.id,
-          helicopterTypeId: _flightHelicopterId!,
-          activityDate: _flightDate,
-          flightHours: hours,
-          description: _flightDescCtrl.text.trim().isEmpty
-              ? null
-              : _flightDescCtrl.text.trim(),
-          isPoligono: _flightIsPoligono,
-          submittedBy: adminId,
-        ),
-        adminId,
-      );
-      _finish();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    }
-  }
-
-  Future<void> _submitTob() async {
-    final user = _selectedUser;
-    final adminId = ref.read(authProvider).userProfile?.id;
-    final hours = parseHours(_tobHoursCtrl.text);
-    if (user == null ||
-        adminId == null ||
-        _tobHelicopterId == null ||
-        hours == null ||
-        hours <= 0) {
-      return;
-    }
-    final desc = _tobDescCtrl.text.trim().isEmpty
-        ? null
-        : _tobDescCtrl.text.trim();
-    setState(() => _saving = true);
-    try {
-      // Senza capacità = volo base TOB: resta tra le attività TOB.
-      await _activityService.addTobActivityValidated(
-        TobActivity(
-          userId: user.id,
-          helicopterTypeId: _tobHelicopterId!,
-          tobCapabilityId: _tobCapabilityId,
-          activityDate: _tobDate,
-          flightHours: hours,
-          description: desc,
-          submittedBy: adminId,
-        ),
-        adminId,
-      );
       _finish();
     } catch (e) {
       if (mounted) {
@@ -400,122 +273,6 @@ class _InsertActivityAdminScreenState
           context,
         ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
-    }
-  }
-
-  Future<void> _addCrewEntry(List<TobCapability> tobCapabilities) async {
-    final helicopterId = _crewFlightHelicopterId;
-    if (helicopterId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona prima un elicottero.')),
-      );
-      return;
-    }
-    final availableUsers = _users
-        .where((u) => !_crewEntries.any((e) => e.user.id == u.id))
-        .toList(growable: false);
-    final roleItems = <DropdownMenuItem<String>>[
-      const DropdownMenuItem(value: 'T', child: Text('T')),
-      const DropdownMenuItem(value: 'TOB', child: Text('TOB')),
-      const DropdownMenuItem(value: 'MTB', child: Text('MTB')),
-    ];
-    final capabilityItems = tobCapabilities
-        .map(
-          (item) =>
-              DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
-        )
-        .toList(growable: false);
-
-    final result = await showDialog<_CrewEntry>(
-      context: context,
-      builder: (ctx) {
-        String? userId;
-        String role = 'T';
-        int? capId;
-        String? capName;
-        return StatefulBuilder(
-          builder: (context, setD) => AlertDialog(
-            scrollable: true,
-            title: const Text('Aggiungi membro equipaggio'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppDropdown<String>(
-                  decoration: const InputDecoration(labelText: 'Membro'),
-                  menuMaxHeight: 300,
-                  items: availableUsers
-                      .map(
-                        (u) => DropdownMenuItem<String>(
-                          value: u.id,
-                          child: Text(
-                            '${u.fullName} · ${u.numeroLicenza ?? ''}',
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (v) => setD(() => userId = v),
-                ),
-                const SizedBox(height: 12),
-                AppDropdown<String>(
-                  initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Ruolo'),
-                  items: roleItems,
-                  onChanged: (v) => setD(() {
-                    role = v ?? 'T';
-                    capId = null;
-                    capName = null;
-                  }),
-                ),
-                if (role == 'TOB') ...[
-                  const SizedBox(height: 12),
-                  AppDropdown<int>(
-                    decoration: const InputDecoration(
-                      labelText: 'Capacità TOB',
-                    ),
-                    menuMaxHeight: 300,
-                    items: capabilityItems,
-                    onChanged: (v) {
-                      setD(() {
-                        capId = v;
-                        capName = tobCapabilities
-                            .firstWhere((c) => c.id == v)
-                            .name;
-                      });
-                    },
-                  ),
-                ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (userId == null) {
-                    return;
-                  }
-                  final user = _users.firstWhere((u) => u.id == userId);
-                  Navigator.pop(
-                    ctx,
-                    _CrewEntry(
-                      user: user,
-                      role: role,
-                      tobCapabilityId: capId,
-                      tobCapabilityName: capName,
-                    ),
-                  );
-                },
-                child: const Text('Aggiungi'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (result != null && mounted) {
-      setState(() => _crewEntries.add(result));
     }
   }
 
@@ -1022,11 +779,9 @@ class _InsertActivityAdminScreenState
     final adminId = ref.read(authProvider).userProfile?.id;
     final helicopterId = _crewFlightHelicopterId;
     final hours = parseHours(_crewFlightHoursCtrl.text);
-    if (adminId == null || helicopterId == null || _crewEntries.isEmpty) {
+    if (adminId == null || helicopterId == null || _crewPick.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Compila tutti i campi e aggiungi almeno un membro.'),
-        ),
+        const SnackBar(content: Text('Scegli elicottero ed equipaggio.')),
       );
       return;
     }
@@ -1042,13 +797,15 @@ class _InsertActivityAdminScreenState
       final desc = _crewFlightDescCtrl.text.trim().isEmpty
           ? null
           : _crewFlightDescCtrl.text.trim();
-      for (final entry in _crewEntries) {
-        if (entry.role == 'TOB') {
+      for (final MapEntry(key: userId, value: role) in _crewPick.entries) {
+        if (role.startsWith('TOB')) {
           await _activityService.addTobActivityValidated(
             TobActivity(
-              userId: entry.user.id,
+              userId: userId,
               helicopterTypeId: helicopterId,
-              tobCapabilityId: entry.tobCapabilityId,
+              tobCapabilityId: role == 'TOB'
+                  ? null
+                  : int.parse(role.substring(4)),
               activityDate: _crewFlightDate,
               flightHours: hours,
               description: desc,
@@ -1060,12 +817,12 @@ class _InsertActivityAdminScreenState
           // T e MTB.
           await _activityService.addFlightActivityValidated(
             FlightActivity(
-              userId: entry.user.id,
+              userId: userId,
               helicopterTypeId: helicopterId,
               activityDate: _crewFlightDate,
               flightHours: hours,
               description: desc,
-              isPoligono: entry.role == 'MTB' && _crewFlightIsPoligono,
+              isPoligono: role == 'MTB' && _crewFlightIsPoligono,
               submittedBy: adminId,
             ),
             adminId,
@@ -1075,7 +832,7 @@ class _InsertActivityAdminScreenState
       if (mounted) {
         setState(() {
           _saving = false;
-          _crewEntries.clear();
+          _crewPick.clear();
           _crewFlightHelicopterId = null;
           _crewFlightIsPoligono = false;
           _crewFlightHoursCtrl.clear();
@@ -1107,496 +864,213 @@ class _InsertActivityAdminScreenState
     context.go('/admin/validate');
   }
 
+  /// Equipaggio abilitato sull'elicottero, un gruppo per ruolo: T (anche
+  /// dalla famiglia 169), MTB, TOB volo base e una per capacità TOB.
+  /// Record: (chiave in [_crewPick], titolo, sottotitolo, persone).
+  List<(String, String, String, List<UserProfile>)> _crewGroups(int heli) {
+    final db = GhDbService();
+    final byId = {for (final u in _users) u.id: u};
+    final family = _userService.tFamilyOf(heli);
+    final rows = db.crew.where((r) => r['active'] != false).toList();
+    final onHeli = {
+      for (final r in rows)
+        if (r['helicopter_type_id'] == heli) r['user_id'],
+    };
+    List<UserProfile> people(bool Function(Map<String, dynamic>) test) => [
+      for (final id in {
+        for (final r in rows)
+          if (test(r)) r['user_id'] as String,
+      })
+        ?byId[id],
+    ]..sort((a, b) => a.cognome.compareTo(b.cognome));
+    bool on(Map<String, dynamic> r, String type) =>
+        r['crew_type'] == type && r['helicopter_type_id'] == heli;
+    final caps = db.tobUserCaps.where(
+      (c) => c['active'] != false && c['helicopter_type_id'] == heli,
+    );
+    return [
+      (
+        'T',
+        'T',
+        '',
+        people(
+          (r) =>
+              on(r, 'T') ||
+              // T sul gemello 169 senza righe su questo elicottero.
+              (r['crew_type'] == 'T' &&
+                  family.contains(r['helicopter_type_id']) &&
+                  !onHeli.contains(r['user_id'])),
+        ),
+      ),
+      ('MTB', 'MTB', 'Mitragliere di bordo', people((r) => on(r, 'MTB'))),
+      ('TOB', 'TOB', 'volo base', people((r) => on(r, 'TOB'))),
+      for (final cap in ref.read(authProvider).tobCapabilityTypes)
+        (
+          'TOB:${cap.id}',
+          'TOB',
+          cap.name,
+          [
+            for (final id in {
+              for (final c in caps)
+                if (c['tob_capability_id'] == cap.id) c['user_id'] as String,
+            })
+              ?byId[id],
+          ]..sort((a, b) => a.cognome.compareTo(b.cognome)),
+        ),
+    ].where((g) => g.$4.isNotEmpty).toList();
+  }
+
+  Widget _buildCrewFlightTab() {
+    final heli = _crewFlightHelicopterId;
+    final groups = heli == null
+        ? const <(String, String, String, List<UserProfile>)>[]
+        : _crewGroups(heli);
+    final labels = {
+      for (final (key, title, sub, _) in groups)
+        key: sub.isEmpty ? title : '$title · $sub',
+    };
+    final byId = {for (final u in _users) u.id: u};
+    final members = [for (final id in _crewPick.keys) ?byId[id]]
+      ..sort((a, b) => a.cognome.compareTo(b.cognome));
+    final n = members.length;
+    return _TwoPane(
+      left: [
+        AppDropdown<int>(
+          initialValue: heli,
+          decoration: const InputDecoration(labelText: 'Elicottero'),
+          items: [
+            for (final h
+                in ref.read(authProvider).visibleHelicopters(keep: heli))
+              DropdownMenuItem(value: h.id, child: Text(h.name)),
+          ],
+          onChanged: (v) => setState(() {
+            _crewFlightHelicopterId = v;
+            _crewPick.clear();
+            _crewFlightIsPoligono = false;
+          }),
+        ),
+        const SizedBox(height: 16),
+        _AdminDateButton(
+          label: 'Data volo',
+          date: _crewFlightDate,
+          onPressed: () =>
+              _pickDate((v) => _crewFlightDate = v, _crewFlightDate),
+        ),
+        const SizedBox(height: 16),
+        HoursField(controller: _crewFlightHoursCtrl, label: 'Ore di volo'),
+        if (_crewPick.containsValue('MTB'))
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Attività a fuoco (solo MTB)'),
+            value: _crewFlightIsPoligono,
+            onChanged: (v) =>
+                setState(() => _crewFlightIsPoligono = v ?? false),
+          ),
+        _field(_crewFlightDescCtrl, 'Descrizione (opzionale)', maxLines: 2),
+        const SizedBox(height: 20),
+        Text(
+          '$n ${n == 1 ? 'membro' : 'membri'} di equipaggio',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        for (final u in members)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${u.fullName}: ${labels[_crewPick[u.id]] ?? ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          onPressed: _saving ? null : _submitCrewFlight,
+          icon: const Icon(Icons.check),
+          label: Text('Inserisci volo ($n)'),
+        ),
+      ],
+      header: _paneHeader(
+        'Equipaggio',
+        _crewSearch,
+        'Cerca persona',
+        (v) => setState(() => _crewSearch = v),
+      ),
+      sections: [
+        if (groups.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 24),
+            child: Center(
+              child: Text(
+                heli == null
+                    ? 'Scegli l\'elicottero a sinistra.'
+                    : 'Nessun equipaggio abilitato su questo elicottero.',
+                style: const TextStyle(color: AppColors.textHint),
+              ),
+            ),
+          )
+        else
+          for (final (key, title, sub, users) in groups)
+            _TeamSection(
+              title: title,
+              subtitle: sub.isEmpty ? null : sub,
+              users: users,
+              query: _crewSearch,
+              selected: {
+                for (final e in _crewPick.entries)
+                  if (e.value == key) e.key,
+              },
+              onChanged: () => setState(() {}),
+              // Un solo ruolo per persona: scegliendolo qui si sposta.
+              onToggle: (id) => setState(() {
+                if (_crewPick[id] == key) {
+                  _crewPick.remove(id);
+                } else {
+                  _crewPick[id] = key;
+                }
+              }),
+            ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tAssignments = _crews.where((item) => item.crewType == 'T').toList();
-    final mdbAssignments = _crews
-        .where((item) => item.crewType == 'MTB')
-        .toList();
-    final tobAssignments = _crews
-        .where((item) => item.crewType == 'TOB')
-        .toList();
-    final flightHelicopters = _uniqueCrewHelicopters([
-      ...tAssignments,
-      ...mdbAssignments,
-    ]);
-    final tobHelicopters = _uniqueCrewHelicopters(tobAssignments);
-    final mdbHelicopterIds = mdbAssignments
-        .map((item) => item.helicopterTypeId)
-        .toSet();
-    final isMdbFlightHelicopter =
-        _flightHelicopterId != null &&
-        mdbHelicopterIds.contains(_flightHelicopterId);
-    final filteredCapabilities = _tobCapabilities
-        .where((item) => item.helicopterTypeId == _tobHelicopterId)
-        .toList();
-
     return Scaffold(
       appBar: AppBar(
         leading: const AdminAppBarLeading(),
         title: const Text('Attività'),
         bottom: TabBar(
           controller: _tabController,
-          tabs: _tabs
-              .map(
-                (tab) => Tab(
-                  text: switch (tab) {
-                    _AdminInsertTabType.workOrder => 'Ordine di Lavoro',
-                    _AdminInsertTabType.maintenance => 'Manutenzione',
-                    _AdminInsertTabType.seminar => 'Seminario',
-                    _AdminInsertTabType.flight => 'Volo',
-                    _AdminInsertTabType.tob => 'TOB',
-                    _AdminInsertTabType.crewFlight => 'Volo Equipaggio',
-                  },
-                ),
-              )
-              .toList(),
+          tabs: [
+            for (final tab in _tabs)
+              Tab(
+                text: switch (tab) {
+                  _AdminInsertTabType.workOrder => 'Ordine di Lavoro',
+                  _AdminInsertTabType.maintenance => 'Manutenzione',
+                  _AdminInsertTabType.seminar => 'Seminario',
+                  _AdminInsertTabType.crewFlight => 'Volo',
+                },
+              ),
+          ],
         ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : TabBarView(
+              controller: _tabController,
               children: [
-                AnimatedBuilder(
-                  animation: _tabController,
-                  builder: (context, _) {
-                    final currentTab = _tabs[_tabController.index];
-                    final needsUserSelector =
-                        currentTab == _AdminInsertTabType.flight ||
-                        currentTab == _AdminInsertTabType.tob;
-                    if (!needsUserSelector) {
-                      return const SizedBox.shrink();
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                      child: AppDropdown<String>(
-                        initialValue: _selectedUser?.id,
-                        decoration: const InputDecoration(
-                          labelText: 'Seleziona utente',
-                        ),
-                        items: _users
-                            .map(
-                              (user) => DropdownMenuItem<String>(
-                                value: user.id,
-                                child: Text(
-                                  '${user.fullName} · ${user.numeroLicenza ?? 'N/A'}',
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          UserProfile? user;
-                          for (final item in _users) {
-                            if (item.id == value) {
-                              user = item;
-                              break;
-                            }
-                          }
-                          _selectUser(user);
-                        },
-                      ),
-                    );
+                for (final tab in _tabs)
+                  switch (tab) {
+                    _AdminInsertTabType.workOrder => _buildWorkOrderTab(),
+                    _AdminInsertTabType.maintenance => _buildMaintenanceTab(),
+                    _AdminInsertTabType.seminar => _buildSeminarTab(),
+                    _AdminInsertTabType.crewFlight => _buildCrewFlightTab(),
                   },
-                ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: _tabs.map((tab) {
-                      switch (tab) {
-                        case _AdminInsertTabType.workOrder:
-                          return _buildWorkOrderTab();
-                        case _AdminInsertTabType.crewFlight:
-                          final auth = ref.read(authProvider);
-                          final tobCaps = auth.tobCapabilityTypes;
-                          final allHelicopters = auth.helicopterTypes;
-                          final helicopterItems = allHelicopters
-                              .map(
-                                (h) => DropdownMenuItem<int>(
-                                  value: h.id,
-                                  child: Text(h.name),
-                                ),
-                              )
-                              .toList(growable: false);
-                          return _AdminActivityTab(
-                            enabled: true,
-                            child: _AdminActivityCard(
-                              children: [
-                                AppDropdown<int>(
-                                  initialValue: _crewFlightHelicopterId,
-                                  menuMaxHeight: 300,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Elicottero',
-                                  ),
-                                  items: helicopterItems,
-                                  onChanged: (v) => setState(() {
-                                    _crewFlightHelicopterId = v;
-                                    _crewEntries.clear();
-                                    _crewFlightIsPoligono = false;
-                                  }),
-                                ),
-                                const SizedBox(height: 16),
-                                _AdminDateButton(
-                                  label: 'Data volo',
-                                  date: _crewFlightDate,
-                                  onPressed: () => _pickDate(
-                                    (v) => _crewFlightDate = v,
-                                    _crewFlightDate,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                HoursField(
-                                  controller: _crewFlightHoursCtrl,
-                                  label: 'Ore di volo',
-                                ),
-                                if (_crewEntries.any(
-                                  (entry) => entry.role == 'MTB',
-                                )) ...[
-                                  const SizedBox(height: 8),
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: const Text(
-                                      'Attività a fuoco (solo membri MTB)',
-                                    ),
-                                    value: _crewFlightIsPoligono,
-                                    onChanged: (value) => setState(
-                                      () => _crewFlightIsPoligono =
-                                          value ?? false,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _crewFlightDescCtrl,
-                                  maxLines: 2,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Descrizione (opzionale)',
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Equipaggio (${_crewEntries.length})',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                    ),
-                                    const Spacer(),
-                                    TextButton.icon(
-                                      onPressed: () => _addCrewEntry(tobCaps),
-                                      icon: const Icon(
-                                        Icons.person_add_outlined,
-                                      ),
-                                      label: const Text('Aggiungi'),
-                                    ),
-                                  ],
-                                ),
-                                if (_crewEntries.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text(
-                                      'Nessun membro aggiunto.',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  )
-                                else
-                                  ...List.generate(_crewEntries.length, (i) {
-                                    final entry = _crewEntries[i];
-                                    return ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      leading: CircleAvatar(
-                                        child: Text(
-                                          entry.role,
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
-                                      ),
-                                      title: Text(entry.user.fullName),
-                                      subtitle: Text(
-                                        entry.role == 'TOB'
-                                            ? entry.tobCapabilityName != null
-                                                  ? 'TOB · ${entry.tobCapabilityName}'
-                                                  : 'TOB (base)'
-                                            : entry.role == 'MTB'
-                                            ? 'MTB · Mitragliere di Bordo'
-                                            : 'T · Pilota/Equipaggio',
-                                      ),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.remove_circle_outline,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () => setState(
-                                          () => _crewEntries.removeAt(i),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                const SizedBox(height: 24),
-                                ElevatedButton.icon(
-                                  onPressed: _saving ? null : _submitCrewFlight,
-                                  icon: const Icon(Icons.save_outlined),
-                                  label: const Text(
-                                    'Inserisci per tutto l\'equipaggio',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        case _AdminInsertTabType.maintenance:
-                          return _buildMaintenanceTab();
-                        case _AdminInsertTabType.seminar:
-                          return _buildSeminarTab();
-                        case _AdminInsertTabType.flight:
-                          return _AdminActivityTab(
-                            enabled:
-                                _selectedUser != null &&
-                                flightHelicopters.isNotEmpty,
-                            child: _AdminActivityCard(
-                              children: [
-                                AppDropdown<int>(
-                                  initialValue:
-                                      flightHelicopters.any(
-                                        (item) =>
-                                            item.id == _flightHelicopterId,
-                                      )
-                                      ? _flightHelicopterId
-                                      : null,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Elicottero',
-                                  ),
-                                  items: flightHelicopters
-                                      .map(
-                                        (item) => DropdownMenuItem<int>(
-                                          value: item.id,
-                                          child: Text(item.name),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) => setState(() {
-                                    _flightHelicopterId = value;
-                                    if (value == null ||
-                                        !mdbHelicopterIds.contains(value)) {
-                                      _flightIsPoligono = false;
-                                    }
-                                  }),
-                                ),
-                                const SizedBox(height: 16),
-                                _AdminDateButton(
-                                  label: 'Data volo',
-                                  date: _flightDate,
-                                  onPressed: () => _pickDate(
-                                    (value) => _flightDate = value,
-                                    _flightDate,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                HoursField(
-                                  controller: _flightHoursCtrl,
-                                  label: 'Ore di volo',
-                                ),
-                                if (isMdbFlightHelicopter) ...[
-                                  const SizedBox(height: 8),
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: const Text(
-                                      'Attività a fuoco (Poligono)',
-                                    ),
-                                    value: _flightIsPoligono,
-                                    onChanged: (value) => setState(
-                                      () => _flightIsPoligono = value ?? false,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _flightDescCtrl,
-                                  maxLines: 3,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Descrizione',
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                ElevatedButton(
-                                  onPressed: _saving ? null : _submitFlight,
-                                  child: const Text('Inserisci come validata'),
-                                ),
-                              ],
-                            ),
-                          );
-                        case _AdminInsertTabType.tob:
-                          return _AdminActivityTab(
-                            enabled:
-                                _selectedUser != null &&
-                                tobHelicopters.isNotEmpty,
-                            child: _AdminActivityCard(
-                              children: [
-                                AppDropdown<int>(
-                                  initialValue:
-                                      tobHelicopters.any(
-                                        (item) => item.id == _tobHelicopterId,
-                                      )
-                                      ? _tobHelicopterId
-                                      : null,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Elicottero',
-                                  ),
-                                  items: tobHelicopters
-                                      .map(
-                                        (item) => DropdownMenuItem<int>(
-                                          value: item.id,
-                                          child: Text(item.name),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) =>
-                                      setState(() => _tobHelicopterId = value),
-                                ),
-                                const SizedBox(height: 16),
-                                AppDropdown<int?>(
-                                  key: ValueKey('tobcap$_tobHelicopterId'),
-                                  initialValue:
-                                      filteredCapabilities.any(
-                                        (item) =>
-                                            item.tobCapabilityId ==
-                                            _tobCapabilityId,
-                                      )
-                                      ? _tobCapabilityId
-                                      : null,
-                                  decoration: const InputDecoration(
-                                    labelText:
-                                        'Capacità aggiuntiva (facoltativa)',
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('Nessuna (solo volo)'),
-                                    ),
-                                    for (final item in filteredCapabilities)
-                                      DropdownMenuItem<int?>(
-                                        value: item.tobCapabilityId,
-                                        child: Text(item.capabilityName),
-                                      ),
-                                  ],
-                                  onChanged: (value) =>
-                                      setState(() => _tobCapabilityId = value),
-                                ),
-                                const SizedBox(height: 16),
-                                _AdminDateButton(
-                                  label: 'Data volo TOB',
-                                  date: _tobDate,
-                                  onPressed: () => _pickDate(
-                                    (value) => _tobDate = value,
-                                    _tobDate,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                HoursField(
-                                  controller: _tobHoursCtrl,
-                                  label: 'Ore di volo',
-                                ),
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: _tobDescCtrl,
-                                  maxLines: 3,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Descrizione',
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                ElevatedButton(
-                                  onPressed: _saving ? null : _submitTob,
-                                  child: const Text('Inserisci come validata'),
-                                ),
-                              ],
-                            ),
-                          );
-                      }
-                    }).toList(),
-                  ),
-                ),
               ],
             ),
-    );
-  }
-
-  List<_ActivityHelicopterOption> _uniqueCrewHelicopters(
-    List<UserCrewAssignment> assignments,
-  ) {
-    final map = <int, _ActivityHelicopterOption>{};
-    for (final assignment in assignments) {
-      map[assignment.helicopterTypeId] = _ActivityHelicopterOption(
-        id: assignment.helicopterTypeId,
-        code: assignment.helicopterCode,
-        name: assignment.helicopterName,
-      );
-    }
-    return map.values.toList();
-  }
-}
-
-class _ActivityHelicopterOption {
-  const _ActivityHelicopterOption({
-    required this.id,
-    required this.code,
-    required this.name,
-  });
-
-  final int id;
-  final String code;
-  final String name;
-}
-
-class _CrewEntry {
-  const _CrewEntry({
-    required this.user,
-    required this.role,
-    this.tobCapabilityId,
-    this.tobCapabilityName,
-  });
-
-  final UserProfile user;
-  final String role;
-  final int? tobCapabilityId;
-  final String? tobCapabilityName;
-}
-
-class _AdminActivityTab extends StatelessWidget {
-  const _AdminActivityTab({required this.enabled, required this.child});
-
-  final bool enabled;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!enabled) {
-      return const Center(
-        child: Text('Seleziona un utente con le abilitazioni richieste.'),
-      );
-    }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: child,
-    );
-  }
-}
-
-class _AdminActivityCard extends StatelessWidget {
-  const _AdminActivityCard({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(children: children),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1702,6 +1176,7 @@ class _TeamSection extends StatelessWidget {
     required this.query,
     required this.selected,
     required this.onChanged,
+    this.onToggle,
   });
 
   final String title;
@@ -1713,6 +1188,8 @@ class _TeamSection extends StatelessWidget {
   // modificato in place, poi onChanged
   final Set<String> selected;
   final VoidCallback onChanged;
+  // se presente: tocco = onToggle(id), niente «Tutti» (equipaggio di volo)
+  final ValueSetter<String>? onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -1766,20 +1243,21 @@ class _TeamSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                TextButton(
-                  onPressed: visible.isEmpty
-                      ? null
-                      : () {
-                          final ids = visible.map((u) => u.id);
-                          if (allVisible) {
-                            selected.removeAll(ids);
-                          } else {
-                            selected.addAll(ids);
-                          }
-                          onChanged();
-                        },
-                  child: Text(allVisible ? 'Nessuno' : 'Tutti'),
-                ),
+                if (onToggle == null)
+                  TextButton(
+                    onPressed: visible.isEmpty
+                        ? null
+                        : () {
+                            final ids = visible.map((u) => u.id);
+                            if (allVisible) {
+                              selected.removeAll(ids);
+                            } else {
+                              selected.addAll(ids);
+                            }
+                            onChanged();
+                          },
+                    child: Text(allVisible ? 'Nessuno' : 'Tutti'),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1800,10 +1278,12 @@ class _TeamSection extends StatelessWidget {
                           ? null
                           : expiryBadge(expiry![u.id]),
                       selected: selected.contains(u.id),
-                      onTap: () {
-                        if (!selected.remove(u.id)) selected.add(u.id);
-                        onChanged();
-                      },
+                      onTap: onToggle != null
+                          ? () => onToggle!(u.id)
+                          : () {
+                              if (!selected.remove(u.id)) selected.add(u.id);
+                              onChanged();
+                            },
                     ),
                 ],
               ),
