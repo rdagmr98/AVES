@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/activity_edit_dialog.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../app.dart';
 import '../../constants/app_constants.dart';
@@ -197,12 +198,49 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
     }
   }
 
+  /// Stesso giorno, elicottero e ore di un volo già inviato: quasi sempre un
+  /// doppio invio (un tecnico ha reinviato lo stesso volo 3 volte).
+  Future<bool> _confirmIfDuplicate(
+    Iterable<({DateTime date, int heli, double hours})> sent,
+    DateTime date,
+    int heli,
+    double hours,
+  ) async =>
+      !sent.any(
+        (a) =>
+            DateUtils.isSameDay(a.date, date) &&
+            a.heli == heli &&
+            a.hours == hours,
+      ) ||
+      await confirmAction(
+        context,
+        'Volo già inviato',
+        'Hai già inviato un volo con la stessa data, elicottero e ore. '
+            'Inviarlo di nuovo?',
+        'Invia di nuovo',
+      );
+
   Future<void> _submitFlight(UserProfile user) async {
     final hours = parseHours(_flightHoursCtrl.text);
     if (_flightHelicopterId == null || hours == null || hours <= 0) {
       _showMessage(
         'Inserisci elicottero e ore di volo valide (h:mm o minuti).',
       );
+      return;
+    }
+    final sent = await _service.getUserFlightActivities(user.id);
+    if (!await _confirmIfDuplicate(
+      sent.map(
+        (a) => (
+          date: a.activityDate,
+          heli: a.helicopterTypeId,
+          hours: a.flightHours,
+        ),
+      ),
+      _flightDate,
+      _flightHelicopterId!,
+      hours,
+    )) {
       return;
     }
     setState(() => _saving = true);
@@ -232,12 +270,31 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
   Future<void> _submitTob(UserProfile user) async {
     final hours = parseHours(_tobHoursCtrl.text);
     if (_tobHelicopterId == null || hours == null || hours <= 0) {
-      _showMessage('Inserisci elicottero e ore di volo valide (h:mm o minuti).');
+      _showMessage(
+        'Inserisci elicottero e ore di volo valide (h:mm o minuti).',
+      );
       return;
     }
     final description = _tobDescCtrl.text.trim().isEmpty
         ? null
         : _tobDescCtrl.text.trim();
+    final sent = await _service.getUserTobActivities(user.id);
+    if (!await _confirmIfDuplicate(
+      sent
+          .where((a) => a.tobCapabilityId == _tobCapabilityId)
+          .map(
+            (a) => (
+              date: a.activityDate,
+              heli: a.helicopterTypeId,
+              hours: a.flightHours,
+            ),
+          ),
+      _tobDate,
+      _tobHelicopterId!,
+      hours,
+    )) {
+      return;
+    }
     setState(() => _saving = true);
     try {
       // Senza capacità = volo base TOB: resta tra le attività TOB.
@@ -416,7 +473,9 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
         .where((item) => item.helicopterTypeId == _tobHelicopterId)
         .toList();
     // Capacità facoltativa: null = solo volo base TOB, niente auto-selezione.
-    if (!filteredCapabilities.any((c) => c.tobCapabilityId == _tobCapabilityId)) {
+    if (!filteredCapabilities.any(
+      (c) => c.tobCapabilityId == _tobCapabilityId,
+    )) {
       _tobCapabilityId = null;
     }
 
