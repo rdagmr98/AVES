@@ -240,31 +240,18 @@ class _AddActivityScreenState extends ConsumerState<AddActivityScreen> {
         : _tobDescCtrl.text.trim();
     setState(() => _saving = true);
     try {
-      // Senza capacità è un volo base TOB: si salva come attività di volo.
-      if (_tobCapabilityId == null) {
-        await _service.addFlightActivity(
-          FlightActivity(
-            userId: user.id,
-            helicopterTypeId: _tobHelicopterId!,
-            activityDate: _tobDate,
-            flightHours: hours,
-            description: description,
-            submittedBy: user.id,
-          ),
-        );
-      } else {
-        await _service.addTobActivity(
-          TobActivity(
-            userId: user.id,
-            helicopterTypeId: _tobHelicopterId!,
-            tobCapabilityId: _tobCapabilityId!,
-            activityDate: _tobDate,
-            flightHours: hours,
-            description: description,
-            submittedBy: user.id,
-          ),
-        );
-      }
+      // Senza capacità = volo base TOB: resta tra le attività TOB.
+      await _service.addTobActivity(
+        TobActivity(
+          userId: user.id,
+          helicopterTypeId: _tobHelicopterId!,
+          tobCapabilityId: _tobCapabilityId,
+          activityDate: _tobDate,
+          flightHours: hours,
+          description: description,
+          submittedBy: user.id,
+        ),
+      );
       _finishSubmit();
     } catch (e) {
       if (mounted) {

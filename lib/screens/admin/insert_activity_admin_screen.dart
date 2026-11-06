@@ -314,33 +314,19 @@ class _InsertActivityAdminScreenState
         : _tobDescCtrl.text.trim();
     setState(() => _saving = true);
     try {
-      // Senza capacità è un volo base TOB: attività di volo.
-      if (_tobCapabilityId == null) {
-        await _activityService.addFlightActivityValidated(
-          FlightActivity(
-            userId: user.id,
-            helicopterTypeId: _tobHelicopterId!,
-            activityDate: _tobDate,
-            flightHours: hours,
-            description: desc,
-            submittedBy: adminId,
-          ),
-          adminId,
-        );
-      } else {
-        await _activityService.addTobActivityValidated(
-          TobActivity(
-            userId: user.id,
-            helicopterTypeId: _tobHelicopterId!,
-            tobCapabilityId: _tobCapabilityId!,
-            activityDate: _tobDate,
-            flightHours: hours,
-            description: desc,
-            submittedBy: adminId,
-          ),
-          adminId,
-        );
-      }
+      // Senza capacità = volo base TOB: resta tra le attività TOB.
+      await _activityService.addTobActivityValidated(
+        TobActivity(
+          userId: user.id,
+          helicopterTypeId: _tobHelicopterId!,
+          tobCapabilityId: _tobCapabilityId,
+          activityDate: _tobDate,
+          flightHours: hours,
+          description: desc,
+          submittedBy: adminId,
+        ),
+        adminId,
+      );
       _finish();
     } catch (e) {
       if (mounted) {
@@ -1057,12 +1043,12 @@ class _InsertActivityAdminScreenState
           ? null
           : _crewFlightDescCtrl.text.trim();
       for (final entry in _crewEntries) {
-        if (entry.role == 'TOB' && entry.tobCapabilityId != null) {
+        if (entry.role == 'TOB') {
           await _activityService.addTobActivityValidated(
             TobActivity(
               userId: entry.user.id,
               helicopterTypeId: helicopterId,
-              tobCapabilityId: entry.tobCapabilityId!,
+              tobCapabilityId: entry.tobCapabilityId,
               activityDate: _crewFlightDate,
               flightHours: hours,
               description: desc,
@@ -1071,7 +1057,7 @@ class _InsertActivityAdminScreenState
             adminId,
           );
         } else {
-          // T, MTB e TOB senza capacità (volo base TOB).
+          // T e MTB.
           await _activityService.addFlightActivityValidated(
             FlightActivity(
               userId: entry.user.id,

@@ -380,7 +380,9 @@ class TobActivity {
   final int? id;
   final String userId;
   final int helicopterTypeId;
-  final int tobCapabilityId;
+
+  /// null = volo base TOB, senza capacità aggiuntiva.
+  final int? tobCapabilityId;
   final DateTime activityDate;
 
   /// Ore di volo: contano anche per il semestre della currency T. 0 sulle
@@ -425,7 +427,7 @@ class TobActivity {
     id: j['id'] as int?,
     userId: j['user_id'] as String,
     helicopterTypeId: j['helicopter_type_id'] as int,
-    tobCapabilityId: j['tob_capability_id'] as int,
+    tobCapabilityId: j['tob_capability_id'] as int?,
     activityDate: DateTime.parse(j['activity_date'] as String),
     flightHours: (j['flight_hours'] as num?)?.toDouble() ?? 0,
     description: j['description'] as String?,
@@ -444,7 +446,7 @@ class TobActivity {
         '',
     capabilityName:
         (j['tob_capabilities'] as Map<String, dynamic>?)?['name'] as String? ??
-        '',
+        (j['tob_capability_id'] == null ? 'Volo base' : ''),
     userFullName: () {
       final u = j['user_profiles'] as Map<String, dynamic>?;
       if (u == null) return '';

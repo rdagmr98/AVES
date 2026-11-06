@@ -357,6 +357,7 @@ Future<bool> editTobActivity(BuildContext context, TobActivity a) async {
     detailLabel: 'Capacità',
     detailKey: 'tob_capability_id',
     details: (heli) => {
+      null: 'Volo base',
       for (final cap in caps.where((cap) => cap.helicopterTypeId == heli))
         cap.tobCapabilityId: cap.capabilityName,
       if (heli == a.helicopterTypeId) a.tobCapabilityId: a.capabilityName,

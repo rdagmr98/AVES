@@ -58,6 +58,7 @@ class ActivityService {
   }
 
   String _tobCapabilityLabel(int? capabilityId) {
+    if (capabilityId == null) return 'volo base';
     final ref = _findReference('tobCapabilities', capabilityId);
     return ref?['name'] as String? ?? 'capacità TOB';
   }
