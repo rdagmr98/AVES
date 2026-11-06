@@ -197,7 +197,12 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
             helicopterTypeIds: {heli.id},
           ),
           flight: [
-            if (crewTypes.contains('T')) ('Volo T', '', crewStatus('flight_t')),
+            if (crewTypes.contains('T') || crewTypes.contains('TOB'))
+              (
+                crewTypes.contains('T') ? 'Volo T' : 'Volo TOB',
+                '3 h a semestre',
+                crewStatus('flight_t'),
+              ),
             if (crewTypes.contains('TOB'))
               ('Base TOB', 'Fascia ${fascia ?? '-'}', crewStatus('tob_base')),
             for (final cap in auth.tobCapabilities)
@@ -223,9 +228,9 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
           expiry: _maintenanceExpiryDate(auth.currency['maintenance']),
           onTap: () => context.go('/activities/my?type=maintenance'),
         ),
-      if (auth.hasTCrew)
+      if (auth.hasTCrew || auth.hasTobCrew)
         _CurrencyCard(
-          title: 'Volo T',
+          title: auth.hasTCrew ? 'Volo T' : 'Ore volo TOB',
           status: crewStatus('flight_t'),
           subtitle: flightFitnessBlocking
               ? 'Idoneità scaduta'

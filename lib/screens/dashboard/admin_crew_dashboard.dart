@@ -148,7 +148,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       CurrencyStatus? flightStatus;
       CurrencyStatus? tobBaseStatus;
       CurrencyStatus? mdbStatus;
-      if (assignments.any((item) => item.crewType == 'T')) {
+      if (assignments.any((i) => i.crewType == 'T' || i.crewType == 'TOB')) {
         flightStatus = await _currencyService.getFlightCurrency(user.id);
       }
       if (assignments.any((item) => item.crewType == 'TOB')) {
@@ -975,7 +975,9 @@ class _CrewUserRow {
     int? capabilityId,
   ) {
     final statuses = <CurrencyStatus>[];
-    if ((crewTypeFilter == 'all' || crewTypeFilter == 'T') &&
+    if ((crewTypeFilter == 'all' ||
+            crewTypeFilter == 'T' ||
+            crewTypeFilter == 'TOB') &&
         flightStatus != null) {
       statuses.add(flightStatus!);
     }
@@ -1272,7 +1274,11 @@ class _CrewRecordDialog extends StatelessWidget {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            if (has('T')) _qualRow('T · 3 h a semestre', row.flightStatus),
+            if (has('T') || has('TOB'))
+              _qualRow(
+                '${has('T') ? 'T' : 'TOB'} · 3 h a semestre',
+                row.flightStatus,
+              ),
             if (has('TOB'))
               _qualRow('TOB fascia ${fascia ?? '-'}', row.tobBaseStatus),
             for (final c in caps)

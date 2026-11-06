@@ -655,11 +655,12 @@ class CurrencyService {
     Iterable<Map<String, dynamic>> crewOf(String type) =>
         crew.where((r) => r['crew_type'] == type);
 
-    final tEnd = endOf(crewOf('T'));
+    // Le 3 h a semestre valgono per T e TOB.
+    final tEnd = endOf([...crewOf('T'), ...crewOf('TOB')]);
     if (tEnd != null) {
       final minHours = (await getFlightTCriteria())?.minHours ?? 3.0;
       addLosses(
-        'Volo T',
+        'Ore volo a semestre',
         flightSemesterLosses(
           [for (final a in allFlights) (date: day(a), hours: _hours(a))],
           minHours,
@@ -835,7 +836,7 @@ class CurrencyService {
         : acts.map((a) => a.date).reduce((a, b) => a.isAfter(b) ? a : b);
 
     final label =
-        'Currency Volo T sem. ${sem.label} (${formatHours(sem.hours)} h / ${formatHours(minHours)} h)';
+        'Ore volo sem. ${sem.label} (${formatHours(sem.hours)} h / ${formatHours(minHours)} h)';
 
     final deadline = sem.deadline;
     final daysLeft = deadline == null
@@ -1211,7 +1212,8 @@ class CurrencyService {
     );
     final crewTypes = crews.map((item) => item['crew_type'] as String).toSet();
 
-    if (crewTypes.contains('T')) {
+    // 3 h a semestre: anche per i TOB senza T.
+    if (crewTypes.contains('T') || crewTypes.contains('TOB')) {
       result['flight_t'] = await getFlightCurrency(userId);
     }
 
