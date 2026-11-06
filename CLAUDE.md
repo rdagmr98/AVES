@@ -45,7 +45,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 | `password_reset.dart` | funzioni pure del reset: password temporanea, ricerca della riga del richiedente (test in `test/password_reset_test.dart`) |
 | `widgets/currency_event_tile.dart` | riga dello storico currency (manutenzione e volo) |
 | `widgets/flight_course_dialog.dart` | `registerFlightCourse`: corso volo T/capacità, per la T i voli del corso contano per il semestre |
-| `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin; `insertMaintenanceActivity`/`insertSeminar` = inserimento admin già validato dalla scheda |
+| `widgets/activity_edit_dialog.dart` | dialog unico di modifica attività in attesa (manutenzione, volo, TOB, seminari), da Valida e dashboard privilegi admin; `insertMaintenanceActivity`/`insertSeminar`/`insertFlight` = inserimento admin già validato dalla scheda; `confirmAction` = conferma condivisa |
 
 ## Modelli
 - `user_models.dart`: utente + abilitazioni
@@ -53,6 +53,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-11-06
+- 2026-11-06 (22): scheda admin volo, sezione «Voli validati» (voli e TOB) con modifica/elimina e «+ Volo» (`insertFlight`), `18ffad6`. Prossimo: prova in produzione, chiedere se rifare anche `/admin/insert` (nota vault `AVES Corsi/Tecnici admin volo modifica cancella e inserimento voli 2026-11-06.md`).
 - 2026-11-06 (21): volo TOB senza capacità salvato in `tob_acts` con capacità nulla («Volo base», `2338cec`), non più in `flight.json`; riga di Ardia spostata (`aves-data` `3467674`). Trappola: le versioni vecchie vanno in errore su capacità nulla, prima deploy poi dati. Prossimo: prova in produzione (vedi hub vault).
 - 2026-11-06 (20): 3 h a semestre anche per i TOB senza T (`68ca884`): `flight_t` in `getFullCurrency` e `admin_crew_dashboard` con T o TOB, storico idem. Rischio presa profilo per nome accettato dall'utente, privilegi richiedibili per i nuovi. Prossimo: verificare in produzione su un TOB, attivazione Scimonello.
 - 2026-11-06 (19): registrazione dei pre-registrati per nome e cognome (`802f69b`): `_checkName` in `register_screen.dart`, `signUp(claimUserId:)`, privilegi in sola lettura col profilo agganciato. Scimonello riportato a pre-registrato (`aves-data` `16c6e11`). Prossimo: provarlo con Scimonello. Nota vault `AVES Corsi/Tecnici registrazione per nome e cognome 2026-11-06.md`.
