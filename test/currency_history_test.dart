@@ -142,4 +142,41 @@ void main() {
     expect(catCovers(3, 3), isTrue);
     expect(catCovers(3, 4), isFalse);
   });
+
+  test('notifica letta non torna nello stesso episodio, torna nel nuovo', () {
+    final read = [
+      {
+        'user_id': 'u',
+        'type': 'MAINTENANCE_EXPIRED',
+        'label': 'L',
+        'message': 'm',
+        'is_read': true,
+        'episode': '2026-10-01',
+      },
+    ];
+    bool sent(String episode, [List<Map<String, dynamic>>? n]) =>
+        currencyNotificationSent(
+          n ?? read,
+          userId: 'u',
+          type: 'MAINTENANCE_EXPIRED',
+          label: 'L',
+          message: 'm',
+          episode: episode,
+        );
+    expect(sent('2026-10-01'), isTrue);
+    expect(sent('2027-04-01'), isFalse);
+    // Notifiche vecchie senza episodio: dedupe solo se non lette.
+    expect(
+      sent('-', [
+        {...read.first, 'episode': null},
+      ]),
+      isFalse,
+    );
+    expect(
+      sent('-', [
+        {...read.first, 'episode': null, 'is_read': false},
+      ]),
+      isTrue,
+    );
+  });
 }

@@ -150,3 +150,20 @@ Map<int, String> proposedOjt(
             : ojtTypes[2],
   };
 }
+
+/// Notifica di currency già inviata: non letta, oppure letta ma dello stesso
+/// episodio (stessa scadenza). Così una notifica letta non torna a ogni sync.
+bool currencyNotificationSent(
+  Iterable<Map<String, dynamic>> notifications, {
+  required String userId,
+  required String type,
+  required String label,
+  required String message,
+  required String episode,
+}) => notifications.any(
+  (n) =>
+      n['user_id'] == userId &&
+      n['type'] == type &&
+      (n['is_read'] == false || n['episode'] == episode) &&
+      (n['label'] == label || n['message'] == message),
+);

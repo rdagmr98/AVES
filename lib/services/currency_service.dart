@@ -258,6 +258,7 @@ class CurrencyService {
   }) async {
     bool inScope(Map<String, dynamic> item) =>
         item['user_id'] == userId &&
+        item['active'] != false &&
         (helicopterTypeIds == null ||
             helicopterTypeIds.contains(item['helicopter_type_id']));
     final hasMaintenanceQualification =
@@ -892,7 +893,10 @@ class CurrencyService {
 
   Future<CurrencyCriteria?> getMtbPoligonoCriteria() async {
     for (final item in _db.criteria) {
-      if (item['criteria_type'] == 'MTB_POLIGONO') {
+      // criteria.json ha solo MDB_POLIGONO (nome storico): è quello che
+      // l'admin modifica in Impostazioni.
+      if (item['criteria_type'] == 'MTB_POLIGONO' ||
+          item['criteria_type'] == 'MDB_POLIGONO') {
         return CurrencyCriteria.fromJson(item);
       }
     }
@@ -1274,12 +1278,14 @@ class CurrencyService {
           userId,
           'MAINTENANCE_SUSPENDED',
           status.label,
+          expiry: status.expiryDate,
         );
       } else if (status.isExpired) {
         message = await _upsertNotification(
           userId,
           _notifType(entry.key, expired: true),
           status.label,
+          expiry: status.expiryDate,
         );
       } else if (status.isWarning) {
         message = await _upsertNotification(
@@ -1287,6 +1293,7 @@ class CurrencyService {
           _notifType(entry.key, expired: false),
           status.label,
           daysLeft: status.daysUntilExpiry ?? 0,
+          expiry: status.expiryDate,
         );
       }
       if (message != null) {
@@ -1323,6 +1330,7 @@ class CurrencyService {
         '${privilege.helicopterCode} · ${privilege.privilegeName} · ${isExpired ? 'scaduto' : 'in scadenza'}',
         message: userMessage,
         metadata: metadata,
+        expiry: privilege.status.expiryDate,
       );
       if (privilegeNotification != null) {
         WebNotificationService.showNotification(
@@ -1345,6 +1353,7 @@ class CurrencyService {
             '_${isExpired ? 'expired' : 'warning'}',
         message: adminMessage,
         metadata: metadata,
+        expiry: privilege.status.expiryDate,
       );
     }
   }
@@ -1359,8 +1368,8 @@ class CurrencyService {
     if (key == 'tob_base') {
       return expired ? 'TOB_BASE_EXPIRED' : 'TOB_BASE_EXPIRING';
     }
-    if (key == 'mdb') {
-      return expired ? 'MDB_EXPIRED' : 'MDB_EXPIRING';
+    if (key == 'mtb') {
+      return expired ? 'MTB_EXPIRED' : 'MTB_EXPIRING';
     }
     return expired ? 'TOB_EXPIRED' : 'TOB_EXPIRING';
   }
@@ -1372,22 +1381,24 @@ class CurrencyService {
     int? daysLeft,
     String? message,
     Map<String, dynamic>? metadata,
+    DateTime? expiry,
   }) async {
     final notifications = _db.notifications;
+    // Episodio = scadenza: cambia solo con un rinnovo seguito da nuova scadenza.
+    final episode = expiry?.toIso8601String().substring(0, 10) ?? '-';
     final resolvedMessage =
         message ??
         (daysLeft != null
             ? '⚠️ $label in scadenza tra $daysLeft giorni!'
             : '🔴 $label – NO GO. Eseguire attività di mantenimento.');
-    final exists = notifications.any(
-      (item) =>
-          item['user_id'] == userId &&
-          item['type'] == type &&
-          item['is_read'] == false &&
-          ((item['label'] as String?) == label ||
-              item['message'] == resolvedMessage),
-    );
-    if (exists) {
+    if (currencyNotificationSent(
+      notifications,
+      userId: userId,
+      type: type,
+      label: label,
+      message: resolvedMessage,
+      episode: episode,
+    )) {
       return null;
     }
 
@@ -1396,6 +1407,7 @@ class CurrencyService {
       'user_id': userId,
       'type': type,
       'label': label,
+      'episode': episode,
       'message': resolvedMessage,
       'metadata': metadata,
       'is_read': false,
