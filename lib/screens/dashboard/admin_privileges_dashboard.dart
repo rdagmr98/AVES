@@ -517,12 +517,6 @@ class _AdminPrivilegesDashboardState
           row.user.fullName.toLowerCase().contains(search) ||
           (row.user.numeroLicenza ?? '').toLowerCase().contains(search);
 
-      final privilegeHelicopters = row.privileges
-          .map((item) => item.helicopterTypeId)
-          .toSet();
-      final privilegeTypes = row.privileges
-          .map((item) => item.privilegeTypeId)
-          .toSet();
       final rowStatusKey = row.status.isExpired
           ? 'expired'
           : row.status.isWarning
@@ -545,11 +539,12 @@ class _AdminPrivilegesDashboardState
             _licenseTypeChipIds,
             licenseTypes.contains,
           ) &&
-          _matchSelectedValues<int>(
+          matchPairs<int, int>(
+            row.privileges.map((p) => (p.helicopterTypeId, p.privilegeTypeId)),
             _helicopterTypeIds,
-            privilegeHelicopters.contains,
-          ) &&
-          _matchSelectedValues<int>(_privilegeTypeIds, privilegeTypes.contains);
+            _privilegeTypeIds,
+            all: _andMode,
+          );
 
       final matchesQualifications =
           (!_onlyTi || row.user.isTi) && (!_onlyEtp || row.user.isEtp);

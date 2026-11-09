@@ -248,12 +248,6 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
           search.isEmpty ||
           row.user.fullName.toLowerCase().contains(search) ||
           (row.user.numeroLicenza ?? '').toLowerCase().contains(search);
-      final assignmentHelicopters = row.assignments
-          .map((item) => item.helicopterTypeId)
-          .toSet();
-      final assignmentTypes = row.assignments
-          .map((item) => item.crewType)
-          .toSet();
       final capabilityIds = row.tobCapabilities
           .map((item) => item.tobCapabilityId)
           .toSet();
@@ -279,11 +273,12 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
             _tobCapabilityChipIds,
             capabilityIds.contains,
           ) &&
-          _matchSelectedValues<int>(
+          matchPairs<int, String>(
+            row.assignments.map((a) => (a.helicopterTypeId, a.crewType)),
             _helicopterTypeIds,
-            assignmentHelicopters.contains,
-          ) &&
-          _matchSelectedValues<String>(_crewTypeIds, assignmentTypes.contains);
+            _crewTypeIds,
+            all: _andMode,
+          );
 
       final matchesQualifications =
           (!_onlyTi || row.user.isTi) && (!_onlyEtp || row.user.isEtp);

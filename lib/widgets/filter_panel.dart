@@ -2,6 +2,25 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_constants.dart';
 
+/// Filtro elicottero + tipo sulle stesse righe [held]: il tipo scelto deve
+/// essere posseduto sull'elicottero scelto, non su un altro. Lista vuota =
+/// nessun vincolo. [all]: ogni combinazione scelta, altrimenti almeno una.
+bool matchPairs<A, B>(
+  Iterable<(A, B)> held,
+  List<A> as,
+  List<B> bs, {
+  required bool all,
+}) {
+  if (as.isEmpty && bs.isEmpty) return true;
+  bool has(A? a, B? b) =>
+      held.any((p) => (a == null || p.$1 == a) && (b == null || p.$2 == b));
+  final aa = as.isEmpty ? <A?>[null] : as;
+  final bb = bs.isEmpty ? <B?>[null] : bs;
+  return all
+      ? aa.every((a) => bb.every((b) => has(a, b)))
+      : aa.any((a) => bb.any((b) => has(a, b)));
+}
+
 /// Titolo della card filtri con contatore dei filtri attivi e "Azzera".
 class FiltersHeader extends StatelessWidget {
   const FiltersHeader({super.key, required this.active, required this.onClear});
