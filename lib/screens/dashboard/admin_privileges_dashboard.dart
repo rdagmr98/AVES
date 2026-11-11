@@ -2365,7 +2365,18 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
               color: AppColors.textSecondary,
             ),
           ),
-        for (final e in _history) CurrencyEventTile(e, onDeleted: _afterChange),
+        // OJT: la matita modifica la stessa riga delle attività validate.
+        for (final e in _history)
+          CurrencyEventTile(
+            e,
+            onDeleted: _afterChange,
+            onEdit: switch (_acts
+                .where((a) => a.id == e.activityId)
+                .firstOrNull) {
+              null => null,
+              final a => () => _editActivity(a),
+            },
+          ),
       ],
     );
   }

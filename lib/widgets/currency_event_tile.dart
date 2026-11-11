@@ -6,11 +6,13 @@ import '../services/currency_history.dart';
 
 /// Riga dello storico currency (manutenzione e volo). Con [onDeleted] le voci
 /// eliminabili hanno il cestino: conferma, cancella la riga, poi [onDeleted].
+/// [onEdit]: matita (OJT), apre la stessa modifica delle attività validate.
 class CurrencyEventTile extends StatelessWidget {
-  const CurrencyEventTile(this.event, {super.key, this.onDeleted});
+  const CurrencyEventTile(this.event, {super.key, this.onDeleted, this.onEdit});
 
   final CurrencyEvent event;
   final VoidCallback? onDeleted;
+  final VoidCallback? onEdit;
 
   Future<void> _delete(BuildContext context) async {
     final paired =
@@ -73,12 +75,24 @@ class CurrencyEventTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Icon(icon, color: color, size: 20),
       title: Text(event.title),
-      trailing: event.delete == null || onDeleted == null
+      trailing: onEdit == null && (event.delete == null || onDeleted == null)
           ? null
-          : IconButton(
-              tooltip: 'Elimina dallo storico',
-              icon: const Icon(Icons.delete_outline, size: 20),
-              onPressed: () => _delete(context),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onEdit != null)
+                  IconButton(
+                    tooltip: 'Modifica',
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    onPressed: onEdit,
+                  ),
+                if (event.delete != null && onDeleted != null)
+                  IconButton(
+                    tooltip: 'Elimina dallo storico',
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    onPressed: () => _delete(context),
+                  ),
+              ],
             ),
       subtitle: Text(
         [

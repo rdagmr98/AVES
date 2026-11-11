@@ -439,6 +439,7 @@ class CurrencyService {
         (
           date: date(a),
           kind: CurrencyEventKind.restored,
+          activityId: a['id'] as int?,
           title:
               '${a['activity_type']}: '
               '${label(a['helicopter_type_id'], a['privilege_type_id'], a['license_type_id'])}',
@@ -490,6 +491,7 @@ class CurrencyService {
         events.add((
           date: created,
           kind: CurrencyEventKind.assigned,
+          activityId: null,
           title: 'Privilegio assegnato: ${label(key.$1, key.$2, key.$3)}',
           note: null,
           delete: del,
@@ -499,6 +501,7 @@ class CurrencyService {
         events.add((
           date: revoked,
           kind: CurrencyEventKind.revoked,
+          activityId: null,
           title: 'Privilegio revocato: ${label(key.$1, key.$2, key.$3)}',
           note: null,
           delete: del,
@@ -519,6 +522,7 @@ class CurrencyService {
         events.add((
           date: l.lost,
           kind: CurrencyEventKind.lost,
+          activityId: null,
           delete: null,
           title: 'Currency persa: ${label(h, p, l)}',
           note: 'nessuna attività validata da ${periodDays ~/ 30} mesi',
@@ -528,6 +532,7 @@ class CurrencyService {
           events.add((
             date: r,
             kind: CurrencyEventKind.restored,
+            activityId: null,
             title: 'Currency riacquisita: ${label(h, p, l)}',
             note: 'con attività validata',
             delete: null,
@@ -570,6 +575,7 @@ class CurrencyService {
         (
           date: day(a),
           kind: CurrencyEventKind.restored,
+          activityId: null,
           title: '${a['activity_type']}: ${heli(a['helicopter_type_id'])} · T',
           note: [
             'volo ${formatHours((a['flight_hours'] as num).toDouble())} h',
@@ -582,6 +588,7 @@ class CurrencyService {
         (
           date: day(a),
           kind: CurrencyEventKind.restored,
+          activityId: null,
           title:
               '${a['activity_type']}: ${heli(a['helicopter_type_id'])} · '
               '${cap(a['tob_capability_id'])}',
@@ -603,6 +610,7 @@ class CurrencyService {
           events.add((
             date: created,
             kind: CurrencyEventKind.assigned,
+            activityId: null,
             title: '$noun assegnata: ${what(r)}',
             note: null,
             delete: del,
@@ -612,6 +620,7 @@ class CurrencyService {
           events.add((
             date: DateTime.tryParse(r['updated_at'] as String? ?? '') ?? now,
             kind: CurrencyEventKind.revoked,
+            activityId: null,
             title: '$noun revocata: ${what(r)}',
             note: null,
             delete: del,
@@ -659,6 +668,7 @@ class CurrencyService {
         events.add((
           date: l.lost,
           kind: CurrencyEventKind.lost,
+          activityId: null,
           delete: null,
           title: 'Currency persa: $what',
           note: note,
@@ -668,6 +678,7 @@ class CurrencyService {
           events.add((
             date: r,
             kind: CurrencyEventKind.restored,
+            activityId: null,
             title: 'Currency riacquisita: $what',
             note: 'con attività validata',
             delete: null,

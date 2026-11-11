@@ -11,10 +11,12 @@ bool catCovers(Object? a, Object? b) => a == null || b == null || a == b;
 
 /// Evento dello storico currency di un utente (timeline della scheda).
 /// [delete] elimina la riga da cui nasce (null = evento calcolato o
-/// privilegio ancora attivo).
+/// privilegio ancora attivo). [activityId]: attività manutentiva (OJT) da cui
+/// nasce, modificabile dallo storico come dalle attività validate.
 typedef CurrencyEvent = ({
   DateTime date,
   CurrencyEventKind kind,
+  int? activityId,
   String title,
   String? note,
   Future<void> Function()? delete,
