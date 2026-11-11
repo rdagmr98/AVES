@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-11-09
+## STATO SESSIONE — aggiornato 2026-11-11
+- 2026-11-11 (26): dati allineati all'Annesso 10/11 con OJT per i nuovi privilegi (`aves-data` `758b636`, `7ca0f72`). Storico: un'assegnazione con OJT compare solo come OJT (`assignedByOjt`, `7424b98`). Nota vault `AVES Corsi/Tecnici import Annesso 10-11-2026 OJT nuovi privilegi.md`.
 - 2026-11-09 (25): filtri admin, elicottero e privilegio (o ruolo equipaggio) valutati sulla stessa riga con `matchPairs` (`widgets/filter_panel.dart`, `ae24892`). Prima erano indipendenti: pre/post sul 206 passava il filtro 169. Nota vault `AVES Corsi/Tecnici filtri elicottero e privilegio sulla stessa riga 2026-11-09.md`.
 - 2026-11-06 (24): registro giornate utili D-P3-02 (Em. 1 MdQ) precompilato per Admin CSL dalla Sezione P-66 (`useful_days.dart`, `3bfa853`). Audit chiuso: notifiche potate e cancellate come traccia (`d116366`), niente notifiche ai pre-registrati, avviso volo duplicato (`b922ccb`), subscription 404/410 rimosse da `notify.mjs` + step in `aves-data` `push.yml` (`21538df`). Nota vault `AVES Corsi/Tecnici registro giornate utili D-P3-02.md`.
 - 2026-11-06 (23): audit, fix `75d43a3`: righe revocate fuori da `getMaintenanceCurrency`, notifiche di currency lette che non tornano più (`episode` = scadenza, `currencyNotificationSent`), tipo MTB, poligono MTB da `MDB_POLIGONO`. Poi MTB = 3 h a semestre + poligono (`75a9ef6`), stesso calcolo in dashboard, admin volo, storico, notifiche e PDF; legacy `getMdbCurrency` rimosso. Nota vault `AVES Corsi/Tecnici audit 2026-11-06.md`.
