@@ -20,24 +20,36 @@ typedef CurrencyEvent = ({
   Future<void> Function()? delete,
 });
 
+/// Scadenza della currency manutentiva: [periodDays] dei criteri contati in
+/// mesi di calendario (180 = 6 mesi), come l'Annesso 1 (05/11 → 05/05); il
+/// giorno che manca nel mese diventa l'ultimo (31/08 → 28/02).
+DateTime maintenanceExpiry(DateTime last, int periodDays) {
+  final month = last.month + periodDays ~/ 30;
+  final lastDay = DateTime(last.year, month + 1, 0).day;
+  return DateTime(last.year, month, last.day > lastDay ? lastDay : last.day);
+}
+
 /// Perdite di currency ricavate dalle date delle attività: ogni intervallo
 /// oltre [periodDays] fra due attività consecutive (o fra l'ultima ed [end])
-/// è una perdita alla data dell'ultima + [periodDays]; `regained` è l'attività
-/// che l'ha ripristinata (null = ancora persa a [end]). Senza attività la
-/// currency non è mai stata acquisita: nessuna perdita.
+/// è una perdita alla data dell'ultima + [periodDays] ([months]: in mesi, vedi
+/// [maintenanceExpiry]); `regained` è l'attività che l'ha ripristinata (null =
+/// ancora persa a [end]). Senza attività la currency non è mai stata
+/// acquisita: nessuna perdita.
 List<({DateTime lost, DateTime? regained})> currencyLosses(
   Iterable<DateTime> dates,
   int periodDays,
-  DateTime end,
-) {
+  DateTime end, {
+  bool months = false,
+}) {
+  DateTime exp(DateTime d) => months
+      ? maintenanceExpiry(d, periodDays)
+      : d.add(Duration(days: periodDays));
   final sorted = dates.toList()..sort();
   return [
     for (var i = 0; i < sorted.length; i++)
-      if ((i + 1 < sorted.length ? sorted[i + 1] : end).isAfter(
-        sorted[i].add(Duration(days: periodDays)),
-      ))
+      if ((i + 1 < sorted.length ? sorted[i + 1] : end).isAfter(exp(sorted[i])))
         (
-          lost: sorted[i].add(Duration(days: periodDays)),
+          lost: exp(sorted[i]),
           regained: i + 1 < sorted.length ? sorted[i + 1] : null,
         ),
   ];
@@ -53,10 +65,9 @@ bool assignedByOjt(
   Iterable<DateTime> revoked,
 ) {
   final day = DateTime(created.year, created.month, created.day);
-  final prev = revoked.where((r) => r.isBefore(created)).fold<DateTime?>(
-    null,
-    (m, r) => m == null || r.isAfter(m) ? r : m,
-  );
+  final prev = revoked
+      .where((r) => r.isBefore(created))
+      .fold<DateTime?>(null, (m, r) => m == null || r.isAfter(m) ? r : m);
   return ojt.any((o) => !o.isAfter(day) && (prev == null || o.isAfter(prev)));
 }
 

@@ -313,14 +313,13 @@ class _InsertActivityAdminScreenState
       final privId = p['privilege_type_id'] as int;
       final list = result.putIfAbsent(privId, () => []);
       if (!list.contains(user)) list.add(user);
-      final exp = _currencyService
-          .lastMaintenanceDate(
-            user.id,
-            helicopterId,
-            privId,
-            licenseTypeId: p['license_type_id'] as int?,
-          )
-          ?.add(Duration(days: _periodDays));
+      final last = _currencyService.lastMaintenanceDate(
+        user.id,
+        helicopterId,
+        privId,
+        licenseTypeId: p['license_type_id'] as int?,
+      );
+      final exp = last == null ? null : maintenanceExpiry(last, _periodDays);
       // Più categorie (B1.3, B2): conta quella che scade prima (null = mai).
       final m = expiry[privId] ??= {};
       final prev = m[user.id];

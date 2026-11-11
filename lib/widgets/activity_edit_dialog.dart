@@ -36,10 +36,13 @@ Future<Map<String, dynamic>?> showActivityEditDialog(
   double? hours,
   bool poligono = false,
   Set<int> poligonoHelicopters = const {},
+  String? type,
+  List<String> types = const [],
 }) {
   final fmt = DateFormat('dd/MM/yyyy');
   final narrow = MediaQuery.sizeOf(context).width < 600;
   var heliId = helicopterId;
+  var activityType = type;
   var detail = detailId;
   // ponytail: controller non disposti, il dialog li usa ancora durante
   // l'animazione di chiusura; il GC li raccoglie.
@@ -163,6 +166,7 @@ Future<Map<String, dynamic>?> showActivityEditDialog(
           Navigator.of(c).pop({
             dateKey: iso(date),
             if (period) ...{'date_from': iso(from), 'date_to': iso(to)},
+            if (types.isNotEmpty) 'activity_type': activityType,
             if (helicopters != null) 'helicopter_type_id': heliId,
             ?detailKey: detail,
             // h:mm arrotonda al minuto: riscrive solo se l'admin ha cambiato
@@ -197,6 +201,10 @@ Future<Map<String, dynamic>?> showActivityEditDialog(
                       dateField('Al', to, (d) => to = d),
                     ],
                   ]),
+                  if (types.isNotEmpty)
+                    dropdown<String?>('Tipo', activityType, {
+                      for (final t in types) t: t,
+                    }, (v) => activityType = v),
                   if (helicopters != null)
                     line([
                       dropdown<int?>(
@@ -301,6 +309,9 @@ Future<bool> editMaintenanceActivity(
     period: true,
     from: a.dateFrom,
     to: a.dateTo,
+    // OJT: il tipo si corregge fra i tre (iniziale, ripristino, nuovo).
+    type: a.activityType,
+    types: ojtTypes.contains(a.activityType) ? ojtTypes : const [],
     texts: {
       'ordine_lavoro': ('Ordine di lavoro', a.ordineLavoro),
       'matricola_militare': ('Matricola militare', a.matricolaMilitare),

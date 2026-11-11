@@ -224,12 +224,15 @@ class CurrencyService {
     required DateTime? lastDate,
     required int periodDays,
     required String label,
+    bool months = false,
   }) {
     if (lastDate == null) {
       return CurrencyStatus(status: CurrencyStatusEnum.expired, label: label);
     }
 
-    final expiry = lastDate.add(Duration(days: periodDays));
+    final expiry = months
+        ? maintenanceExpiry(lastDate, periodDays)
+        : lastDate.add(Duration(days: periodDays));
     final daysLeft = expiry.difference(DateTime.now()).inDays;
 
     late final CurrencyStatusEnum status;
@@ -321,6 +324,7 @@ class CurrencyService {
     final fallbackStatus = _computeStatus(
       lastDate: last?.effectiveDate,
       periodDays: periodDays,
+      months: true,
       label: 'Currency Manutentiva',
     );
     final perPrivilegeStatuses = await getPerPrivilegeCurrency(
@@ -506,13 +510,18 @@ class CurrencyService {
     for (final MapEntry(key: (h, p, l), value: end) in ends.entries) {
       final mine = mineOf((h, p, l));
       final ojtDates = {for (final a in mine.where(isOjt)) date(a)};
-      for (final l in currencyLosses(mine.map(date), periodDays, end)) {
+      for (final l in currencyLosses(
+        mine.map(date),
+        periodDays,
+        end,
+        months: true,
+      )) {
         events.add((
           date: l.lost,
           kind: CurrencyEventKind.lost,
           delete: null,
           title: 'Currency persa: ${label(h, p, l)}',
-          note: 'nessuna attività validata da $periodDays giorni',
+          note: 'nessuna attività validata da ${periodDays ~/ 30} mesi',
         ));
         final r = l.regained;
         if (r != null && !ojtDates.contains(r)) {
@@ -810,6 +819,7 @@ class CurrencyService {
           status: _computeStatus(
             lastDate: lastDate,
             periodDays: periodDays,
+            months: true,
             label: '${heli['code']} · $name',
           ),
         ),

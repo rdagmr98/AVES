@@ -92,8 +92,11 @@ class _CurrencySettingsScreenState
                   TextField(
                     controller: periodCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Periodo (giorni)',
+                      helperText: isMaintenance
+                          ? '30 giorni = 1 mese di calendario (180 = 6 mesi)'
+                          : null,
                     ),
                   ),
                 if (hasHoursField) ...[
@@ -338,7 +341,7 @@ class _CurrencySettingsScreenState
       return 'Periodo: ${c.periodDays} gg · Poligoni minimi: ${c.minCount ?? '-'}';
     }
     if (c.criteriaType == 'MAINTENANCE') {
-      return 'Periodo: ${c.periodDays} giorni · Preavviso: ${c.warningDays ?? 30} gg';
+      return 'Periodo: ${c.periodDays ~/ 30} mesi · Preavviso: ${c.warningDays ?? 30} gg';
     }
     return 'Periodo: ${c.periodDays} giorni';
   }

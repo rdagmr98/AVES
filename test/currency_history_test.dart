@@ -22,6 +22,27 @@ void main() {
     ]);
   });
 
+  test('manutenzione: 6 mesi di calendario, fine mese riportata', () {
+    expect(maintenanceExpiry(DateTime(2026, 11, 5), 180), DateTime(2027, 5, 5));
+    expect(
+      maintenanceExpiry(DateTime(2026, 8, 31), 180),
+      DateTime(2027, 2, 28),
+    );
+    expect(
+      maintenanceExpiry(DateTime(2027, 8, 31), 180),
+      DateTime(2028, 2, 29),
+    );
+    expect(
+      currencyLosses(
+        [DateTime(2026, 1, 31), DateTime(2026, 8, 1)],
+        180,
+        DateTime(2026, 9, 1),
+        months: true,
+      ),
+      [(lost: DateTime(2026, 7, 31), regained: DateTime(2026, 8, 1))],
+    );
+  });
+
   test('nessuna attività o sempre corrente = nessuna perdita', () {
     expect(currencyLosses([], 30, d(2026, 3, 1)), isEmpty);
     expect(
