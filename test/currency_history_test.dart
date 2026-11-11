@@ -136,6 +136,19 @@ void main() {
     expect(proposedOjt(cat, 30, [1], 3), isEmpty);
   });
 
+  test('assegnazione con OJT: solo l\'OJT dopo l\'ultima revoca la copre', () {
+    final created = DateTime(2026, 11, 11, 22);
+    expect(assignedByOjt(created, [DateTime(2026, 11, 5)], []), isTrue);
+    expect(assignedByOjt(created, [DateTime(2026, 11, 11)], []), isTrue);
+    expect(assignedByOjt(created, [DateTime(2026, 11, 12)], []), isFalse);
+    expect(assignedByOjt(created, [], []), isFalse);
+    // OJT del ciclo prima della revoca: la riassegnazione resta visibile.
+    expect(
+      assignedByOjt(created, [DateTime(2026, 6, 1)], [DateTime(2026, 9, 1)]),
+      isFalse,
+    );
+  });
+
   test('categoria nulla copre tutte, diverse non si coprono', () {
     expect(catCovers(null, 4), isTrue);
     expect(catCovers(3, null), isTrue);

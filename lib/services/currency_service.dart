@@ -412,7 +412,8 @@ class CurrencyService {
 
   /// Storico currency manutentiva di [userId], dal più recente: assegnazioni
   /// e revoche dei privilegi (`created_at`, `active: false` + `updated_at`),
-  /// OJT registrati e perdite ricavate dalle attività validate con la regola
+  /// OJT registrati (un'assegnazione con OJT compare solo come OJT,
+  /// [assignedByOjt]) e perdite ricavate dalle attività validate con la regola
   /// di [lastMaintenanceDate].
   Future<List<CurrencyEvent>> getCurrencyHistory(String userId) async {
     final periodDays = (await getMaintenanceCriteria())?.periodDays ?? 180;
@@ -448,22 +449,40 @@ class CurrencyService {
     // Fine del conteggio perdite per coppia: oggi se il privilegio è attivo,
     // sennò l'ultima revoca.
     // ponytail: le eventuali perdite fra revoca e riassegnazione restano.
+    Iterable<Map<String, dynamic>> mineOf((Object?, Object?, Object?) k) =>
+        acts.where(
+          (a) =>
+              a['helicopter_type_id'] == k.$1 &&
+              (a['privilege_type_id'] == null ||
+                  a['privilege_type_id'] == k.$2) &&
+              catCovers(a['license_type_id'], k.$3),
+        );
+    final rows = [
+      for (final p in _db.privileges.where((p) => p['user_id'] == userId))
+        (
+          p: p,
+          key: (
+            p['helicopter_type_id'],
+            p['privilege_type_id'],
+            p['license_type_id'],
+          ),
+          revoked: p['active'] == false
+              ? DateTime.tryParse(p['updated_at'] as String? ?? '') ?? now
+              : null,
+        ),
+    ];
     final ends = <(Object?, Object?, Object?), DateTime>{};
-    for (final p in _db.privileges.where((p) => p['user_id'] == userId)) {
-      final key = (
-        p['helicopter_type_id'],
-        p['privilege_type_id'],
-        p['license_type_id'],
-      );
+    for (final (:p, :key, :revoked) in rows) {
       final created = DateTime.tryParse(p['created_at'] as String? ?? '');
-      final revoked = p['active'] == false
-          ? DateTime.tryParse(p['updated_at'] as String? ?? '') ?? now
-          : null;
       // Si eliminano solo le righe revocate: le attive con "Togli privilegio".
       final del = revoked == null
           ? null
           : _remove(() => _db.privileges, _db.savePrivileges, p['id']);
-      if (created != null) {
+      if (created != null &&
+          !assignedByOjt(created, mineOf(key).where(isOjt).map(date), [
+            for (final r in rows)
+              if (r.key == key && r.revoked != null) r.revoked!,
+          ])) {
         events.add((
           date: created,
           kind: CurrencyEventKind.assigned,
@@ -485,12 +504,7 @@ class CurrencyService {
       if (ends[key]?.isAfter(end) != true) ends[key] = end;
     }
     for (final MapEntry(key: (h, p, l), value: end) in ends.entries) {
-      final mine = acts.where(
-        (a) =>
-            a['helicopter_type_id'] == h &&
-            (a['privilege_type_id'] == null || a['privilege_type_id'] == p) &&
-            catCovers(a['license_type_id'], l),
-      );
+      final mine = mineOf((h, p, l));
       final ojtDates = {for (final a in mine.where(isOjt)) date(a)};
       for (final l in currencyLosses(mine.map(date), periodDays, end)) {
         events.add((

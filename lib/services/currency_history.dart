@@ -43,6 +43,23 @@ List<({DateTime lost, DateTime? regained})> currencyLosses(
   ];
 }
 
+/// Assegnazione del [created] già nello storico come OJT: un OJT ([ojt]) fino a
+/// quel giorno e dopo l'ultima revoca precedente ([revoked]). L'OJT iniziale o
+/// di ripristino è l'assegnazione, con la sua data vera; la riga privilegio
+/// porta la data di inserimento.
+bool assignedByOjt(
+  DateTime created,
+  Iterable<DateTime> ojt,
+  Iterable<DateTime> revoked,
+) {
+  final day = DateTime(created.year, created.month, created.day);
+  final prev = revoked.where((r) => r.isBefore(created)).fold<DateTime?>(
+    null,
+    (m, r) => m == null || r.isAfter(m) ? r : m,
+  );
+  return ojt.any((o) => !o.isAfter(day) && (prev == null || o.isAfter(prev)));
+}
+
 /// Tipi coperti da un seminario: NAM_MHF (anche "NAM/MHF" e i dati senza
 /// tipo) vale per entrambi.
 Set<String> seminarCovers(String? type) {
