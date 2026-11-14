@@ -6,6 +6,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -90,6 +91,62 @@ Future<List<Uint8List>> _pdfPages(Uint8List pdf) async {
   return pages;
 }
 
+/// Riquadri della pagina (alto sx, alto dx, basso sx, basso dx) ritagliati
+/// sull'inchiostro, in larghezze-pagina, più l'altezza della pagina: nelle
+/// scansioni non sono centrati nei quarti del foglio. Taglio al canale bianco
+/// più vicino a metà pagina (provato su tutte le MAML di LMAM_FIRMATE).
+Future<(double, List<Rect>)> _quarters(Uint8List jpeg) async {
+  final codec = await ui.instantiateImageCodec(jpeg, targetWidth: 600);
+  final img = (await codec.getNextFrame()).image;
+  final w = img.width, h = img.height;
+  final px = (await img.toByteData())!.buffer.asUint8List();
+  img.dispose();
+  final ink = [
+    for (var i = 0; i < w * h; i++)
+      px[4 * i] + px[4 * i + 1] + px[4 * i + 2] < 600,
+  ];
+  // pixel d'inchiostro per riga (rows) o per colonna del rettangolo
+  List<int> prof(int x0, int y0, int x1, int y1, bool rows) {
+    final p = List.filled(rows ? y1 - y0 : x1 - x0, 0);
+    for (var y = y0; y < y1; y++) {
+      for (var x = x0; x < x1; x++) {
+        if (ink[y * w + x]) p[rows ? y - y0 : x - x0]++;
+      }
+    }
+    return p;
+  }
+
+  int gap(List<int> p) {
+    final n = p.length;
+    var best = n ~/ 2;
+    for (var i = n * 35 ~/ 100; i < n * 65 ~/ 100; i++) {
+      if (p[i] <= 1 && (i - n / 2).abs() < (best - n / 2).abs()) best = i;
+    }
+    return best;
+  }
+
+  final ys = gap(prof(0, 0, w, h, true));
+  final out = <Rect>[];
+  for (final (y0, y1) in [(0, ys), (ys, h)]) {
+    final xs = gap(prof(0, y0, w, y1, false));
+    for (final (x0, x1) in [(0, xs), (xs, w)]) {
+      final r = prof(x0, y0, x1, y1, true), c = prof(x0, y0, x1, y1, false);
+      final top = r.indexWhere((v) => v > 1);
+      out.add(
+        top < 0
+            ? Rect.fromLTRB(x0 / w, y0 / w, x1 / w, y1 / w)
+            : Rect.fromLTRB(
+                (x0 + c.indexWhere((v) => v > 1)) / w,
+                (y0 + top) / w,
+                (x0 + c.lastIndexWhere((v) => v > 1) + 1) / w,
+                (y0 + r.lastIndexWhere((v) => v > 1) + 1) / w,
+              ),
+      );
+    }
+  }
+  return (h / w, out);
+}
+
 /// Stampa le pagine già disegnate da un iframe nascosto: stessa resa per PDF e
 /// foto, senza dipendere dal visualizzatore PDF del browser.
 void _print(List<Uint8List> pages) {
@@ -144,89 +201,180 @@ class _MamlViewer extends StatefulWidget {
   State<_MamlViewer> createState() => _MamlViewerState();
 }
 
-/// Ultima vista scelta (2 pagine / 8 riquadri), resta per la sessione.
-bool _panelsMode = false;
+/// Ultima vista scelta (8 riquadri / 2 pagine), resta per la sessione.
+bool _panelsMode = true;
 
 /// Riquadri della MAML in ordine I-III, IV-VII, VIII, IX-XI, XII, XIII, XIV,
-/// XV: (pagina, quarto del foglio, capovolto). La metà bassa di pagina 1 è
-/// stampata capovolta (si piega), quindi lì destra e sinistra si scambiano.
+/// XV: (pagina, quarto in [_quarters], capovolto). La metà bassa di pagina 1
+/// è stampata capovolta (si piega), quindi lì destra e sinistra si scambiano.
 const _panels = [
-  (0, Alignment.topRight, false),
-  (0, Alignment.topLeft, false),
-  (0, Alignment.bottomRight, true),
-  (0, Alignment.bottomLeft, true),
-  (1, Alignment.topLeft, false),
-  (1, Alignment.topRight, false),
-  (1, Alignment.bottomLeft, false),
-  (1, Alignment.bottomRight, false),
+  (0, 1, false),
+  (0, 0, false),
+  (0, 3, true),
+  (0, 2, true),
+  (1, 0, false),
+  (1, 1, false),
+  (1, 2, false),
+  (1, 3, false),
 ];
 
 class _MamlViewerState extends State<_MamlViewer> {
-  late final Future<List<Uint8List>> _pages = () async {
-    final bytes = await MamlScanService().load(widget.file);
-    final mime = widget.file['mime'] as String? ?? '';
-    if (mime.startsWith('image/')) return [bytes];
-    return _pdfPages(bytes);
-  }();
+  /// Pagine e, per le MAML di 2 pagine, i riquadri trovati (altrimenti null).
+  late final Future<(List<Uint8List>, List<(double, List<Rect>)>?)> _pages =
+      () async {
+        final bytes = await MamlScanService().load(widget.file);
+        final mime = widget.file['mime'] as String? ?? '';
+        if (mime.startsWith('image/')) return ([bytes], null);
+        final pages = await _pdfPages(bytes);
+        if (pages.length != 2) return (pages, null);
+        try {
+          return (pages, [for (final p in pages) await _quarters(p)]);
+        } catch (_) {
+          return (pages, null);
+        }
+      }();
 
-  /// Un quarto della pagina largo [w]: l'immagine è disegnata al doppio e
-  /// ritagliata. ponytail: proporzioni A4 fisse, come tutte le MAML viste.
-  Widget _panel(Uint8List page, Alignment at, double w) => SizedBox(
-    width: w,
-    height: w * math.sqrt2,
-    child: ClipRect(
-      child: OverflowBox(
-        alignment: at,
-        minWidth: 2 * w,
-        maxWidth: 2 * w,
-        minHeight: 2 * w * math.sqrt2,
-        maxHeight: 2 * w * math.sqrt2,
-        child: Image.memory(page, fit: BoxFit.fill),
-      ),
-    ),
-  );
+  // Admin (PC): rotella = scorrimento, click = zoom sul punto.
+  final _v = ScrollController(), _h = ScrollController();
+  double _zoom = 1;
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<Uint8List>>(
+  void dispose() {
+    _v.dispose();
+    _h.dispose();
+    super.dispose();
+  }
+
+  void _toggleZoom(Offset p) {
+    final z0 = _zoom, z1 = _zoom == 1 ? 2.5 : 1.0;
+    final c = Offset(_h.offset + p.dx, _v.offset + p.dy) / z0;
+    setState(() => _zoom = z1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final (s, to) in [(_h, c.dx * z1 - p.dx), (_v, c.dy * z1 - p.dy)]) {
+        if (s.hasClients) s.jumpTo(to.clamp(0, s.position.maxScrollExtent));
+      }
+    });
+  }
+
+  /// Riquadro centrato [c] in una casella [t] uguale per tutti, larga [w]
+  /// (misure in larghezze-pagina, [aspect] = altezza della pagina).
+  Widget _panel(Uint8List page, double aspect, Offset c, Size t, double w) {
+    final k = w / t.width;
+    return SizedBox(
+      width: w,
+      height: t.height * k,
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: k,
+          maxWidth: k,
+          minHeight: k * aspect,
+          maxHeight: k * aspect,
+          child: Transform.translate(
+            offset: (Offset(t.width, t.height) / 2 - c) * k,
+            child: Image.memory(page, fit: BoxFit.fill),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _content(
+    List<Uint8List> pages,
+    List<(double, List<Rect>)>? q,
+    double width,
+  ) {
+    if (!_panelsMode || q == null) {
+      return Column(
+        children: [
+          for (final p in pages)
+            Container(
+              constraints: const BoxConstraints(maxWidth: 900),
+              padding: const EdgeInsets.all(8),
+              child: Image.memory(p),
+            ),
+        ],
+      );
+    }
+    final all = [for (final (_, rs) in q) ...rs];
+    final t = Size(
+      all.map((r) => r.width).reduce(math.max) + .03,
+      all.map((r) => r.height).reduce(math.max) + .03,
+    );
+    return Wrap(
+      alignment: WrapAlignment.center,
+      children: [
+        for (final (page, quarter, flip) in _panels)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: RotatedBox(
+              quarterTurns: flip ? 2 : 0,
+              child: _panel(
+                pages[page],
+                q[page].$1,
+                q[page].$2[quarter].center,
+                t,
+                math.min(width - 16, 420),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) => FutureBuilder<(List<Uint8List>, List<(double, List<Rect>)>?)>(
     future: _pages,
     builder: (context, snap) => Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Chiudi',
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(widget.title, overflow: TextOverflow.ellipsis),
-        actions: [
-          if (snap.data?.length == 2)
-            SegmentedButton<bool>(
-              showSelectedIcon: false,
-              style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              segments: const [
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(Icons.description_outlined),
-                  label: Text('2'),
-                  tooltip: '2 pagine',
-                ),
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(Icons.grid_view),
-                  label: Text('8'),
-                  tooltip: '8 riquadri',
-                ),
-              ],
-              selected: {_panelsMode},
-              onSelectionChanged: (s) => setState(() => _panelsMode = s.first),
+      bottomNavigationBar: BottomAppBar(
+        height: 60,
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.title,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
-          if (widget.canPrint)
+            if (snap.data?.$2 != null)
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: const [
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.grid_view),
+                    label: Text('8'),
+                    tooltip: '8 riquadri',
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.description_outlined),
+                    label: Text('2'),
+                    tooltip: '2 pagine',
+                  ),
+                ],
+                selected: {_panelsMode},
+                onSelectionChanged: (s) =>
+                    setState(() => _panelsMode = s.first),
+              ),
+            if (widget.canPrint)
+              IconButton(
+                tooltip: 'Stampa',
+                icon: const Icon(Icons.print_outlined),
+                onPressed: snap.hasData ? () => _print(snap.data!.$1) : null,
+              ),
             IconButton(
-              tooltip: 'Stampa',
-              icon: const Icon(Icons.print_outlined),
-              onPressed: snap.hasData ? () => _print(snap.data!) : null,
+              tooltip: 'Chiudi',
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-          const SizedBox(width: 8),
-        ],
+          ],
+        ),
       ),
       body: snap.hasError
           ? Center(
@@ -241,43 +389,40 @@ class _MamlViewerState extends State<_MamlViewer> {
           : !snap.hasData
           ? const Center(child: CircularProgressIndicator())
           : LayoutBuilder(
-              builder: (context, box) => InteractiveViewer(
-                constrained: false,
-                maxScale: 6,
-                child: SizedBox(
+              builder: (context, box) {
+                final content = SizedBox(
                   width: box.maxWidth,
-                  child: _panelsMode && snap.data!.length == 2
-                      ? Wrap(
-                          alignment: WrapAlignment.center,
-                          children: [
-                            for (final (page, at, flip) in _panels)
-                              Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: RotatedBox(
-                                  quarterTurns: flip ? 2 : 0,
-                                  child: _panel(
-                                    snap.data![page],
-                                    at,
-                                    math.min(box.maxWidth - 16, 420),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            for (final p in snap.data!)
-                              Container(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 900,
-                                ),
-                                padding: const EdgeInsets.all(8),
-                                child: Image.memory(p),
-                              ),
-                          ],
+                  child: _content(snap.data!.$1, snap.data!.$2, box.maxWidth),
+                );
+                if (!widget.canPrint) {
+                  return InteractiveViewer(
+                    constrained: false,
+                    maxScale: 6,
+                    child: content,
+                  );
+                }
+                // canPrint = admin, quindi PC: la rotella scorre, il click
+                // ingrandisce (FittedBox scala la stessa impaginazione).
+                return GestureDetector(
+                  onTapUp: (d) => _toggleZoom(d.localPosition),
+                  child: MouseRegion(
+                    cursor: _zoom == 1
+                        ? SystemMouseCursors.zoomIn
+                        : SystemMouseCursors.zoomOut,
+                    child: SingleChildScrollView(
+                      controller: _v,
+                      child: SingleChildScrollView(
+                        controller: _h,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: box.maxWidth * _zoom,
+                          child: FittedBox(child: content),
                         ),
-                ),
-              ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
     ),
   );
