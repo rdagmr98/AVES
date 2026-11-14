@@ -16,6 +16,7 @@ import '../../services/notification_service.dart';
 import '../../services/pta_service.dart';
 import '../../services/web_notification_service.dart';
 import '../../widgets/aves_logo_widget.dart';
+import '../../widgets/maml_viewer.dart';
 import '../../services/hours_format.dart';
 import '../../widgets/notification_panel_widget.dart';
 import '../../widgets/user_avatar.dart';
@@ -558,6 +559,11 @@ class _CompactHeader extends StatelessWidget {
                       ],
                     ],
                   ),
+                ),
+                MamlButton(
+                  userId: user.id,
+                  name: user.fullName,
+                  onMissing: onTap,
                 ),
                 const Icon(Icons.chevron_right, color: AppColors.textHint),
               ],

@@ -22,6 +22,7 @@ import '../../widgets/currency_badge_widget.dart';
 import '../../widgets/currency_event_tile.dart';
 import '../../widgets/filter_panel.dart';
 import '../../widgets/flight_course_dialog.dart';
+import '../../widgets/maml_viewer.dart';
 import '../../widgets/user_avatar.dart';
 
 enum _CrewSortMode { status, alphabetical, lastModified, lastActivity }
@@ -1565,6 +1566,11 @@ class _CrewRecordDialog extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   if (worst != null) CurrencyBadgeWidget(status: worst),
+                  MamlButton(
+                    userId: user.id,
+                    name: user.fullName,
+                    canPrint: true,
+                  ),
                   IconButton(
                     tooltip: 'Registra corso',
                     icon: const Icon(Icons.school_outlined),

@@ -13,6 +13,7 @@ import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/app_dropdown.dart';
 import '../../widgets/aves_logo_widget.dart';
 import '../../widgets/date_range_dialog.dart';
+import '../../widgets/maml_viewer.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminP66Dashboard extends ConsumerStatefulWidget {
@@ -182,6 +183,11 @@ class _AdminP66DashboardState extends ConsumerState<AdminP66Dashboard> {
           ),
         ),
         actions: [
+          MamlButton(
+            userId: row.user.id,
+            name: row.user.fullName,
+            canPrint: true,
+          ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Chiudi'),

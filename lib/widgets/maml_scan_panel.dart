@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/maml_scan_service.dart';
+import 'maml_viewer.dart';
 
 /// Scansione MAML di [userId]: la vede il titolare e qualsiasi admin. Il
 /// titolare la carica in attesa di verifica; un admin ([isAdmin]) la carica
@@ -72,30 +73,12 @@ class _MamlScanPanelState extends State<MamlScanPanel> {
     input.click();
   }
 
-  Future<void> _view(Map file) async {
-    // Aperta subito, dentro il gesto: dopo l'await il browser la bloccherebbe.
-    final win = html.window.open('', '_blank');
-    setState(() => _busy = true);
-    try {
-      final bytes = await _service.load(Map<String, dynamic>.from(file));
-      // ponytail: URL del blob mai revocato, lo libera la chiusura della scheda.
-      final url = html.Url.createObjectUrlFromBlob(
-        html.Blob([bytes], file['mime'] as String? ?? 'application/pdf'),
-      );
-      try {
-        win.location.href = url;
-      } catch (_) {
-        html.AnchorElement(href: url)
-          ..setAttribute('download', 'MAML')
-          ..click();
-      }
-    } catch (e) {
-      win.close();
-      if (mounted) _snack('$e'.replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  void _view(Map file) => showMamlViewer(
+    context,
+    file,
+    title: 'Scansione MAML',
+    canPrint: widget.isAdmin,
+  );
 
   Future<void> _reject() async {
     final ctrl = TextEditingController();

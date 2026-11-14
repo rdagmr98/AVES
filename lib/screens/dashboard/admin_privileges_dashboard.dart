@@ -27,6 +27,7 @@ import '../../widgets/currency_event_tile.dart';
 import '../../widgets/date_range_dialog.dart';
 import '../../widgets/filter_panel.dart';
 import '../../widgets/form_parts.dart';
+import '../../widgets/maml_viewer.dart';
 import '../../widgets/user_avatar.dart';
 
 enum _MaintenanceSortMode { status, alphabetical, lastModified, lastActivity }
@@ -2673,6 +2674,11 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
                   ),
                   const SizedBox(width: 12),
                   CurrencyBadgeWidget(status: _row.status),
+                  MamlButton(
+                    userId: user.id,
+                    name: user.fullName,
+                    canPrint: true,
+                  ),
                   if (email.isNotEmpty)
                     IconButton(
                       tooltip: 'Invia email',
