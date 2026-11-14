@@ -53,6 +53,7 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
 ## STATO SESSIONE — aggiornato 2026-11-14
+- 2026-11-14 (30): MAML di tutti da `E:\LMAM_FIRMATE` (59 utenti, `aves-data` `f858799`, letti con agy hydrogen), viewer a 2 pagine o 8 riquadri e FAB MAML in basso a destra (`558c2c6`). Nota vault `AVES Corsi/Tecnici import scansioni MAML.md`.
 - 2026-11-14 (29): MAML vista dentro l'app con pdf.js vendorizzato (`web/pdfjs/`, `widgets/maml_viewer.dart`, `b5b739b`), stampa solo admin, `MamlButton` in dashboard utente e nelle schede di `admin/priv`, `admin/crew`, `admin/p66`. Fac-simile di prova su Ardia (`aves-data` `34aad09`), da sostituire con la vera.
 - 2026-11-14 (28): scansione MAML nel profilo e nel dettaglio utente admin (`widgets/maml_scan_panel.dart`, `services/maml_scan_service.dart`, `abb59ee`): l'utente carica, un admin approva o rifiuta. File cifrati in `aves-data/maml/`, indice `db/maml_scans.json`, 12 scansioni importate (`aves-data` `2401126`, script `aves-data/tools/import_maml.py`). Nota vault `AVES Corsi/Tecnici scansione MAML con verifica admin 2026-11-14.md`.
 - 2026-11-11 (27): currency manutentiva = ultima attività + 6 mesi di calendario (`maintenanceExpiry`, `1492fe5`), volo/poligono restano in giorni; tipo OJT modificabile in «Attività validate». Dati a scadenza − 6 mesi e assegnazioni alla data OJT (`aves-data` `ad6f481`). Nota vault `AVES Corsi/Tecnici currency manutentiva 6 mesi di calendario 2026-11-11.md`.
