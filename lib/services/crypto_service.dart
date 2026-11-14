@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:encrypt/encrypt.dart';
 
 class CryptoService {
@@ -30,6 +32,22 @@ class CryptoService {
       return ciphertext;
     }
   }
+
+  /// File binari: IV casuale di 16 byte in testa, poi AES-CBC PKCS7.
+  Uint8List encryptBytes(Uint8List data) {
+    final iv = IV.fromSecureRandom(16);
+    return Uint8List.fromList([
+      ...iv.bytes,
+      ..._encrypter.encryptBytes(data, iv: iv).bytes,
+    ]);
+  }
+
+  Uint8List decryptBytes(Uint8List data) => Uint8List.fromList(
+    _encrypter.decryptBytes(
+      Encrypted(data.sublist(16)),
+      iv: IV(data.sublist(0, 16)),
+    ),
+  );
 
   String? encryptNullable(String? value) =>
       value == null ? null : encrypt(value);

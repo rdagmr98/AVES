@@ -15,6 +15,7 @@ import '../../services/currency_history.dart';
 import '../../services/password_reset.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin_app_bar_leading.dart';
+import '../../widgets/maml_scan_panel.dart';
 import '../../widgets/user_avatar.dart';
 
 // ─────────────────────────────────────────────────────────────
@@ -1918,6 +1919,27 @@ class _UserDetailPageState extends ConsumerState<_UserDetailPage> {
                             ),
                             child: const Text('Utente'),
                           ),
+                      ],
+                    ),
+                  ),
+                ),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Scansione MAML',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        MamlScanPanel(
+                          userId: _user.id,
+                          viewerId: auth.userProfile?.id ?? '',
+                          isAdmin: true,
+                        ),
                       ],
                     ),
                   ),

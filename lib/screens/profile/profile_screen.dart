@@ -12,6 +12,7 @@ import '../../constants/app_constants.dart';
 import '../../models/reference_models.dart';
 import '../../models/user_models.dart';
 import '../../services/user_service.dart';
+import '../../widgets/maml_scan_panel.dart';
 import '../../widgets/user_avatar.dart';
 import '../../widgets/admin_app_bar_leading.dart';
 import '../../widgets/currency_badge_widget.dart';
@@ -1174,6 +1175,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  _Section(
+                    icon: Icons.badge_outlined,
+                    title: 'Scansione MAML',
+                    child: MamlScanPanel(
+                      userId: profile.id,
+                      viewerId: profile.id,
+                      isAdmin: isAdminProfile,
                     ),
                   ),
                   _Section(

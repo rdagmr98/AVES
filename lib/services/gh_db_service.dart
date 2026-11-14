@@ -50,6 +50,7 @@ class GhDbService {
     'account_deletion_requests.json',
     'privilege_requests.json',
     'seminars.json',
+    'maml_scans.json',
   ];
 
   Future<void> init() async {
@@ -540,6 +541,70 @@ class GhDbService {
         data,
         'aggiornamento richieste privilegi',
       );
+
+  /// Indice delle scansioni MAML: un record per utente (`id` = user id) con
+  /// `approved` e `pending` = `{path, sha, mime, at, by}` o null.
+  List<Map<String, dynamic>> get mamlScans => List<Map<String, dynamic>>.from(
+    _getData('maml_scans.json') as List? ?? [],
+  );
+
+  Future<void> saveMamlScans(List<Map<String, dynamic>> data) =>
+      _writeFile('maml_scans.json', data, 'aggiornamento scansioni MAML');
+
+  // ── File binari (scansioni), fuori dalla cache JSON ───────────────────────
+  static const String _root =
+      'https://api.github.com/repos/${GhConfig.owner}/${GhConfig.dataRepo}/contents';
+
+  /// Crea [path] (nome sempre nuovo, quindi niente sha) e ne restituisce lo
+  /// sha, che serve poi per cancellarlo.
+  Future<String> putBinary(String path, Uint8List bytes, String msg) async {
+    final body = jsonEncode({'message': msg, 'content': base64.encode(bytes)});
+    for (var attempt = 1; ; attempt++) {
+      final res = await http
+          .put(
+            Uri.parse('$_root/$path'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 120));
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return ((jsonDecode(res.body) as Map)['content'] as Map)['sha']
+            as String;
+      }
+      // 409 = un'altra scrittura ha spostato il branch nel frattempo.
+      final retryable = res.statusCode == 409 || res.statusCode >= 500;
+      if (!retryable || attempt == _maxWriteAttempts) {
+        throw Exception('Caricamento non riuscito (${res.statusCode})');
+      }
+      await _backoff(attempt);
+    }
+  }
+
+  Future<Uint8List> getBinary(String path) async {
+    final res = await http
+        .get(
+          _fresh('$_root/$path'),
+          headers: {..._headers, 'Accept': 'application/vnd.github.raw+json'},
+        )
+        .timeout(const Duration(seconds: 120));
+    if (res.statusCode != 200) {
+      throw Exception('Scansione non disponibile (${res.statusCode})');
+    }
+    return res.bodyBytes;
+  }
+
+  /// Best effort: un file orfano non fa danni, un errore qui non blocca nulla.
+  Future<void> deleteBinary(String path, String sha, String msg) async {
+    try {
+      await http
+          .delete(
+            Uri.parse('$_root/$path'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({'message': msg, 'sha': sha}),
+          )
+          .timeout(const Duration(seconds: 30));
+    } catch (_) {}
+  }
 }
 
 class ConflictException implements Exception {
