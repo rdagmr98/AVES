@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-11-11
+## STATO SESSIONE — aggiornato 2026-11-14
+- 2026-11-14 (28): scansione MAML nel profilo e nel dettaglio utente admin (`widgets/maml_scan_panel.dart`, `services/maml_scan_service.dart`, `abb59ee`): l'utente carica, un admin approva o rifiuta. File cifrati in `aves-data/maml/`, indice `db/maml_scans.json`, 12 scansioni importate (`aves-data` `2401126`, script `aves-data/tools/import_maml.py`). Nota vault `AVES Corsi/Tecnici scansione MAML con verifica admin 2026-11-14.md`.
 - 2026-11-11 (27): currency manutentiva = ultima attività + 6 mesi di calendario (`maintenanceExpiry`, `1492fe5`), volo/poligono restano in giorni; tipo OJT modificabile in «Attività validate». Dati a scadenza − 6 mesi e assegnazioni alla data OJT (`aves-data` `ad6f481`). Nota vault `AVES Corsi/Tecnici currency manutentiva 6 mesi di calendario 2026-11-11.md`.
 - 2026-11-11 (26): dati allineati all'Annesso 10/11 con OJT per i nuovi privilegi (`aves-data` `758b636`, `7ca0f72`). Storico: un'assegnazione con OJT compare solo come OJT (`assignedByOjt`, `7424b98`). Nota vault `AVES Corsi/Tecnici import Annesso 10-11-2026 OJT nuovi privilegi.md`.
 - 2026-11-09 (25): filtri admin, elicottero e privilegio (o ruolo equipaggio) valutati sulla stessa riga con `matchPairs` (`widgets/filter_panel.dart`, `ae24892`). Prima erano indipendenti: pre/post sul 206 passava il filtro 169. Nota vault `AVES Corsi/Tecnici filtri elicottero e privilegio sulla stessa riga 2026-11-09.md`.
