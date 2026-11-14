@@ -461,17 +461,32 @@ class _UserDashboardState extends ConsumerState<UserDashboard> {
         onSelected: (tab) => context.go('/activities/add?tab=$tab'),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(authProvider).refreshUserData(),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1100),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              children: children,
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: () => ref.read(authProvider).refreshUserData(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                  children: children,
+                ),
+              ),
             ),
           ),
-        ),
+          // ponytail: secondo FAB nel body, lo Scaffold ne ha uno solo (il "+").
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: MamlButton(
+              userId: user.id,
+              name: user.fullName,
+              fab: true,
+              onMissing: () => context.go('/profile'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -559,11 +574,6 @@ class _CompactHeader extends StatelessWidget {
                       ],
                     ],
                   ),
-                ),
-                MamlButton(
-                  userId: user.id,
-                  name: user.fullName,
-                  onMissing: onTap,
                 ),
                 const Icon(Icons.chevron_right, color: AppColors.textHint),
               ],

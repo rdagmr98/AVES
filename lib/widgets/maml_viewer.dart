@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -143,6 +144,23 @@ class _MamlViewer extends StatefulWidget {
   State<_MamlViewer> createState() => _MamlViewerState();
 }
 
+/// Ultima vista scelta (2 pagine / 8 riquadri), resta per la sessione.
+bool _panelsMode = false;
+
+/// Riquadri della MAML in ordine I-III, IV-VII, VIII, IX-XI, XII, XIII, XIV,
+/// XV: (pagina, quarto del foglio, capovolto). La metà bassa di pagina 1 è
+/// stampata capovolta (si piega), quindi lì destra e sinistra si scambiano.
+const _panels = [
+  (0, Alignment.topRight, false),
+  (0, Alignment.topLeft, false),
+  (0, Alignment.bottomRight, true),
+  (0, Alignment.bottomLeft, true),
+  (1, Alignment.topLeft, false),
+  (1, Alignment.topRight, false),
+  (1, Alignment.bottomLeft, false),
+  (1, Alignment.bottomRight, false),
+];
+
 class _MamlViewerState extends State<_MamlViewer> {
   late final Future<List<Uint8List>> _pages = () async {
     final bytes = await MamlScanService().load(widget.file);
@@ -150,6 +168,23 @@ class _MamlViewerState extends State<_MamlViewer> {
     if (mime.startsWith('image/')) return [bytes];
     return _pdfPages(bytes);
   }();
+
+  /// Un quarto della pagina largo [w]: l'immagine è disegnata al doppio e
+  /// ritagliata. ponytail: proporzioni A4 fisse, come tutte le MAML viste.
+  Widget _panel(Uint8List page, Alignment at, double w) => SizedBox(
+    width: w,
+    height: w * math.sqrt2,
+    child: ClipRect(
+      child: OverflowBox(
+        alignment: at,
+        minWidth: 2 * w,
+        maxWidth: 2 * w,
+        minHeight: 2 * w * math.sqrt2,
+        maxHeight: 2 * w * math.sqrt2,
+        child: Image.memory(page, fit: BoxFit.fill),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => FutureBuilder<List<Uint8List>>(
@@ -163,12 +198,34 @@ class _MamlViewerState extends State<_MamlViewer> {
         ),
         title: Text(widget.title, overflow: TextOverflow.ellipsis),
         actions: [
+          if (snap.data?.length == 2)
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.description_outlined),
+                  label: Text('2'),
+                  tooltip: '2 pagine',
+                ),
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.grid_view),
+                  label: Text('8'),
+                  tooltip: '8 riquadri',
+                ),
+              ],
+              selected: {_panelsMode},
+              onSelectionChanged: (s) => setState(() => _panelsMode = s.first),
+            ),
           if (widget.canPrint)
             IconButton(
               tooltip: 'Stampa',
               icon: const Icon(Icons.print_outlined),
               onPressed: snap.hasData ? () => _print(snap.data!) : null,
             ),
+          const SizedBox(width: 8),
         ],
       ),
       body: snap.hasError
@@ -189,16 +246,36 @@ class _MamlViewerState extends State<_MamlViewer> {
                 maxScale: 6,
                 child: SizedBox(
                   width: box.maxWidth,
-                  child: Column(
-                    children: [
-                      for (final p in snap.data!)
-                        Container(
-                          constraints: const BoxConstraints(maxWidth: 900),
-                          padding: const EdgeInsets.all(8),
-                          child: Image.memory(p),
+                  child: _panelsMode && snap.data!.length == 2
+                      ? Wrap(
+                          alignment: WrapAlignment.center,
+                          children: [
+                            for (final (page, at, flip) in _panels)
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: RotatedBox(
+                                  quarterTurns: flip ? 2 : 0,
+                                  child: _panel(
+                                    snap.data![page],
+                                    at,
+                                    math.min(box.maxWidth - 16, 420),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            for (final p in snap.data!)
+                              Container(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 900,
+                                ),
+                                padding: const EdgeInsets.all(8),
+                                child: Image.memory(p),
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -214,12 +291,16 @@ class MamlButton extends StatelessWidget {
     required this.userId,
     required this.name,
     this.canPrint = false,
+    this.fab = false,
     this.onMissing,
   });
 
   final String userId;
   final String name;
   final bool canPrint;
+
+  /// Pulsante tondo come il "+" (dashboard utente) invece dell'icona.
+  final bool fab;
   final VoidCallback? onMissing;
 
   @override
@@ -230,24 +311,38 @@ class MamlButton extends StatelessWidget {
       final file = (rec['approved'] ?? rec['pending']) as Map?;
       if (file == null && onMissing == null) return const SizedBox.shrink();
       final pendingOnly = rec['approved'] == null && file != null;
+      final tooltip = file == null
+          ? 'MAML: carica la scansione dal profilo'
+          : pendingOnly
+          ? 'MAML (in attesa di verifica)'
+          : 'MAML';
+      final VoidCallback? open = file == null
+          ? onMissing
+          : () => showMamlViewer(
+              context,
+              file,
+              title: 'MAML · $name',
+              canPrint: canPrint,
+            );
+      if (fab) {
+        return FloatingActionButton(
+          heroTag: null,
+          tooltip: tooltip,
+          onPressed: open,
+          child: Badge(
+            isLabelVisible: pendingOnly,
+            backgroundColor: Colors.amber,
+            child: const Icon(Icons.badge_outlined),
+          ),
+        );
+      }
       return IconButton(
-        tooltip: file == null
-            ? 'MAML: carica la scansione dal profilo'
-            : pendingOnly
-            ? 'MAML (in attesa di verifica)'
-            : 'MAML',
+        tooltip: tooltip,
         icon: Icon(
           Icons.badge_outlined,
           color: pendingOnly ? Colors.amber : null,
         ),
-        onPressed: file == null
-            ? onMissing
-            : () => showMamlViewer(
-                context,
-                file,
-                title: 'MAML · $name',
-                canPrint: canPrint,
-              ),
+        onPressed: open,
       );
     },
   );
