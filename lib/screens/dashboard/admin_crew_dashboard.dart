@@ -35,6 +35,8 @@ class AdminCrewDashboard extends ConsumerStatefulWidget {
 }
 
 class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
+  bool _attentionView =
+      false; // card «Fermi e in scadenza»: vista per motivo al posto della griglia
   final _userService = UserService();
   final _activityService = ActivityService();
   final _currencyService = CurrencyService();
@@ -566,139 +568,6 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     );
   }
 
-  Widget _buildCrewGoPanel(List<_CrewUserRow> goRows) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppColors.currencyValid.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_outline,
-                    size: 18,
-                    color: AppColors.currencyValid,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Equipaggi GO (${goRows.length})',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const Text(
-                        'Ore semestrali e qualifiche di volo in regola',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: goRows.length,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 116,
-                childAspectRatio: 0.86,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
-              ),
-              itemBuilder: (context, index) {
-                final row = goRows[index];
-                final hours = row.flightStatus?.flightHours;
-                final subText = hours != null
-                    ? '${formatHours(hours)} h sem.'
-                    : 'GO';
-                return InkWell(
-                  onTap: () => _showUserDetail(row),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Card(
-                    color: const Color(0xFF1A3A1A),
-                    margin: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(
-                        color: Color(0xFF27AE60),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Center(
-                              child: UserAvatar.fill(user: row.user),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  row.user.nome,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12.5),
-                                ),
-                                Text(
-                                  row.user.cognome,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            subText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF8CE99A),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCrewAttentionPanel(List<_CrewUserRow> attentionRows) {
     var noGoCount = 0;
     var warnCount = 0;
@@ -969,8 +838,7 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     );
   }
 
-  Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {
-    final goRows = <_CrewUserRow>[];
+  List<_CrewUserRow> _attentionRows(List<_CrewUserRow> filteredRows) {
     final attentionRows = <_CrewUserRow>[];
 
     for (final row in filteredRows) {
@@ -981,37 +849,91 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       final hasExpired = statuses.any((s) => s.isExpired);
       final hasWarning = statuses.any((s) => s.isWarning);
       if (!hasExpired && !hasWarning && statuses.isNotEmpty) {
-        goRows.add(row);
-      } else {
-        attentionRows.add(row);
+        continue;
       }
+      attentionRows.add(row);
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final sideBySide =
-            constraints.maxWidth >= 820 &&
-            goRows.isNotEmpty &&
-            attentionRows.isNotEmpty;
-        if (sideBySide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 5, child: _buildCrewGoPanel(goRows)),
-              const SizedBox(width: 16),
-              Expanded(flex: 6, child: _buildCrewAttentionPanel(attentionRows)),
-            ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (attentionRows.isNotEmpty)
-              _buildCrewAttentionPanel(attentionRows),
-            if (attentionRows.isNotEmpty && goRows.isNotEmpty)
-              const SizedBox(height: 16),
-            if (goRows.isNotEmpty) _buildCrewGoPanel(goRows),
-          ],
+    return attentionRows;
+  }
+
+  Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filteredRows.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 110,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemBuilder: (context, index) {
+        final row = filteredRows[index];
+        final statuses = row.relevantStatuses(
+          _statusCrewFilter,
+          _statusCapabilityFilter,
+        );
+        final hasExpired = statuses.any((item) => item.isExpired);
+        final hasWarning = statuses.any((item) => item.isWarning);
+        final backgroundColor = hasExpired
+            ? const Color(0xFF3A0A0A)
+            : hasWarning
+            ? const Color(0xFF3A2A0A)
+            : statuses.isNotEmpty
+            ? const Color(0xFF1A3A1A)
+            : AppColors.surface;
+        final borderColor = hasExpired
+            ? const Color(0xFFC0392B)
+            : hasWarning
+            ? const Color(0xFFE67E22)
+            : statuses.isNotEmpty
+            ? const Color(0xFF27AE60)
+            : AppColors.border;
+        return InkWell(
+          onTap: () => _showUserDetail(row),
+          borderRadius: BorderRadius.circular(12),
+          child: Card(
+            color: backgroundColor,
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: borderColor, width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Center(child: UserAvatar.fill(user: row.user)),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          row.user.nome,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        Text(
+                          row.user.cognome,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
@@ -1253,6 +1175,12 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
 
     final statCardData = <_CrewStatCardData>[
       _CrewStatCardData(
+        title: 'Fermi e in scadenza',
+        value: '${_attentionRows(_rows).length}',
+        icon: Icons.warning_amber_rounded,
+        onTap: () => setState(() => _attentionView = !_attentionView),
+      ),
+      _CrewStatCardData(
         title: 'Attività volo/TOB in attesa',
         value: '$_pendingActivities',
         icon: Icons.pending_actions,
@@ -1349,7 +1277,9 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
       );
     }
 
-    return _buildUserGrid(filteredRows);
+    return _attentionView
+        ? _buildCrewAttentionPanel(_attentionRows(filteredRows))
+        : _buildUserGrid(filteredRows);
   }
 
   @override

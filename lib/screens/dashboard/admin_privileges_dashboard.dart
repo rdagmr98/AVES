@@ -42,6 +42,8 @@ class AdminPrivilegesDashboard extends ConsumerStatefulWidget {
 
 class _AdminPrivilegesDashboardState
     extends ConsumerState<AdminPrivilegesDashboard> {
+  bool _attentionView =
+      false; // card «Fermi e in scadenza»: vista per motivo al posto della griglia
   final _userService = UserService();
   final _activityService = ActivityService();
   final _currencyService = CurrencyService();
@@ -913,139 +915,6 @@ class _AdminPrivilegesDashboardState
     );
   }
 
-  Widget _buildGoPanel(List<_MaintenanceUserRow> goRows) {
-    final df = DateFormat('dd/MM/yy');
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppColors.currencyValid.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_outline,
-                    size: 18,
-                    color: AppColors.currencyValid,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Operativi GO (${goRows.length})',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const Text(
-                        'Privilegi e seminari in regola · ordinati per stato/scadenza',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: goRows.length,
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 116,
-                childAspectRatio: 0.86,
-                crossAxisSpacing: 6,
-                mainAxisSpacing: 6,
-              ),
-              itemBuilder: (context, index) {
-                final row = goRows[index];
-                final expText = row.status.expiryDate != null
-                    ? 'Scad. ${df.format(row.status.expiryDate!)}'
-                    : 'GO';
-                return InkWell(
-                  onTap: () => _showUserDetail(row),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Card(
-                    color: const Color(0xFF1A3A1A),
-                    margin: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(
-                        color: Color(0xFF27AE60),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Center(
-                              child: UserAvatar.fill(user: row.user),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  row.user.nome,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12.5),
-                                ),
-                                Text(
-                                  row.user.cognome,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            expText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF8CE99A),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildAttentionPanel(List<_MaintenanceUserRow> attentionRows) {
     final noGoCount = attentionRows
         .where((r) => r.status.isExpired || r.status.isSuspended)
@@ -1339,33 +1208,76 @@ class _AdminPrivilegesDashboardState
   }
 
   Widget _buildUserGrid(List<_MaintenanceUserRow> filteredRows) {
-    final goRows = filteredRows.where((r) => r.status.isValid).toList();
-    final attentionRows = filteredRows.where((r) => !r.status.isValid).toList();
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final sideBySide =
-            constraints.maxWidth >= 820 &&
-            goRows.isNotEmpty &&
-            attentionRows.isNotEmpty;
-        if (sideBySide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 5, child: _buildGoPanel(goRows)),
-              const SizedBox(width: 16),
-              Expanded(flex: 6, child: _buildAttentionPanel(attentionRows)),
-            ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (attentionRows.isNotEmpty) _buildAttentionPanel(attentionRows),
-            if (attentionRows.isNotEmpty && goRows.isNotEmpty)
-              const SizedBox(height: 16),
-            if (goRows.isNotEmpty) _buildGoPanel(goRows),
-          ],
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: filteredRows.length,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 110,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+      ),
+      itemBuilder: (context, index) {
+        final row = filteredRows[index];
+        final backgroundColor = row.status.isExpired || row.status.isSuspended
+            ? const Color(0xFF3A0A0A)
+            : row.status.isWarning
+            ? const Color(0xFF3A2A0A)
+            : row.status.isValid
+            ? const Color(0xFF1A3A1A)
+            : AppColors.surface;
+        final borderColor = row.status.isExpired || row.status.isSuspended
+            ? const Color(0xFFC0392B)
+            : row.status.isWarning
+            ? const Color(0xFFE67E22)
+            : row.status.isValid
+            ? const Color(0xFF27AE60)
+            : AppColors.border;
+        return InkWell(
+          onTap: () => _showUserDetail(row),
+          borderRadius: BorderRadius.circular(12),
+          child: Card(
+            color: backgroundColor,
+            margin: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: borderColor, width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Center(child: UserAvatar.fill(user: row.user)),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          row.user.nome,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        Text(
+                          row.user.cognome,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
@@ -1747,10 +1659,11 @@ class _AdminPrivilegesDashboardState
         onTap: () => context.go('/admin/users'),
       ),
       _StatCardData(
-        title: 'Currency scadute',
-        value: '$expiredCount',
+        title: 'Fermi e in scadenza',
+        value: '${expiredCount + warningCount}',
         icon: Icons.warning_amber_rounded,
-        onTap: _showExpired,
+        color: _attentionView ? AppColors.currencyExpired : null,
+        onTap: () => setState(() => _attentionView = !_attentionView),
       ),
       _StatCardData(
         title: 'PTA attive',
@@ -1822,7 +1735,11 @@ class _AdminPrivilegesDashboardState
           ),
         )
       else
-        _buildUserGrid(filteredRows),
+        _attentionView
+            ? _buildAttentionPanel(
+                filteredRows.where((r) => !r.status.isValid).toList(),
+              )
+            : _buildUserGrid(filteredRows),
     ];
 
     return Scaffold(
