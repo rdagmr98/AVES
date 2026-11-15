@@ -375,83 +375,643 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
     );
   }
 
-  Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: filteredRows.length,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 110,
-        childAspectRatio: 1.0,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-      ),
-      itemBuilder: (context, index) {
-        final row = filteredRows[index];
-        final statuses = row.relevantStatuses(
-          _statusCrewFilter,
-          _statusCapabilityFilter,
-        );
-        final hasExpired = statuses.any((item) => item.isExpired);
-        final hasWarning = statuses.any((item) => item.isWarning);
-        final backgroundColor = hasExpired
-            ? const Color(0xFF3A0A0A)
-            : hasWarning
-            ? const Color(0xFF3A2A0A)
-            : statuses.isNotEmpty
-            ? const Color(0xFF1A3A1A)
-            : AppColors.surface;
-        final borderColor = hasExpired
-            ? const Color(0xFFC0392B)
-            : hasWarning
-            ? const Color(0xFFE67E22)
-            : statuses.isNotEmpty
-            ? const Color(0xFF27AE60)
-            : AppColors.border;
-        return InkWell(
-          onTap: () => _showUserDetail(row),
-          borderRadius: BorderRadius.circular(12),
-          child: Card(
-            color: backgroundColor,
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: borderColor, width: 1.5),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Center(child: UserAvatar.fill(user: row.user)),
+  ({
+    String key,
+    String title,
+    IconData icon,
+    Color color,
+    int severity,
+    String detail,
+    String badge,
+    Color badgeColor,
+  })
+  _classifyCrewAttentionRow(_CrewUserRow row) {
+    final capFilter = _statusCapabilityFilter;
+    final crewFilter = _statusCrewFilter;
+
+    final expiredCaps = <String>[];
+    final warningCaps = <String>[];
+    DateTime? worstCapExpiry;
+    DateTime? nearestCapWarn;
+
+    if (crewFilter == 'all' || crewFilter == 'TOB') {
+      for (final cap in row.tobCapabilities) {
+        if (capFilter != null && cap.tobCapabilityId != capFilter) continue;
+        final st =
+            row.tobStatuses['${cap.helicopterTypeId}:${cap.tobCapabilityId}'];
+        if (st == null) continue;
+        if (st.isExpired) {
+          expiredCaps.add('${cap.helicopterCode} · ${cap.capabilityName}');
+          if (worstCapExpiry == null ||
+              (st.expiryDate != null &&
+                  st.expiryDate!.isBefore(worstCapExpiry))) {
+            worstCapExpiry = st.expiryDate;
+          }
+        } else if (st.isWarning) {
+          warningCaps.add('${cap.helicopterCode} · ${cap.capabilityName}');
+          if (nearestCapWarn == null ||
+              (st.expiryDate != null &&
+                  st.expiryDate!.isBefore(nearestCapWarn))) {
+            nearestCapWarn = st.expiryDate;
+          }
+        }
+      }
+    }
+
+    String formatCapList(List<String> list, String suffix) {
+      if (list.isEmpty) return '';
+      final head = list.take(2).join('  •  ');
+      final extra = list.length > 2 ? ' (+${list.length - 2} $suffix)' : '';
+      return '$head$extra';
+    }
+
+    final fl = row.flightStatus;
+    final tobBase = (crewFilter == 'all' || crewFilter == 'TOB')
+        ? row.tobBaseStatus
+        : null;
+    final mtb = (crewFilter == 'all' || crewFilter == 'MTB')
+        ? row.mdbStatus
+        : null;
+
+    if (fl != null && fl.isExpired) {
+      final (badge, badgeColor) = expiryBadge(fl.expiryDate, never: '0 h');
+      return (
+        key: 'flight_exp',
+        title: 'Ore volo semestrali insufficienti',
+        icon: Icons.flight,
+        color: AppColors.currencyExpired,
+        severity: 0,
+        detail: fl.label,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (tobBase != null && tobBase.isExpired) {
+      final (badge, badgeColor) = expiryBadge(
+        tobBase.expiryDate,
+        never: 'Mai svolto',
+      );
+      return (
+        key: 'tob_base_exp',
+        title: 'Currency Base TOB scaduta',
+        icon: Icons.precision_manufacturing_outlined,
+        color: AppColors.currencyExpired,
+        severity: 0,
+        detail: tobBase.label,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (expiredCaps.isNotEmpty) {
+      final (badge, badgeColor) = expiryBadge(
+        worstCapExpiry,
+        never: 'Mai svolta',
+      );
+      return (
+        key: 'tob_cap_exp',
+        title: 'Capacità TOB scadute',
+        icon: Icons.build_circle_outlined,
+        color: AppColors.currencyExpired,
+        severity: 0,
+        detail: formatCapList(expiredCaps, 'scad.'),
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (mtb != null && mtb.isExpired) {
+      final (badge, badgeColor) = expiryBadge(
+        mtb.expiryDate,
+        never: 'Mai svolto',
+      );
+      return (
+        key: 'mtb_exp',
+        title: 'Poligono MTB scaduto o mancante',
+        icon: Icons.shield_outlined,
+        color: AppColors.currencyExpired,
+        severity: 0,
+        detail: mtb.label,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (fl != null && fl.isWarning) {
+      final (badge, badgeColor) = expiryBadge(fl.expiryDate);
+      return (
+        key: 'flight_warn',
+        title: 'Ore volo semestrali in scadenza',
+        icon: Icons.flight,
+        color: AppColors.currencyWarning,
+        severity: 1,
+        detail: fl.label,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (tobBase != null && tobBase.isWarning) {
+      final (badge, badgeColor) = expiryBadge(tobBase.expiryDate);
+      return (
+        key: 'tob_base_warn',
+        title: 'Currency Base TOB in scadenza',
+        icon: Icons.precision_manufacturing_outlined,
+        color: AppColors.currencyWarning,
+        severity: 1,
+        detail: tobBase.label,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (warningCaps.isNotEmpty) {
+      final (badge, badgeColor) = expiryBadge(nearestCapWarn);
+      return (
+        key: 'tob_cap_warn',
+        title: 'Capacità TOB in scadenza',
+        icon: Icons.schedule,
+        color: AppColors.currencyWarning,
+        severity: 1,
+        detail: formatCapList(warningCaps, 'in scad.'),
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (mtb != null && mtb.isWarning) {
+      final (badge, badgeColor) = expiryBadge(mtb.expiryDate);
+      return (
+        key: 'mtb_warn',
+        title: 'Poligono MTB in scadenza',
+        icon: Icons.shield_outlined,
+        color: AppColors.currencyWarning,
+        severity: 1,
+        detail: mtb.label,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    return (
+      key: 'other',
+      title: 'Dati non disponibili',
+      icon: Icons.help_outline,
+      color: AppColors.textSecondary,
+      severity: 2,
+      detail: 'Nessun dato di volo registrato',
+      badge: 'N/D',
+      badgeColor: AppColors.textSecondary,
+    );
+  }
+
+  Widget _buildCrewGoPanel(List<_CrewUserRow> goRows) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.currencyValid.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          row.user.nome,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 16),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 18,
+                    color: AppColors.currencyValid,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Equipaggi GO (${goRows.length})',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const Text(
+                        'Ore semestrali e qualifiche di volo in regola',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
                         ),
-                        Text(
-                          row.user.cognome,
-                          textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: goRows.length,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 116,
+                childAspectRatio: 0.86,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+              ),
+              itemBuilder: (context, index) {
+                final row = goRows[index];
+                final hours = row.flightStatus?.flightHours;
+                final subText = hours != null
+                    ? '${formatHours(hours)} h sem.'
+                    : 'GO';
+                return InkWell(
+                  onTap: () => _showUserDetail(row),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Card(
+                    color: const Color(0xFF1A3A1A),
+                    margin: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(
+                        color: Color(0xFF27AE60),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Center(
+                              child: UserAvatar.fill(user: row.user),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  row.user.nome,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12.5),
+                                ),
+                                Text(
+                                  row.user.cognome,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF8CE99A),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCrewAttentionPanel(List<_CrewUserRow> attentionRows) {
+    var noGoCount = 0;
+    var warnCount = 0;
+
+    final byKey =
+        <
+          String,
+          ({
+            String title,
+            IconData icon,
+            Color color,
+            int severity,
+            List<
+              (_CrewUserRow row, String detail, String badge, Color badgeColor)
+            >
+            items,
+          })
+        >{};
+
+    for (final row in attentionRows) {
+      final info = _classifyCrewAttentionRow(row);
+      if (info.severity == 0) {
+        noGoCount++;
+      } else if (info.severity == 1) {
+        warnCount++;
+      }
+      final group = byKey.putIfAbsent(
+        info.key,
+        () => (
+          title: info.title,
+          icon: info.icon,
+          color: info.color,
+          severity: info.severity,
+          items: [],
+        ),
+      );
+      group.items.add((row, info.detail, info.badge, info.badgeColor));
+    }
+
+    final groups = byKey.values.toList()
+      ..sort((a, b) {
+        final bySeverity = a.severity.compareTo(
+          b.severity,
+        ); // prima i NO GO, poi le scadenze
+        if (bySeverity != 0) return bySeverity;
+        return b.items.length.compareTo(a.items.length);
+      });
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.currencyExpired.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: AppColors.currencyExpired,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Fermi e in scadenza (${attentionRows.length})',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Raggruppati per motivo (gruppi più numerosi prima) · $noGoCount NO GO, $warnCount in scadenza',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < groups.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: groups[i].color.withValues(alpha: 0.45),
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: groups[i].color.withValues(alpha: 0.16),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: groups[i].color.withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            groups[i].icon,
+                            size: 16,
+                            color: groups[i].color,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              groups[i].title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: groups[i].color,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '${groups[i].items.length}',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    for (var j = 0; j < groups[i].items.length; j++) ...[
+                      if (j > 0)
+                        Divider(
+                          height: 1,
+                          color: AppColors.border.withValues(alpha: 0.5),
+                        ),
+                      _buildCrewAttentionTile(groups[i].items[j]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCrewAttentionTile(
+    (_CrewUserRow row, String detail, String badge, Color badgeColor) item,
+  ) {
+    final (row, detail, badge, badgeColor) = item;
+    final roles = row.assignments.map((a) => a.crewType).toSet().join('/');
+    final meta = [
+      if (roles.isNotEmpty) roles,
+      if (row.user.orgUnitName.isNotEmpty) row.user.orgUnitName,
+      if (row.user.isTi) 'TI',
+      if (row.user.isEtp) 'ETP',
+    ].join(' · ');
+    return InkWell(
+      onTap: () => _showUserDetail(row),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          children: [
+            UserAvatar(user: row.user, radius: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          row.user.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ),
+                      if (meta.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            meta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 4),
                 ],
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: badgeColor.withValues(alpha: 0.6)),
+              ),
+              child: Text(
+                badge,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: badgeColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserGrid(List<_CrewUserRow> filteredRows) {
+    final goRows = <_CrewUserRow>[];
+    final attentionRows = <_CrewUserRow>[];
+
+    for (final row in filteredRows) {
+      final statuses = row.relevantStatuses(
+        _statusCrewFilter,
+        _statusCapabilityFilter,
+      );
+      final hasExpired = statuses.any((s) => s.isExpired);
+      final hasWarning = statuses.any((s) => s.isWarning);
+      if (!hasExpired && !hasWarning && statuses.isNotEmpty) {
+        goRows.add(row);
+      } else {
+        attentionRows.add(row);
+      }
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideBySide =
+            constraints.maxWidth >= 820 &&
+            goRows.isNotEmpty &&
+            attentionRows.isNotEmpty;
+        if (sideBySide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 5, child: _buildCrewGoPanel(goRows)),
+              const SizedBox(width: 16),
+              Expanded(flex: 6, child: _buildCrewAttentionPanel(attentionRows)),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (attentionRows.isNotEmpty)
+              _buildCrewAttentionPanel(attentionRows),
+            if (attentionRows.isNotEmpty && goRows.isNotEmpty)
+              const SizedBox(height: 16),
+            if (goRows.isNotEmpty) _buildCrewGoPanel(goRows),
+          ],
         );
       },
     );
@@ -795,16 +1355,65 @@ class _AdminCrewDashboardState extends ConsumerState<AdminCrewDashboard> {
   @override
   Widget build(BuildContext context) {
     final filteredRows = _sortedRows(_filteredRows());
+    final expiredCount = _rows
+        .where(
+          (r) => r
+              .relevantStatuses(_statusCrewFilter, _statusCapabilityFilter)
+              .any((s) => s.isExpired),
+        )
+        .length;
+    final warningCount = _rows.where((r) {
+      final st = r.relevantStatuses(_statusCrewFilter, _statusCapabilityFilter);
+      return !st.any((s) => s.isExpired) && st.any((s) => s.isWarning);
+    }).length;
+    final validCount = _rows.where((r) {
+      final st = r.relevantStatuses(_statusCrewFilter, _statusCapabilityFilter);
+      return st.isNotEmpty &&
+          !st.any((s) => s.isExpired) &&
+          !st.any((s) => s.isWarning);
+    }).length;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobileLayout = screenWidth < 650;
 
     final content = [
       _buildStatCards(isMobileLayout),
       const SizedBox(height: 16),
-      Text(
-        'Utenti equipaggi/volo',
-        style: Theme.of(context).textTheme.titleLarge,
-        textAlign: TextAlign.center,
+      Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            'Utenti equipaggi/volo (${filteredRows.length})',
+            style: Theme.of(context).textTheme.titleLarge,
+            softWrap: true,
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              FilterPill(
+                label: 'NO GO ($expiredCount)',
+                color: AppColors.currencyExpired,
+                selected: _statusChipFilters.contains('expired'),
+                onTap: () => _toggleStringFilter(_statusChipFilters, 'expired'),
+              ),
+              FilterPill(
+                label: 'In scadenza ($warningCount)',
+                color: AppColors.currencyWarning,
+                selected: _statusChipFilters.contains('warning'),
+                onTap: () => _toggleStringFilter(_statusChipFilters, 'warning'),
+              ),
+              FilterPill(
+                label: 'GO ($validCount)',
+                color: AppColors.currencyValid,
+                selected: _statusChipFilters.contains('valid'),
+                onTap: () => _toggleStringFilter(_statusChipFilters, 'valid'),
+              ),
+            ],
+          ),
+        ],
       ),
       const SizedBox(height: 12),
       _buildUserContent(filteredRows),

@@ -518,7 +518,7 @@ class _AdminPrivilegesDashboardState
           row.user.fullName.toLowerCase().contains(search) ||
           (row.user.numeroLicenza ?? '').toLowerCase().contains(search);
 
-      final rowStatusKey = row.status.isExpired
+      final rowStatusKey = (row.status.isExpired || row.status.isSuspended)
           ? 'expired'
           : row.status.isWarning
           ? 'warning'
@@ -585,7 +585,12 @@ class _AdminPrivilegesDashboardState
 
   Future<void> _emailExpiringUsers() async {
     final rowsToNotify = _rows
-        .where((row) => row.status.isWarning || row.status.isExpired)
+        .where(
+          (row) =>
+              row.status.isWarning ||
+              row.status.isExpired ||
+              row.status.isSuspended,
+        )
         .toList();
     await _launchMaintenanceEmail(rowsToNotify);
   }
@@ -625,7 +630,7 @@ class _AdminPrivilegesDashboardState
               );
           final others = _rows.where(
             (r) =>
-                r.status.isExpired &&
+                (r.status.isExpired || r.status.isSuspended) &&
                 !r.perPrivilegeCurrency.any((ps) => ps.status.isExpired),
           );
           Future<void> after(bool changed) async {
@@ -750,77 +755,617 @@ class _AdminPrivilegesDashboardState
     );
   }
 
-  Widget _buildUserGrid(List<_MaintenanceUserRow> filteredRows) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: filteredRows.length,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 110,
-        childAspectRatio: 1.0,
-        crossAxisSpacing: 4,
-        mainAxisSpacing: 4,
-      ),
-      itemBuilder: (context, index) {
-        final row = filteredRows[index];
-        final backgroundColor = row.status.isExpired
-            ? const Color(0xFF3A0A0A)
-            : row.status.isWarning
-            ? const Color(0xFF3A2A0A)
-            : row.status.isValid
-            ? const Color(0xFF1A3A1A)
-            : AppColors.surface;
-        final borderColor = row.status.isExpired
-            ? const Color(0xFFC0392B)
-            : row.status.isWarning
-            ? const Color(0xFFE67E22)
-            : row.status.isValid
-            ? const Color(0xFF27AE60)
-            : AppColors.border;
-        return InkWell(
-          onTap: () => _showUserDetail(row),
-          borderRadius: BorderRadius.circular(12),
-          child: Card(
-            color: backgroundColor,
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: borderColor, width: 1.5),
+  ({
+    String key,
+    String title,
+    IconData icon,
+    Color color,
+    int severity,
+    String detail,
+    String badge,
+    Color badgeColor,
+  })
+  _classifyAttentionRow(_MaintenanceUserRow row) {
+    final expiredPrivs =
+        row.perPrivilegeCurrency.where((p) => p.status.isExpired).toList()
+          ..sort(
+            (a, b) => (a.status.expiryDate ?? DateTime(1970)).compareTo(
+              b.status.expiryDate ?? DateTime(1970),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Center(child: UserAvatar.fill(user: row.user)),
+          );
+    final warningPrivs =
+        row.perPrivilegeCurrency.where((p) => p.status.isWarning).toList()
+          ..sort(
+            (a, b) => (a.status.expiryDate ?? DateTime(1970)).compareTo(
+              b.status.expiryDate ?? DateTime(1970),
+            ),
+          );
+
+    String formatPrivList(List<PrivilegeCurrencyStatus> list, String suffix) {
+      if (list.isEmpty) return '';
+      final head = list
+          .take(2)
+          .map((p) => '${p.helicopterCode} · ${p.privilegeName}')
+          .join('  •  ');
+      final extra = list.length > 2 ? ' (+${list.length - 2} $suffix)' : '';
+      return '$head$extra';
+    }
+
+    if (row.status.isSuspended) {
+      final ptaText = row.status.label.replaceFirst(
+        'Currency Manutentiva — ',
+        '',
+      );
+      final extra = expiredPrivs.isNotEmpty
+          ? '  ·  ${expiredPrivs.length} priv. scad.'
+          : '';
+      return (
+        key: 'pta',
+        title: 'Sospesi per PTA non visionata',
+        icon: Icons.block,
+        color: const Color(0xFF8E44AD),
+        severity: 0,
+        detail: '$ptaText$extra',
+        badge: 'NO GO – PTA',
+        badgeColor: const Color(0xFF8E44AD),
+      );
+    }
+
+    if (row.status.isExpired && row.status.label.contains('seminario')) {
+      final semText = row.status.label.replaceFirst(
+        'Currency Manutentiva – ',
+        '',
+      );
+      final extra = expiredPrivs.isNotEmpty
+          ? '  ·  +${expiredPrivs.length} priv. scad.'
+          : '';
+      final (badge, badgeColor) = expiryBadge(
+        row.status.expiryDate,
+        never: 'Mancante',
+      );
+      return (
+        key: 'sem_exp',
+        title: 'Seminario NAM / MHF scaduto o mancante',
+        icon: Icons.school_outlined,
+        color: AppColors.currencyExpired,
+        severity: 0,
+        detail: '${semText[0].toUpperCase()}${semText.substring(1)}$extra',
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (row.status.isExpired || expiredPrivs.isNotEmpty) {
+      final privDetail = expiredPrivs.isNotEmpty
+          ? formatPrivList(expiredPrivs, 'scad.')
+          : row.status.label.replaceFirst('Currency Manutentiva — ', '');
+      final warnExtra = warningPrivs.isNotEmpty
+          ? '  ·  ${warningPrivs.length} in scad.'
+          : '';
+      final worstDate = expiredPrivs.isNotEmpty
+          ? expiredPrivs.first.status.expiryDate
+          : row.status.expiryDate;
+      final (badge, badgeColor) = expiryBadge(worstDate, never: 'Mai svolta');
+      return (
+        key: 'priv_exp',
+        title: 'Privilegi manutentivi scaduti',
+        icon: Icons.build_circle_outlined,
+        color: AppColors.currencyExpired,
+        severity: 0,
+        detail: '$privDetail$warnExtra',
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (row.status.isWarning && row.status.label.contains('seminario')) {
+      final semText = row.status.label.replaceFirst(
+        'Currency Manutentiva – ',
+        '',
+      );
+      final extra = warningPrivs.isNotEmpty
+          ? '  ·  +${warningPrivs.length} priv. in scad.'
+          : '';
+      final (badge, badgeColor) = expiryBadge(
+        row.status.secondaryExpiryDate ?? row.status.expiryDate,
+      );
+      return (
+        key: 'sem_warn',
+        title: 'Seminario NAM / MHF in scadenza',
+        icon: Icons.school_outlined,
+        color: AppColors.currencyWarning,
+        severity: 1,
+        detail: '${semText[0].toUpperCase()}${semText.substring(1)}$extra',
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    if (row.status.isWarning || warningPrivs.isNotEmpty) {
+      final privDetail = warningPrivs.isNotEmpty
+          ? formatPrivList(warningPrivs, 'in scad.')
+          : row.status.label.replaceFirst('Currency Manutentiva — ', '');
+      final nearestDate = warningPrivs.isNotEmpty
+          ? warningPrivs.first.status.expiryDate
+          : row.status.expiryDate;
+      final (badge, badgeColor) = expiryBadge(nearestDate);
+      return (
+        key: 'priv_warn',
+        title: 'Privilegi manutentivi in scadenza',
+        icon: Icons.schedule,
+        color: AppColors.currencyWarning,
+        severity: 1,
+        detail: privDetail,
+        badge: badge,
+        badgeColor: badgeColor,
+      );
+    }
+
+    return (
+      key: 'other',
+      title: 'Dati non disponibili',
+      icon: Icons.help_outline,
+      color: AppColors.textSecondary,
+      severity: 2,
+      detail: row.status.label,
+      badge: row.status.statusText,
+      badgeColor: AppColors.textSecondary,
+    );
+  }
+
+  Widget _buildGoPanel(List<_MaintenanceUserRow> goRows) {
+    final df = DateFormat('dd/MM/yy');
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.currencyValid.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          row.user.nome,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 13),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    size: 18,
+                    color: AppColors.currencyValid,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Operativi GO (${goRows.length})',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const Text(
+                        'Privilegi e seminari in regola · ordinati per stato/scadenza',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
                         ),
-                        Text(
-                          row.user.cognome,
-                          textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: goRows.length,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 116,
+                childAspectRatio: 0.86,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+              ),
+              itemBuilder: (context, index) {
+                final row = goRows[index];
+                final expText = row.status.expiryDate != null
+                    ? 'Scad. ${df.format(row.status.expiryDate!)}'
+                    : 'GO';
+                return InkWell(
+                  onTap: () => _showUserDetail(row),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Card(
+                    color: const Color(0xFF1A3A1A),
+                    margin: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(
+                        color: Color(0xFF27AE60),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Center(
+                              child: UserAvatar.fill(user: row.user),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  row.user.nome,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12.5),
+                                ),
+                                Text(
+                                  row.user.cognome,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            expText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF8CE99A),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttentionPanel(List<_MaintenanceUserRow> attentionRows) {
+    final noGoCount = attentionRows
+        .where((r) => r.status.isExpired || r.status.isSuspended)
+        .length;
+    final warnCount = attentionRows.where((r) => r.status.isWarning).length;
+
+    final byKey =
+        <
+          String,
+          ({
+            String title,
+            IconData icon,
+            Color color,
+            int severity,
+            List<
+              (
+                _MaintenanceUserRow row,
+                String detail,
+                String badge,
+                Color badgeColor,
+              )
+            >
+            items,
+          })
+        >{};
+
+    final far = DateTime(9999); // dentro ogni gruppo: prima chi scade prima
+    final sorted = [...attentionRows]
+      ..sort(
+        (a, b) =>
+            (a.status.expiryDate ?? far).compareTo(b.status.expiryDate ?? far),
+      );
+    for (final row in sorted) {
+      final info = _classifyAttentionRow(row);
+      final group = byKey.putIfAbsent(
+        info.key,
+        () => (
+          title: info.title,
+          icon: info.icon,
+          color: info.color,
+          severity: info.severity,
+          items: [],
+        ),
+      );
+      group.items.add((row, info.detail, info.badge, info.badgeColor));
+    }
+
+    final groups = byKey.values.toList()
+      ..sort((a, b) {
+        final bySeverity = a.severity.compareTo(
+          b.severity,
+        ); // prima i NO GO, poi le scadenze
+        if (bySeverity != 0) return bySeverity;
+        return b.items.length.compareTo(a.items.length);
+      });
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.currencyExpired.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: AppColors.currencyExpired,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Fermi e in scadenza (${attentionRows.length})',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Raggruppati per motivo (gruppi più numerosi prima) · $noGoCount NO GO, $warnCount in scadenza',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (noGoCount > 0)
+                  TextButton.icon(
+                    onPressed: _showExpired,
+                    icon: const Icon(Icons.build_outlined, size: 16),
+                    label: const Text('Azioni OJT'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < groups.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              _buildAttentionGroupCard(groups[i]),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttentionGroupCard(
+    ({
+      String title,
+      IconData icon,
+      Color color,
+      int severity,
+      List<
+        (_MaintenanceUserRow row, String detail, String badge, Color badgeColor)
+      >
+      items,
+    })
+    group,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: group.color.withValues(alpha: 0.45)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: group.color.withValues(alpha: 0.16),
+              border: Border(
+                bottom: BorderSide(color: group.color.withValues(alpha: 0.3)),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(group.icon, size: 16, color: group.color),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    group.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: group.color,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${group.items.length}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < group.items.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                color: AppColors.border.withValues(alpha: 0.5),
+              ),
+            _buildAttentionUserTile(group.items[i], group.color),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttentionUserTile(
+    (_MaintenanceUserRow row, String detail, String badge, Color badgeColor)
+    item,
+    Color groupColor,
+  ) {
+    final (row, detail, badge, badgeColor) = item;
+    final meta = [
+      if (row.user.orgUnitName.isNotEmpty) row.user.orgUnitName,
+      if (row.user.isTi) 'TI',
+      if (row.user.isEtp) 'ETP',
+    ].join(' · ');
+    return InkWell(
+      onTap: () => _showUserDetail(row),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          children: [
+            UserAvatar(user: row.user, radius: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          row.user.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ),
+                      if (meta.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            meta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 4),
                 ],
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: badgeColor.withValues(alpha: 0.6)),
+              ),
+              child: Text(
+                badge,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: badgeColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserGrid(List<_MaintenanceUserRow> filteredRows) {
+    final goRows = filteredRows.where((r) => r.status.isValid).toList();
+    final attentionRows = filteredRows.where((r) => !r.status.isValid).toList();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideBySide =
+            constraints.maxWidth >= 820 &&
+            goRows.isNotEmpty &&
+            attentionRows.isNotEmpty;
+        if (sideBySide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 5, child: _buildGoPanel(goRows)),
+              const SizedBox(width: 16),
+              Expanded(flex: 6, child: _buildAttentionPanel(attentionRows)),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (attentionRows.isNotEmpty) _buildAttentionPanel(attentionRows),
+            if (attentionRows.isNotEmpty && goRows.isNotEmpty)
+              const SizedBox(height: 16),
+            if (goRows.isNotEmpty) _buildGoPanel(goRows),
+          ],
         );
       },
     );
@@ -1180,7 +1725,11 @@ class _AdminPrivilegesDashboardState
     final auth = ref.watch(authProvider);
     final filteredRows = _sortedRows(_filteredRows());
     final approvedUsersCount = _rows.length;
-    final expiredCount = _rows.where((row) => row.status.isExpired).length;
+    final expiredCount = _rows
+        .where((row) => row.status.isExpired || row.status.isSuspended)
+        .length;
+    final warningCount = _rows.where((row) => row.status.isWarning).length;
+    final validCount = _rows.where((row) => row.status.isValid).length;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobileLayout = screenWidth < 650;
 
@@ -1216,16 +1765,49 @@ class _AdminPrivilegesDashboardState
           value: '$_pendingAcksCount',
           icon: Icons.pending_actions,
           color: AppColors.currencyWarning,
+          onTap: () => context.go('/admin/pta'),
         ),
     ];
 
     final content = [
       _buildStatCardsSection(statCardData, isMobileLayout),
       const SizedBox(height: 16),
-      Text(
-        'Utenti con currency manutentiva',
-        style: Theme.of(context).textTheme.titleLarge,
-        softWrap: true,
+      Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            'Utenti con currency manutentiva (${filteredRows.length})',
+            style: Theme.of(context).textTheme.titleLarge,
+            softWrap: true,
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              FilterPill(
+                label: 'NO GO ($expiredCount)',
+                color: AppColors.currencyExpired,
+                selected: _statusChipFilters.contains('expired'),
+                onTap: () => _toggleFilterValue(_statusChipFilters, 'expired'),
+              ),
+              FilterPill(
+                label: 'In scadenza ($warningCount)',
+                color: AppColors.currencyWarning,
+                selected: _statusChipFilters.contains('warning'),
+                onTap: () => _toggleFilterValue(_statusChipFilters, 'warning'),
+              ),
+              FilterPill(
+                label: 'GO ($validCount)',
+                color: AppColors.currencyValid,
+                selected: _statusChipFilters.contains('valid'),
+                onTap: () => _toggleFilterValue(_statusChipFilters, 'valid'),
+              ),
+            ],
+          ),
+        ],
       ),
       const SizedBox(height: 12),
       if (filteredRows.isEmpty)
