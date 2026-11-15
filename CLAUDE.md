@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-11-14
+## STATO SESSIONE — aggiornato 2026-11-15
+- 2026-11-15 (32): viewer MAML, selettore vista riquadri/pagine a pillola con icone disegnate (`_ViewModeSwitch` in `widgets/maml_viewer.dart`) al posto del `SegmentedButton` con 8/2.
 - 2026-11-14 (31): viewer MAML a 8 riquadri di default, centrati sull'inchiostro (`_quarters`), barra in basso con X a destra, admin (PC) rotella scorre e click zoom (`e88208c`).
 - 2026-11-14 (30): MAML di tutti da `E:\LMAM_FIRMATE` (59 utenti, `aves-data` `f858799`, letti con agy hydrogen), viewer a 2 pagine o 8 riquadri e FAB MAML in basso a destra (`558c2c6`). Nota vault `AVES Corsi/Tecnici import scansioni MAML.md`.
 - 2026-11-14 (29): MAML vista dentro l'app con pdf.js vendorizzato (`web/pdfjs/`, `widgets/maml_viewer.dart`, `b5b739b`), stampa solo admin, `MamlButton` in dashboard utente e nelle schede di `admin/priv`, `admin/crew`, `admin/p66`. Fac-simile di prova su Ardia (`aves-data` `34aad09`), da sostituire con la vera.

@@ -10,6 +10,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../constants/app_constants.dart';
 import '../services/gh_db_service.dart';
 import '../services/maml_scan_service.dart';
 
@@ -328,52 +329,45 @@ class _MamlViewerState extends State<_MamlViewer> {
   ) => FutureBuilder<(List<Uint8List>, List<(double, List<Rect>)>?)>(
     future: _pages,
     builder: (context, snap) => Scaffold(
-      bottomNavigationBar: BottomAppBar(
-        height: 60,
-        padding: const EdgeInsets.only(left: 16, right: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                widget.title,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium,
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: BottomAppBar(
+          height: 60,
+          color: Colors.transparent,
+          elevation: 0,
+          padding: const EdgeInsets.only(left: 16, right: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.title,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
-            ),
-            if (snap.data?.$2 != null)
-              SegmentedButton<bool>(
-                showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                segments: const [
-                  ButtonSegment(
-                    value: true,
-                    icon: Icon(Icons.grid_view),
-                    label: Text('8'),
-                    tooltip: '8 riquadri',
-                  ),
-                  ButtonSegment(
-                    value: false,
-                    icon: Icon(Icons.description_outlined),
-                    label: Text('2'),
-                    tooltip: '2 pagine',
-                  ),
-                ],
-                selected: {_panelsMode},
-                onSelectionChanged: (s) =>
-                    setState(() => _panelsMode = s.first),
-              ),
-            if (widget.canPrint)
+              if (snap.data?.$2 != null) ...[
+                _ViewModeSwitch(
+                  panelsMode: _panelsMode,
+                  onChanged: (v) => setState(() => _panelsMode = v),
+                ),
+                const SizedBox(width: 4),
+              ],
+              if (widget.canPrint)
+                IconButton(
+                  tooltip: 'Stampa',
+                  icon: const Icon(Icons.print_outlined),
+                  onPressed: snap.hasData ? () => _print(snap.data!.$1) : null,
+                ),
               IconButton(
-                tooltip: 'Stampa',
-                icon: const Icon(Icons.print_outlined),
-                onPressed: snap.hasData ? () => _print(snap.data!.$1) : null,
+                tooltip: 'Chiudi',
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
               ),
-            IconButton(
-              tooltip: 'Chiudi',
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       body: snap.hasError
@@ -426,6 +420,159 @@ class _MamlViewerState extends State<_MamlViewer> {
             ),
     ),
   );
+}
+
+class _ViewModeSwitch extends StatelessWidget {
+  const _ViewModeSwitch({required this.panelsMode, required this.onChanged});
+
+  final bool panelsMode;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: SizedBox(
+        width: 80,
+        height: 30,
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              alignment: panelsMode
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
+              child: Container(
+                width: 40,
+                height: 30,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1E88E5), AppColors.accent],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(
+                    color: AppColors.accentGlow.withValues(alpha: 0.45),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accentGlow.withValues(alpha: 0.18),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Material(
+              type: MaterialType.transparency,
+              child: Row(
+                children: [
+                  for (final (panels, tip) in const [
+                    (true, 'Vista a riquadri'),
+                    (false, 'Pagine intere'),
+                  ])
+                    Tooltip(
+                      message: tip,
+                      child: Semantics(
+                        button: true,
+                        selected: panelsMode == panels,
+                        label: tip,
+                        excludeSemantics: true,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () => onChanged(panels),
+                          child: SizedBox(
+                            width: 40,
+                            height: 30,
+                            child: Center(
+                              child: CustomPaint(
+                                size: const Size.square(18),
+                                painter: _ViewIconPainter(
+                                  panels: panels,
+                                  active: panelsMode == panels,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ViewIconPainter extends CustomPainter {
+  const _ViewIconPainter({required this.panels, required this.active});
+
+  final bool panels;
+  final bool active;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 20, size.height / 20);
+    final color = active
+        ? Colors.white
+        : AppColors.textSecondary.withValues(alpha: 0.72);
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.65
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final fill = Paint()..color = color.withValues(alpha: 0.22);
+
+    if (panels) {
+      const r = Radius.circular(1.8);
+      for (final rect in const [
+        Rect.fromLTWH(2.3, 2.3, 6.5, 6.5),
+        Rect.fromLTWH(11.2, 2.3, 6.5, 6.5),
+        Rect.fromLTWH(2.3, 11.2, 6.5, 6.5),
+        Rect.fromLTWH(11.2, 11.2, 6.5, 6.5),
+      ]) {
+        final rr = RRect.fromRectAndRadius(rect, r);
+        if (active) canvas.drawRRect(rr, fill);
+        canvas.drawRRect(rr, stroke);
+      }
+      return;
+    }
+
+    final front = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(3.0, 5.2, 10.6, 12.6),
+      const Radius.circular(1.8),
+    );
+    final back = Path()
+      ..moveTo(6.2, 5.2)
+      ..lineTo(6.2, 4.0)
+      ..quadraticBezierTo(6.2, 2.2, 8.0, 2.2)
+      ..lineTo(15.0, 2.2)
+      ..quadraticBezierTo(16.8, 2.2, 16.8, 4.0)
+      ..lineTo(16.8, 13.0)
+      ..quadraticBezierTo(16.8, 14.8, 15.0, 14.8)
+      ..lineTo(13.6, 14.8);
+    canvas.drawPath(back, stroke);
+    if (active) canvas.drawRRect(front, fill);
+    canvas.drawRRect(front, stroke);
+    canvas.drawLine(const Offset(5.7, 9.8), const Offset(10.9, 9.8), stroke);
+    canvas.drawLine(const Offset(5.7, 13.0), const Offset(9.5, 13.0), stroke);
+  }
+
+  @override
+  bool shouldRepaint(_ViewIconPainter old) =>
+      old.panels != panels || old.active != active;
 }
 
 /// Icona MAML per le schede: apre la scansione approvata (o quella in attesa).
