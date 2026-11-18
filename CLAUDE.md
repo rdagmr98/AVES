@@ -52,7 +52,8 @@ git push origin main   ← autorizzato, sempre senza chiedere
 - `activity_models.dart`: attività, ore, tipologia
 - `reference_models.dart`: elicotteri, capacità (TOB capabilities)
 
-## STATO SESSIONE — aggiornato 2026-11-15
+## STATO SESSIONE — aggiornato 2026-11-18
+- 2026-11-18 (33): matita in «Le Mie Attività» per le attività in attesa, stesse `edit*Activity` admin con `pendingOnly` (refresh + rifiuto se già validata, `e20fa7f`). Dati allineati all'Annesso 13/11 (solo Visone, `aves-data` `d45d638`). Nota vault `AVES Corsi/Tecnici modifica attività in attesa da utente 2026-11-18.md`.
 - 2026-11-15 (32): viewer MAML, selettore vista riquadri/pagine a pillola con icone disegnate (`_ViewModeSwitch` in `widgets/maml_viewer.dart`) al posto del `SegmentedButton` con 8/2.
 - 2026-11-14 (31): viewer MAML a 8 riquadri di default, centrati sull'inchiostro (`_quarters`), barra in basso con X a destra, admin (PC) rotella scorre e click zoom (`e88208c`).
 - 2026-11-14 (30): MAML di tutti da `E:\LMAM_FIRMATE` (59 utenti, `aves-data` `f858799`, letti con agy hydrogen), viewer a 2 pagine o 8 riquadri e FAB MAML in basso a destra (`558c2c6`). Nota vault `AVES Corsi/Tecnici import scansioni MAML.md`.
