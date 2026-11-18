@@ -213,27 +213,59 @@ class ActivityService {
 
   /// Aggiorna i campi modificabili (null = azzera il campo); id, utente e
   /// stato di validazione restano invariati.
-  Future<void> updateMaintenanceActivity(int id, Map<String, dynamic> fields) =>
-      _update(_db.maintenanceActs, _db.saveMaintenanceActs, id, fields);
+  // [pendingOnly]: modifica dell'utente, ammessa solo finché nessun admin
+  // l'ha validata (controllo sui dati appena riletti).
+  Future<void> updateMaintenanceActivity(
+    int id,
+    Map<String, dynamic> fields, {
+    bool pendingOnly = false,
+  }) => _update(
+    () => _db.maintenanceActs,
+    _db.saveMaintenanceActs,
+    id,
+    fields,
+    pendingOnly,
+  );
 
-  Future<void> updateFlightActivity(int id, Map<String, dynamic> fields) =>
-      _update(_db.flightActs, _db.saveFlightActs, id, fields);
+  Future<void> updateFlightActivity(
+    int id,
+    Map<String, dynamic> fields, {
+    bool pendingOnly = false,
+  }) => _update(
+    () => _db.flightActs,
+    _db.saveFlightActs,
+    id,
+    fields,
+    pendingOnly,
+  );
 
-  Future<void> updateTobActivity(int id, Map<String, dynamic> fields) =>
-      _update(_db.tobActs, _db.saveTobActs, id, fields);
+  Future<void> updateTobActivity(
+    int id,
+    Map<String, dynamic> fields, {
+    bool pendingOnly = false,
+  }) => _update(() => _db.tobActs, _db.saveTobActs, id, fields, pendingOnly);
 
-  Future<void> updateSeminarActivity(int id, Map<String, dynamic> fields) =>
-      _update(_db.seminars, _db.saveSeminars, id, fields);
+  Future<void> updateSeminarActivity(
+    int id,
+    Map<String, dynamic> fields, {
+    bool pendingOnly = false,
+  }) => _update(() => _db.seminars, _db.saveSeminars, id, fields, pendingOnly);
 
   Future<void> _update(
-    List<Map<String, dynamic>> rows,
+    List<Map<String, dynamic>> Function() read,
     Future<void> Function(List<Map<String, dynamic>>) save,
     int id,
     Map<String, dynamic> fields,
+    bool pendingOnly,
   ) async {
+    if (pendingOnly) await _db.refresh();
+    final rows = read();
     final index = rows.indexWhere((item) => item['id'] == id);
     if (index == -1) {
       throw Exception('Attività non trovata');
+    }
+    if (pendingOnly && rows[index]['is_validated'] == true) {
+      throw Exception('Attività già validata: non è più modificabile');
     }
     rows[index] = {...rows[index], ...fields};
     await save(rows);

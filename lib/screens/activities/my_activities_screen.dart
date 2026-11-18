@@ -6,6 +6,7 @@ import '../../app.dart';
 import '../../models/activity_models.dart';
 import '../../services/activity_service.dart';
 import '../../services/hours_format.dart';
+import '../../widgets/activity_edit_dialog.dart';
 
 class MyActivitiesScreen extends ConsumerStatefulWidget {
   const MyActivitiesScreen({super.key, this.initialType});
@@ -101,6 +102,25 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
     ).showSnackBar(const SnackBar(content: Text('Attività eliminata.')));
   }
 
+  // Modifica finché nessun admin l'ha validata (ricontrollato al salvataggio).
+  Future<void> _editActivity(
+    Future<bool> Function() edit,
+    String userId,
+  ) async {
+    String message;
+    try {
+      if (!await edit()) return;
+      message = 'Attività modificata.';
+    } catch (e) {
+      message = e.toString().replaceFirst('Exception: ', '');
+    }
+    if (!mounted) return;
+    _reload(userId);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).userProfile;
@@ -143,6 +163,16 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
+                        onEdit: item.id != null && !item.isValidated
+                            ? () => _editActivity(
+                                () => editMaintenanceActivity(
+                                  context,
+                                  item,
+                                  pendingOnly: true,
+                                ),
+                                user.id,
+                              )
+                            : null,
                         onDelete: item.id != null && !item.isValidated
                             ? () {
                                 _deleteActivity(
@@ -168,6 +198,16 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
+                        onEdit: item.id != null && !item.isValidated
+                            ? () => _editActivity(
+                                () => editFlightActivity(
+                                  context,
+                                  item,
+                                  pendingOnly: true,
+                                ),
+                                user.id,
+                              )
+                            : null,
                         onDelete: item.id != null && !item.isValidated
                             ? () {
                                 _deleteActivity(
@@ -193,6 +233,16 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                         subtitle: item.description ?? 'Nessuna descrizione',
                         date: item.activityDate,
                         isValidated: item.isValidated,
+                        onEdit: item.id != null && !item.isValidated
+                            ? () => _editActivity(
+                                () => editTobActivity(
+                                  context,
+                                  item,
+                                  pendingOnly: true,
+                                ),
+                                user.id,
+                              )
+                            : null,
                         onDelete: item.id != null && !item.isValidated
                             ? () {
                                 _deleteActivity(
@@ -219,6 +269,16 @@ class _MyActivitiesScreenState extends ConsumerState<MyActivitiesScreen>
                             'Aggiornamento biennale NAM e MHF',
                         date: item.seminarDate,
                         isValidated: item.isValidated,
+                        onEdit: item.id != null && !item.isValidated
+                            ? () => _editActivity(
+                                () => editSeminarActivity(
+                                  context,
+                                  item,
+                                  pendingOnly: true,
+                                ),
+                                user.id,
+                              )
+                            : null,
                         onDelete: item.id != null && !item.isValidated
                             ? () {
                                 _deleteActivity(
@@ -312,6 +372,7 @@ class _ActivityListTile extends StatelessWidget {
     required this.subtitle,
     required this.date,
     required this.isValidated,
+    this.onEdit,
     this.onDelete,
   });
 
@@ -319,6 +380,7 @@ class _ActivityListTile extends StatelessWidget {
   final String subtitle;
   final DateTime date;
   final bool isValidated;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   @override
   Widget build(BuildContext context) {
@@ -335,9 +397,16 @@ class _ActivityListTile extends StatelessWidget {
           Chip(
             label: Text(isValidated ? 'Validata' : 'In attesa', softWrap: true),
           ),
-          if (onDelete != null) ...[
-            const SizedBox(width: 8),
+          if (onEdit != null)
             IconButton(
+              tooltip: 'Modifica attività',
+              visualDensity: VisualDensity.compact,
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          if (onDelete != null) ...[
+            IconButton(
+              visualDensity: VisualDensity.compact,
               tooltip: 'Elimina attività',
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),

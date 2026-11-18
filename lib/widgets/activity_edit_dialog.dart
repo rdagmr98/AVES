@@ -12,7 +12,7 @@ import 'date_range_dialog.dart';
 import 'form_parts.dart';
 import 'hours_field.dart';
 
-/// Modifica admin di un'attività (manutenzione, volo, TOB, seminario): mostra
+/// Modifica di un'attività (admin, o utente finché è in attesa): mostra
 /// solo i campi passati e restituisce i campi JSON da salvare (null = annulla).
 ///
 /// [details] sono le opzioni (privilegi, capacità TOB) dell'elicottero scelto.
@@ -276,8 +276,9 @@ Future<Map<String, dynamic>?> showActivityEditDialog(
 
 Future<bool> editMaintenanceActivity(
   BuildContext context,
-  MaintenanceActivity a,
-) async {
+  MaintenanceActivity a, {
+  bool pendingOnly = false,
+}) async {
   final users = UserService();
   final privileges = await users.getUserPrivileges(a.userId);
   final licenses = await users.getUserLicenses(a.userId);
@@ -319,11 +320,19 @@ Future<bool> editMaintenanceActivity(
     },
   );
   if (fields == null) return false;
-  await ActivityService().updateMaintenanceActivity(a.id!, fields);
+  await ActivityService().updateMaintenanceActivity(
+    a.id!,
+    fields,
+    pendingOnly: pendingOnly,
+  );
   return true;
 }
 
-Future<bool> editFlightActivity(BuildContext context, FlightActivity a) async {
+Future<bool> editFlightActivity(
+  BuildContext context,
+  FlightActivity a, {
+  bool pendingOnly = false,
+}) async {
   final crew = await UserService().getUserCrewAssignments(a.userId);
   if (!context.mounted) return false;
   final fields = await showActivityEditDialog(
@@ -346,11 +355,19 @@ Future<bool> editFlightActivity(BuildContext context, FlightActivity a) async {
     },
   );
   if (fields == null) return false;
-  await ActivityService().updateFlightActivity(a.id!, fields);
+  await ActivityService().updateFlightActivity(
+    a.id!,
+    fields,
+    pendingOnly: pendingOnly,
+  );
   return true;
 }
 
-Future<bool> editTobActivity(BuildContext context, TobActivity a) async {
+Future<bool> editTobActivity(
+  BuildContext context,
+  TobActivity a, {
+  bool pendingOnly = false,
+}) async {
   final users = UserService();
   final crew = await users.getUserCrewAssignments(a.userId);
   final caps = await users.getUserTobCapabilities(a.userId);
@@ -378,7 +395,11 @@ Future<bool> editTobActivity(BuildContext context, TobActivity a) async {
     hours: a.flightHours,
   );
   if (fields == null) return false;
-  await ActivityService().updateTobActivity(a.id!, fields);
+  await ActivityService().updateTobActivity(
+    a.id!,
+    fields,
+    pendingOnly: pendingOnly,
+  );
   return true;
 }
 
@@ -571,8 +592,9 @@ Future<bool> insertSeminar(
 
 Future<bool> editSeminarActivity(
   BuildContext context,
-  SeminarActivity a,
-) async {
+  SeminarActivity a, {
+  bool pendingOnly = false,
+}) async {
   final fields = await showActivityEditDialog(
     context,
     title: 'Modifica seminario',
@@ -581,6 +603,10 @@ Future<bool> editSeminarActivity(
     description: a.description,
   );
   if (fields == null) return false;
-  await ActivityService().updateSeminarActivity(a.id!, fields);
+  await ActivityService().updateSeminarActivity(
+    a.id!,
+    fields,
+    pendingOnly: pendingOnly,
+  );
   return true;
 }
