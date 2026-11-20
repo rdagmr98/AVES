@@ -1260,11 +1260,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     title: group.code,
                                     badge: group.license == null
                                         ? null
-                                        : 'Cat. ${group.license!.licenseCode}',
+                                        : 'Cat. ${auth.licenses.where((l) => l.helicopterTypeId == heliId).map((l) => l.licenseCode).join(' / ')}',
                                     subtitle: group.privs.isEmpty
                                         ? null
                                         : group.privs
-                                              .map((p) => p.privilegeName)
+                                              .map((p) => p.label)
                                               .join(' · '),
                                     pending: _privilegeRequests[heliId] == null
                                         ? null

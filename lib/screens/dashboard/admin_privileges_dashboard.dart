@@ -2697,7 +2697,7 @@ class _ServiceRecordDialogState extends ConsumerState<_ServiceRecordDialog> {
         ? privileges.first.helicopterCode
         : licenses.first.helicopterCode;
     final cat = licenses.isNotEmpty
-        ? '  ·  Cat. ${licenses.first.licenseCode}'
+        ? '  ·  Cat. ${licenses.map((l) => l.licenseCode).join(' / ')}'
         : '';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
